@@ -25,3 +25,22 @@ Confirmed the running file-level-disable tally is already 3 (Step 4 cleared `mod
 - The widget tests already stub `{ terminal: { columns: 200 }, requestRender: () => {} }` — the exact `TuiSurface` shape — so the lean local interface is the de-facto contract, favoring it over importing the SDK `TUI` class.
 - Chose to type `_ctx`/inner `ctx` as the exported `ExtensionContext` to clear the last `no-unsafe-argument` in `agent-tool.ts`, aiming for zero residual there; the plan keeps a line-level-disable fallback only if lint surfaces an irreducible gap.
 - This is `refactor:`-only (hidden changelog type): it auto-batches into the next release rather than cutting one, despite the roadmap's `Release: independent` tag.
+
+## Stage: Implementation — Build (2026-07-15T22:11:44Z)
+
+### Session summary
+
+Executed all 3 planned steps as `refactor:`/`docs:` commits: narrowed `agent-widget.ts`'s `tui` to a lean `TuiSurface` interface, retyped `agent-tool.ts`'s `renderCall`/`renderResult`/`execute` params (`theme`, `result`, `ctx`) plus the shared `textResult` helper and `foreground-runner.ts`'s `onUpdate`, and marked Phase 20 Step 5 landed in `architecture.md`.
+The `tidy-first-assessor` found no preparatory refactoring warranted — the target files were already shaped for the narrowing described in the plan.
+File-level `eslint-disable` header tally landed exactly as planned: 3 → 1 (only `index.ts`'s accepted SDK gap remains).
+
+### Observations
+
+- Removing `agent-tool.ts`'s 6-rule header surfaced a genuinely pre-existing gap the plan didn't name: three `params.resume` (`unknown`) template-literal interpolations in the resume path tripped `no-base-to-string`/`restrict-template-expressions` once the header lifted.
+  Fixed with the same `as string` cast already used a few lines away for the `getRecord`/`resume` calls, rather than re-disabling — consistent with the plan's "line-level precision, not zero" goal, but this specific site wasn't anticipated in the Risks section.
+- Retyping `textResult`'s `details` param from `unknown` to `AgentDetails` broke two test call sites at the type level (not runtime): `agent-tool.test.ts`'s `makeCtx()` fake (now needs `as unknown as ExtensionContext`, matching the existing `parent-snapshot.test.ts` convention) and `helpers.test.ts`'s partial `{ displayName, status }` details fixture (now a complete `AgentDetails` literal).
+  Both were anticipated risks in the plan ("grepped all 17 call sites"), but the *test* call sites weren't part of that grep — only `src/` callers were checked.
+  Future plans retyping a shared helper should grep `test/` call sites too, not just `src/`.
+- Pre-completion reviewer: **PASS**.
+  No WARN findings — deterministic checks, doc updates (forward and reverse), code design, test artifacts, Mermaid diagrams, and dead-code all passed; acceptance-criteria and cross-step-invariant checks were correctly SKIPped (no acceptance-criteria section; no earlier-step files touched).
+- All 3 plan steps completed in this session; nothing deferred.
