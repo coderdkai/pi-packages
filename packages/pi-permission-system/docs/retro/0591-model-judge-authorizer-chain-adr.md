@@ -46,3 +46,56 @@ Next stage is `/ship-issue`.
 - Deviation from plan scope: **none.**
   Both build steps ran as written; the frozen history/plan/retro files listed in the plan's `Not edited` section were left untouched.
 - Phase 11 close (heading `(complete)` + `history/phase-11-*.md` extraction) is deliberately out of scope — all seven steps are now `✅`, but the archival is a distinct `/finish-phase` activity, as with [#581].
+
+## Stage: Final Retrospective (2026-07-15T17:03:07Z)
+
+### Session summary
+
+This single session took [#591] from plan through ship: four `ask_user` rounds derived the model-judge design interactively (Chain of Responsibility, `allow | deny | defer`, type-level non-deferring terminal, injected `PermissionQuery`, opt-in named registration, config split, two-slice gradient), then two docs commits authored ADR 0007 and reconciled `architecture.md` (Step 7 `✅`), and ship closed the issue with no release (all touched paths are release-please-excluded).
+The defining outcome: the corrective [#581]'s retro installed — the `/plan-issue` `Decide`-gate ADR carve-out — worked one issue later, converting a task that was reverted-as-transcription into a clean interactive design.
+
+### Observations
+
+#### What went well
+
+- **A retro-driven fix validated itself one issue later (novel win).**
+  [#581] shipped a full plan→build→ship cycle and was reverted because it *transcribed* the architecture prose instead of *deciding*; its retro added an ADR/decision-record carve-out to `/plan-issue`'s `Decide` gate (do not skip `ask_user` just because a design is written down).
+  This session hit exactly that trigger and ran four `ask_user` rounds instead of transcribing — the plan and ADR landed clean, no revert.
+  This is direct evidence the corrective works, and it argues *against* adding more rules here.
+- **`ask_user` as a genuine design gate, not a formality.**
+  The four rounds produced real bidirectional design: three of my pushbacks were accepted over the operator's first-pass preferences (inject a narrow `PermissionQuery` vs. reach for `PermissionsService`; split config; opt-in activation), and the operator reframed my "terminal leaf + decorators" into a cleaner single-role chain.
+  The deliberation an ADR exists to carry actually happened in the dialogue, then flowed into the ADR's rejected-alternatives section.
+- **The [#581] failure mode was actively guarded at build, not merely avoided.**
+  The plan's `Invariants at risk` prescribed a whole-file grep, and the pre-completion reviewer confirmed the exact reverting miss (the `quarantined for human review` parenthetical and the `ModelTriageAuthorizer(inner)` decorator framing) was gone — closing the loop the earlier miss opened.
+- **Clean ship discipline.**
+  Ship correctly separated the two release axes: the plan's `Release: ship independently` marker vs. whether a commit physically cuts a release.
+  It read `exclude-paths` from `release-please-config.json`, confirmed every touched path (`docs/decisions`/`docs/plans`/`docs/retro`/`docs/architecture`) is excluded, and skipped the release-please merge — matching the same finding [#581] drew.
+
+#### What caused friction (agent side)
+
+- No agent-side friction of note.
+  No rabbit holes, no instruction violations, no scope drift; both build steps ran as written with zero deviations; verification was incremental (`rumdl` after each doc edit, package `lint` after each step, `mmdc` render before the reconciliation commit, pre-completion reviewer at the end).
+
+#### What caused friction (user side)
+
+- **Bidirectional-feedback opportunity — the dogfooding objective surfaced post-commit.**
+  After the plan and planning-retro were already committed, the operator raised a held-from-the-start objective ("a clear objective I have in mind is that we dogfood this" via a first-party typo-path extension) plus the architecture/`/plan-improvements` handoff question.
+  This required a third plan-amendment commit (`4eb4f72f docs: record dogfooding objective in plan for #591`).
+  Impact: one extra clean commit (2 files), no rework — but the objective shapes the ADR's Consequences (acceptance criterion for slice 1), so surfacing it during the planning `ask_user` rounds would have folded it into the first plan.
+  Not a fault on either side; the earliest-possible unlock was a planning-time "downstream objectives / acceptance criteria" question for a decision-record issue.
+
+### Diagnostic details
+
+- **Model-performance correlation** — one subagent dispatch: the `pre-completion-reviewer` (`anthropic/claude-sonnet-5` per its agent frontmatter), a judgment-appropriate task (ADR cross-doc consistency, Mermaid render, deterministic gates); no mismatch.
+  `tidy-first-assessor` was correctly skipped (docs-only).
+  The session switched models frequently and was operator-steered (`opus-4-8` ↔ `sonnet-5`, with `deepseek-v4-flash`, `fable-5`, `haiku-4-5` also appearing): ship ran on `sonnet-5` (mechanical git/CI/close — appropriate), and the design/build turns finished on `opus-4-8` (appropriate for architecture judgment).
+  No turn-by-turn attribution was done given the switch volume, but no output-quality degradation was observable at any stage.
+- **Escalation-delay tracking** — no rabbit holes; no error sequence exceeded 1–2 tool calls (the lone stumble, a `wc -c` double-check of a 40-char SHA, resolved in one call).
+- **Unused-tool detection** — none applicable; symbol searches used exact `grep`/`bash` (correct for known tokens like `ModelTriageAuthorizer` and section anchors), not `colgrep`, and the planning code-reads (`authorizer.ts`, `service.ts`, `permissions-service.ts`, targeted `architecture.md` sections) were sufficient to ground the design pushbacks without an Explore dispatch.
+- **Feedback-loop gap analysis** — no end-loaded-verification gap; gates ran incrementally in every stage.
+
+### Changes made
+
+1. Appended this Final Retrospective stage entry to `packages/pi-permission-system/docs/retro/0591-model-judge-authorizer-chain-adr.md`.
+2. No prompt or `AGENTS.md` change — operator chose observations-only.
+   The one candidate (extend `.pi/prompts/plan-issue.md:103` so a decision-record issue also surfaces downstream objectives / acceptance criteria) was rejected as a single-occurrence with minimal impact; the existing [#581] ADR carve-out is validated as working by this session.
