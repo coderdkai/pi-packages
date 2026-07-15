@@ -88,3 +88,29 @@ Two `fix:` cycles: (1) source guidelines from config + wire into `AgentTool`, (2
   The guideline strings live only in `src/tools/agent-tool.ts` — no architecture doc, package SKILL, or README references them.
 - **Release:** ship independently (two `fix:` → patch release); not in any open batch (Phase 19 closed).
 - **Attribution:** every impl commit carries `Co-authored-by: whaoa <whaoa.w@outlook.com>`.
+
+## Stage: Implementation — TDD (2026-07-15T16:02:00Z)
+
+### Session summary
+
+Implemented both `fix:` cycles plus one tidy-first prep commit; test count 965 → 974 (+9).
+The subagent tool description now sources per-agent guideline copy from each enabled default agent's `toolGuideline` field (registry order), and `buildTypeListText` omits the empty `Default agents:` header.
+Pre-completion reviewer: PASS.
+
+### Observations
+
+- **Tidy-first prep landed.**
+  The assessor recommended one change-scoped refactor — extract the duplicated `enabled !== false` predicate into `isEnabledAgent(registry, name)` in `helpers.ts` before the feat, so `buildAgentGuidelines` reuses it instead of copy-pasting.
+  Landed as `c5bbbdbe` (`refactor:`).
+- **Commit split mechanics.**
+  The two `fix:` cycles both touch `helpers.ts`/`helpers.test.ts`.
+  To keep one logical change per commit, I implemented both greens, then reverted the Cycle-2 header-guard hunk + its test, committed Cycle 1, and reapplied + committed Cycle 2 — cleaner than `git add -p` on interleaved hunks.
+- **Guideline reorder pinned.**
+  A new `agent-tool.test.ts` assertion pins the registry-order guideline lines (`general-purpose, Explore, Plan`) so the operator-confirmed cosmetic reorder is intentional and documented.
+- **PR test not adopted.**
+  PR #594's tautological `- ${name} :` (space-before-colon) assertion was replaced with correct `- ${name}:` / `- Use ${name} for` checks.
+- **Reviewer warnings (WARN, non-blocking).**
+  The reviewer flagged that the tidy-first prep commit `c5bbbdbe` carries no `Co-authored-by: whaoa` trailer, while the recorded rule says "every implementation/docs commit."
+  Decision: the refactor is our own preparatory tidying (not present in whaoa's PR), so credit rides on the two `fix:` commits that implement the contributed logic; the prep commit is exempt.
+  Flagged here for the operator to confirm at ship time.
+- **Gates:** `check`, root `lint`, full `test`, and `fallow dead-code` all green; no lockfile changes; no architecture/README/SKILL updates needed.
