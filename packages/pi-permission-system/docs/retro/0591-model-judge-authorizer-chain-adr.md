@@ -27,3 +27,22 @@ Next stage is `/build-plan` (no test cycles).
   Settled via `ask_user`: monorepo package (not external repo); issue filed by `/plan-improvements`, not now.
 - The build stage's chief risk is the [#581] failure mode: an internally consistent ADR that contradicts un-reconciled architecture-doc prose.
   The plan's `Invariants at risk` section prescribes a whole-file grep (`ask-only|allow-or-escalate|escalate|ModelTriageAuthorizer|quarantine`) rather than a single-section sweep, since [#581] missed a parenthetical at line ~627 by targeting one section.
+
+## Stage: Implementation — Build (2026-07-15T16:51:03Z)
+
+### Session summary
+
+Executed the docs-only plan in two commits: authored `docs/decisions/0007-model-judge-authorizer-chain-adr.md` (the Chain-of-Responsibility model judge — `allow | deny | defer` verdict, type-level non-deferring terminal, injected `PermissionQuery`, opt-in named `registerAuthorizer`, config split, two-slice gradient, dogfooding as slice-1 acceptance), then reconciled `architecture.md` (rewrote `Discriminating delegation`, subsumed the pluggable-escalation seam, reconciled the recursion/aspirational passages, marked Phase 11 Step 7 `✅` on both the heading and the `S7` Mermaid node with the ADR linked).
+No `src/`/`test/` changes; `rumdl`, `lint`, `check`, `test`, and `fallow dead-code` all green; the four Mermaid diagrams render under `mmdc`.
+Next stage is `/ship-issue`.
+
+### Observations
+
+- Pre-completion reviewer: **WARN** (1 non-blocking finding).
+  Reviewer warning: the plan's Open Questions names the dogfood-extension follow-up but it carries no recorded issue number — an intentional, explicitly-reasoned deferral to the next `/plan-improvements` pass, not an oversight.
+  No action taken; flagged so it is not lost before that pass runs.
+- The [#581] failure mode was actively guarded, not just avoided: the reviewer ran the plan's whole-file grep and confirmed the exact reverting miss — the `or is persisted quarantined for human review` non-persistence parenthetical — is gone, along with the `ModelTriageAuthorizer(inner)` decorator framing.
+  Remaining grep hits are all intentional (the reconciled chain framing, the explicit `a superset of the earlier allow-or-escalate framing` supersession callout, and the `ModelTriageAuthorizer` anchor label the plan said to leave).
+- Deviation from plan scope: **none.**
+  Both build steps ran as written; the frozen history/plan/retro files listed in the plan's `Not edited` section were left untouched.
+- Phase 11 close (heading `(complete)` + `history/phase-11-*.md` extraction) is deliberately out of scope — all seven steps are now `✅`, but the archival is a distinct `/finish-phase` activity, as with [#581].
