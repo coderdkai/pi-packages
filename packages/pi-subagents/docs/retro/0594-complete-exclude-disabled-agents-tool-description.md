@@ -62,3 +62,29 @@ Attribution — the contributor gets durable credit:
 
 - The ship-stage PR close comment thanks `@whaoa` by name and links the implementing SHA(s).
 - Reference the PR as `Refs #594` / `(#594)` — never `Closes #594`.
+
+## Stage: Planning (2026-07-15T18:52:00Z)
+
+### Session summary
+
+Produced the numbered implementation plan (`packages/pi-subagents/docs/plans/0594-complete-exclude-disabled-agents-tool-description.md`) around the recorded adopt-with-simplified-design decision.
+The design adds an optional `toolGuideline` field to `AgentConfig`, populates the three embedded defaults, and adds a `buildAgentGuidelines(registry)` helper in `helpers.ts` so the tool description's `Guidelines:` block is sourced from the registry (single source of truth) instead of hardcoded lines.
+Two `fix:` cycles: (1) source guidelines from config + wire into `AgentTool`, (2) omit the empty `Default agents:` header.
+
+### Observations
+
+- **Guideline ordering (operator-confirmed).**
+  Sourcing from config in registry order emits guidelines as `general-purpose, Explore, Plan` — a cosmetic reorder from the current `Explore, Plan, general-purpose`, now consistent with the `Default agents:` type-list order.
+  Operator chose registry order over an explicit order anchor; the all-enabled description text is byte-identical, only line order changes.
+  This intentionally relaxes the PR-review "no change to default description" non-goal (line order only).
+- **ISP.** `buildAgentGuidelines` reuses the existing `TypeListRegistry` interface (reads only `getDefaultAgentNames` + `resolveAgentConfig`) — no new or wider dependency.
+- **No dead-code window.**
+  The helper is introduced and wired into `AgentTool` in the same commit, so `fallow dead-code` sees no orphaned export mid-sequence.
+- **Empty-list safety.**
+  The `Guidelines:` block is composed from an array so an empty `agentGuidelines` spread collapses with no blank line / orphaned label (covered by an all-disabled test).
+- **PR test not adopted.**
+  PR #594's `agent-tool.test.ts` assertion `- ${name} :` (space before colon) is tautological against the real `- ${name}:` format; the plan writes correct assertions instead.
+- **No doc updates.**
+  The guideline strings live only in `src/tools/agent-tool.ts` — no architecture doc, package SKILL, or README references them.
+- **Release:** ship independently (two `fix:` → patch release); not in any open batch (Phase 19 closed).
+- **Attribution:** every impl commit carries `Co-authored-by: whaoa <whaoa.w@outlook.com>`.
