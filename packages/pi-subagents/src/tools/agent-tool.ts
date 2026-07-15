@@ -8,7 +8,7 @@ import type { ParentSnapshot } from "#src/lifecycle/parent-snapshot";
 import type { AgentSpawnConfig } from "#src/lifecycle/subagent-manager";
 import { spawnBackground } from "#src/tools/background-spawner";
 import { runForeground } from "#src/tools/foreground-runner";
-import { buildDetails, buildTypeListText, textResult } from "#src/tools/helpers";
+import { buildAgentGuidelines, buildDetails, buildTypeListText, textResult } from "#src/tools/helpers";
 import { renderAgentResult } from "#src/tools/result-renderer";
 import { type ModelInfo, resolveSpawnConfig } from "#src/tools/spawn-config";
 import type { ParentSessionInfo, Subagent } from "#src/types";
@@ -42,6 +42,7 @@ export type AgentToolSettings = {
 export class AgentTool {
 	private readonly typeListText: string;
 	private readonly availableTypesText: string;
+	private readonly agentGuidelines: string[];
 
 	constructor(
 		private readonly manager: AgentToolManager,
@@ -52,6 +53,7 @@ export class AgentTool {
 	) {
 		this.typeListText = buildTypeListText(registry, agentDir);
 		this.availableTypesText = registry.getAvailableTypes().join(", ");
+		this.agentGuidelines = buildAgentGuidelines(registry);
 	}
 
 	async execute(
@@ -128,6 +130,19 @@ export class AgentTool {
 		const agentDir = this.agentDir;
 		const registry = this.registry;
 
+		const guidelines = [
+			"- For parallel work, use run_in_background: true on each agent. Foreground calls run sequentially — only one executes at a time.",
+			...this.agentGuidelines,
+			"- Provide clear, detailed prompts so the agent can work autonomously.",
+			"- Subagent results are returned as text — summarize them for the user.",
+			"- Use run_in_background for work you don't need immediately. You will be notified when it completes.",
+			"- Use resume with an agent ID to continue a previous agent's work.",
+			"- Use steer_subagent to send mid-run messages to a running background agent.",
+			'- Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").',
+			"- Use thinking to control extended thinking level.",
+			"- Use inherit_context if the agent needs the parent conversation history.",
+		].join("\n");
+
 		return defineTool({
 			name: "subagent" as const,
 			label: "Subagent",
@@ -140,18 +155,7 @@ Available agent types:
 ${typeListText}
 
 Guidelines:
-- For parallel work, use run_in_background: true on each agent. Foreground calls run sequentially — only one executes at a time.
-- Use Explore for codebase searches and code understanding.
-- Use Plan for architecture and implementation planning.
-- Use general-purpose for complex tasks that need file editing.
-- Provide clear, detailed prompts so the agent can work autonomously.
-- Subagent results are returned as text — summarize them for the user.
-- Use run_in_background for work you don't need immediately. You will be notified when it completes.
-- Use resume with an agent ID to continue a previous agent's work.
-- Use steer_subagent to send mid-run messages to a running background agent.
-- Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").
-- Use thinking to control extended thinking level.
-- Use inherit_context if the agent needs the parent conversation history.
+${guidelines}
 `,
 			parameters: Type.Object({
 				prompt: Type.String({

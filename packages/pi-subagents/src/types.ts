@@ -56,6 +56,8 @@ export interface AgentConfig extends AgentIdentity, AgentPromptConfig {
   inheritContext?: boolean;
   /** Default for spawn: run in background. undefined = caller decides. */
   runInBackground?: boolean;
+  /** One-line usage guideline for the subagent tool's Guidelines: block. Omitted — no guideline line. */
+  toolGuideline?: string;
   /** true = this is an embedded default agent (informational) */
   isDefault?: boolean;
   /** false = agent is hidden from the registry */

@@ -100,6 +100,19 @@ function isEnabledAgent(registry: AgentConfigLookup, name: string): boolean {
   return registry.resolveAgentConfig(name).enabled !== false;
 }
 
+/**
+ * Collect the per-agent usage guidelines for the subagent tool's Guidelines: block.
+ * Sourced from each enabled default agent's `toolGuideline`, in registry order,
+ * so a disabled built-in drops its guideline automatically.
+ */
+export function buildAgentGuidelines(registry: TypeListRegistry): string[] {
+  return registry
+    .getDefaultAgentNames()
+    .filter((name) => isEnabledAgent(registry, name))
+    .map((name) => registry.resolveAgentConfig(name).toolGuideline)
+    .filter((line): line is string => line !== undefined);
+}
+
 /** Derive a short model label from a model string. */
 export function getModelLabelFromConfig(model: string): string {
   // Strip provider prefix (e.g. "anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6")

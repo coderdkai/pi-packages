@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { TypeListRegistry } from "#src/tools/helpers";
-import { buildDetails, buildTypeListText, formatLifetimeTokens, getModelLabelFromConfig, getStatusNote, textResult } from "#src/tools/helpers";
+import { buildAgentGuidelines, buildDetails, buildTypeListText, formatLifetimeTokens, getModelLabelFromConfig, getStatusNote, textResult } from "#src/tools/helpers";
 import { createTestSubagent } from "#test/helpers/make-subagent";
 
 /** Build a minimal TypeListRegistry stub for tests. */
 function makeRegistry(opts: {
   defaults?: string[];
   users?: string[];
-  resolve?: (name: string) => { description: string; model: string | undefined; enabled?: boolean };
+  resolve?: (name: string) => {
+    description: string;
+    model: string | undefined;
+    enabled?: boolean;
+    toolGuideline?: string;
+  };
 }): TypeListRegistry {
   return {
     getDefaultAgentNames: () => opts.defaults ?? [],
@@ -146,6 +151,62 @@ describe("buildTypeListText", () => {
     });
     const result = buildTypeListText(registry, "/home/.pi");
     expect(result).not.toContain("Custom agents:");
+  });
+});
+
+describe("buildAgentGuidelines", () => {
+  it("returns the enabled default agents' guideline lines in registry order", () => {
+    const registry = makeRegistry({
+      defaults: ["general-purpose", "Explore", "Plan"],
+      resolve: (name) => ({
+        description: `${name} agent`,
+        model: undefined,
+        toolGuideline: `- Use ${name} for stuff.`,
+      }),
+    });
+    expect(buildAgentGuidelines(registry)).toEqual([
+      "- Use general-purpose for stuff.",
+      "- Use Explore for stuff.",
+      "- Use Plan for stuff.",
+    ]);
+  });
+
+  it("omits a disabled default agent's guideline line", () => {
+    const registry = makeRegistry({
+      defaults: ["general-purpose", "Explore"],
+      resolve: (name) => ({
+        description: `${name} agent`,
+        model: undefined,
+        enabled: name === "Explore" ? false : undefined,
+        toolGuideline: `- Use ${name} for stuff.`,
+      }),
+    });
+    expect(buildAgentGuidelines(registry)).toEqual(["- Use general-purpose for stuff."]);
+  });
+
+  it("omits default agents that declare no guideline", () => {
+    const registry = makeRegistry({
+      defaults: ["general-purpose", "custom-default"],
+      resolve: (name) => ({
+        description: `${name} agent`,
+        model: undefined,
+        toolGuideline: name === "general-purpose" ? "- Use general-purpose for stuff." : undefined,
+      }),
+    });
+    expect(buildAgentGuidelines(registry)).toEqual(["- Use general-purpose for stuff."]);
+  });
+
+  it("returns an empty array when all default agents are disabled", () => {
+    const registry = makeRegistry({
+      defaults: ["general-purpose", "Explore"],
+      resolve: (name) => ({
+        description: `${name} agent`,
+        model: undefined,
+        enabled: false,
+        toolGuideline: `- Use ${name} for stuff.`,
+      }),
+    });
+    expect(buildAgentGuidelines(registry)).toEqual([]);
   });
 });
 

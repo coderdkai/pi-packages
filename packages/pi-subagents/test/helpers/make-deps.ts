@@ -63,3 +63,28 @@ export function createToolDeps(overrides: Partial<AgentToolFixture> = {}): Agent
 		...overrides,
 	};
 }
+
+/**
+ * Build a tool fixture whose named built-in default agents are disabled.
+ * Overlays a same-named user config with `enabled: false` onto each default,
+ * so the registry keeps the name but excludes it from the enabled surface.
+ */
+export function createToolDepsWithDisabledBuiltInAgents(...names: string[]): AgentToolFixture {
+	const registry = new AgentTypeRegistry(
+		() =>
+			new Map(
+				names.map((name) => [
+					name,
+					{
+						name,
+						description: "disabled built-in agent",
+						promptMode: "append" as const,
+						systemPrompt: "",
+						isDefault: true,
+						enabled: false,
+					},
+				]),
+			),
+	);
+	return createToolDeps({ registry });
+}
