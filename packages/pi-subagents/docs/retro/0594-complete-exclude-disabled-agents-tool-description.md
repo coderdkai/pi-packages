@@ -114,3 +114,50 @@ Pre-completion reviewer: PASS.
   Decision: the refactor is our own preparatory tidying (not present in whaoa's PR), so credit rides on the two `fix:` commits that implement the contributed logic; the prep commit is exempt.
   Flagged here for the operator to confirm at ship time.
 - **Gates:** `check`, root `lint`, full `test`, and `fallow dead-code` all green; no lockfile changes; no architecture/README/SKILL updates needed.
+
+## Stage: Final Retrospective (2026-07-15T20:24:05Z)
+
+### Session summary
+
+Shipped #594 end-to-end across four stages (PR review → planning → TDD → ship) with no rework: a third-party PR (`@whaoa`) adopted with a simplified design that sources per-agent guideline copy from the agent config instead of the PR's hardcoded parallel list.
+Released `pi-subagents-v18.0.3` (two `fix:` commits) and closed #594 with contributor credit.
+The pipeline carried the recorded decision cleanly — each stage's retro note satisfied the next stage's Decide gate without re-litigation.
+
+### Observations
+
+#### What went well
+
+- **PR-review triage drove a genuinely better design.**
+  The PR-review stage separated the real problem (disabled built-ins leaking into the `Guidelines:` block) from the PR's implementation, caught a tautological test assertion (`- ${name} :` with a space that never matches the real `- ${name}:` format), and identified the parallel-source-of-truth smell.
+  That evaluation — not the PR diff — became the plan, producing the `toolGuideline`-on-`AgentConfig` design.
+- **`tidy-first-assessor` held its scope boundary on a real change (first-live-use checkpoint).**
+  It recommended exactly one change-scoped refactor (extract `isEnabledAgent` in `helpers.ts`, reused by the new `buildAgentGuidelines`) and explicitly *declined* to restructure the adjacent `defaultDescs`/`customDescs` duplication because the change did not touch it.
+  This is the discipline the skill's checkpoint watches for — the Rejected-as-scope-creep list correctly excluded untouched code.
+- **Ship-stage release-PR merge distinguished `IN_PROGRESS` from the empty-rollup case.**
+  `release_pr_merge` returned `UNSTABLE`; `statusCheckRollup` showed an `IN_PROGRESS` `check`, so I waited three poll cycles for it to finish and retried `release_pr_merge` rather than falling back to `gh pr merge --rebase` (which the prompt reserves for the empty-rollup `GITHUB_TOKEN` case).
+  Correct branch of the step-6.4 decision tree.
+
+#### What caused friction (agent side)
+
+- `other` — SHA over-verification in the ship stage.
+  Ran `git rev-parse ... | wc -c` three times to re-confirm 40-char length on the HEAD SHA and both `fix:` commit SHAs before pasting them into `ci_find` / the close comment.
+  Impact: a few redundant tool calls, no rework — the prompt's "never hand-type a SHA" rule was satisfied on the first `git rev-parse`; the length re-checks added nothing.
+
+#### What caused friction (user side)
+
+- None.
+  The two `ask_user` gates (PR-review direction; planning guideline-order) each resolved a genuine decision in one exchange; no correction or redirect was needed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `anthropic/claude-sonnet-5`, appropriate for their judgment-heavy read-only work (design assessment, quality gate).
+  No mismatch.
+- **Feedback-loop gap analysis** — verification ran incrementally: `pnpm run check` immediately after Cycle 1's `AgentConfig` interface change, per-file `vitest run` on each red→green, and the full `check`/`lint`/`test`/`fallow` sweep after the last step.
+  No end-only-verification gap.
+- **Escalation-delay / unused-tool** — no `rabbit-hole` or `missing-context` friction; the release-PR `IN_PROGRESS` polling (3 cycles) was expected waiting, not a stuck loop.
+  Nothing to flag.
+
+### Changes made
+
+1. Appended this Final Retrospective stage entry to `packages/pi-subagents/docs/retro/0594-complete-exclude-disabled-agents-tool-description.md`.
+   No `AGENTS.md` or prompt changes — the session surfaced no actionable rule gaps (operator confirmed retro-file-only).
