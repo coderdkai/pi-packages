@@ -35,6 +35,7 @@ The deliverable is a decision, not code — so the design below was settled inte
 - Model the live-authority layer as a **Chain of Responsibility**: each link decides or defers; the terminal link cannot defer and pauses the system until it decides (today, the human).
 - Keep the package model-agnostic: it makes no LLM call, exposes a named-capability registration seam plus an injected query capability, and owns only the safety policy it enforces.
 - Reconcile the architecture doc's `Discriminating delegation` and `pluggable escalation seam` sections with the chain model, and mark Step 7 complete.
+- Record the **dogfooding objective** as slice 1's acceptance criterion: a first-party monorepo package (e.g. `packages/pi-permission-model-judge`) implementing the deny-first typo-path reviewer, so the `registerAuthorizer` seam is born consumed (the [#267] vacant-surface guard) and the config split proves itself concretely.
 
 ## Non-Goals
 
@@ -236,6 +237,10 @@ Both use cases are the *same* `ModelTriageAuthorizer` link; they differ only by 
 The ADR states plainly that the "can never grant more than the engine grants for the pieces it identifies" safety property holds *only if decomposition is faithful*; obfuscation is the residual risk, and it is exactly why slice 2 is gated behind the whole envelope while slice 1 needs almost none.
 The gradient is the argument for shipping deny-first.
 
+Slice 1 is validated by **dogfooding**: a first-party extension in this monorepo (e.g. `packages/pi-permission-model-judge`) implementing the typo-path reviewer against the real seam.
+This is a design safeguard, not just a demo — the arch doc's [#267] history guard warns that an inbound registration surface nobody consumes goes vacant; a first-party consumer registering `"model-judge"` on day one makes `registerAuthorizer` born consumed, and its own config file (provider/model/instructions) exercises the config split end to end.
+The ADR's Consequences section names this objective; the concrete issue is filed by the next `/plan-improvements` pass when the phase is scoped.
+
 ### Relationship to `evaluate()` and rule-driven promotion
 
 The judge sits on the ask-*consuming* side of `evaluate()`, distinct from the ask-*producing* side (rule-driven promotion, [#509]).
@@ -248,6 +253,7 @@ Documentation only.
 No `src/`, `test/`, `README.md`, config, or schema change.
 
 - **New:** `packages/pi-permission-system/docs/decisions/0007-model-judge-authorizer-chain-adr.md` — the ADR recording §1–§6, rejected alternatives (opt-out activation; judge imports `PermissionsService`; a single terminal instead of a chain; ask-only allow-or-escalate verdict range), and accepted limitations ([#472] owns provider/prompt/threshold/timeout tuning, the slice decomposition, and the downstream package; terminal-replacement registration deferred; the pre-`evaluate()` classifier keeps its own future ADR).
+  The Consequences section names the dogfooding objective: slice 1 is accepted by a first-party monorepo judge extension registering against the real seam.
   The reverted 0007 slot is free, so this is ADR 0007.
 - **Changed:** `packages/pi-permission-system/docs/architecture/architecture.md`
   - Rewrite the `Discriminating delegation: a model Authorizer` section (line ~604): the chain model, verdict range `allow | deny | defer`, deny-first two-slice gradient, injected `PermissionQuery`, opt-in named registration, config split — superseding the ask-only allow-or-escalate framing.
@@ -310,10 +316,12 @@ Flipping the Phase 11 heading to `(complete)` and extracting its detail to `hist
 
 - **[#472]'s implementation decomposition.**
   This design is materially larger than [#472]'s original "support a case-by-case judge" framing (a chain refactor of the Authorizer spine + `defer` verdict + named registration + injected `PermissionQuery` + config + two judge slices + a new downstream orchestrator package).
-  Whether [#472] splits into staged issues (chain infrastructure; deny-first slice; allow-capable slice; downstream package) is [#472]'s own `/plan-issue` decision — deferred deliberately, not filed speculatively here.
+  The next `/plan-improvements` pass sequences this: [#472]'s decomposition (chain infrastructure; deny-first slice; allow-capable slice) plus the dogfood extension become roadmap-step candidates, and the dogfood-extension issue is filed there — deferred deliberately, not filed speculatively here.
+  The dogfood extension lives in this monorepo as a new package (per the AGENTS.md new-package checklist), settled during planning.
 - **Terminal-replacement registration.**
   Registering a backend *as* the terminal authority (a chat-bot / remote reviewer replacing the human) is the chain seam's other role, deferred until a real non-subagent backend needs it; noted in the ADR as future, not filed.
 
+[#267]: https://github.com/gotgenes/pi-packages/issues/267
 [#296]: https://github.com/gotgenes/pi-packages/issues/296
 [#309]: https://github.com/gotgenes/pi-packages/issues/309
 [#472]: https://github.com/gotgenes/pi-packages/issues/472
