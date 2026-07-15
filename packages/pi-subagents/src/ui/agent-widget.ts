@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-redundant-type-constituents -- Pi SDK types are not fully exported; see upstream Pi SDK for type improvements */
 /**
  * agent-widget.ts — Persistent widget showing running/completed agents above the editor.
  *
@@ -51,11 +50,17 @@ export function assembleWidgetState(
   return { runningCount, queuedCount, hasFinished, hasActive };
 }
 
+/** The slice of the TUI the widget factory callback touches. */
+export interface TuiSurface {
+  readonly terminal: { readonly columns: number };
+  requestRender(): void;
+}
+
 export type UICtx = {
   setStatus(key: string, text: string | undefined): void;
   setWidget(
     key: string,
-    content: undefined | ((tui: any, theme: Theme) => { render(): string[]; invalidate(): void }),
+    content: undefined | ((tui: TuiSurface, theme: Theme) => { render(): string[]; invalidate(): void }),
     options?: { placement?: "aboveEditor" | "belowEditor" },
   ): void;
 };
@@ -74,7 +79,7 @@ export class AgentWidget implements SubagentManagerObserver {
   /** Whether the widget callback is currently registered with the TUI. */
   private widgetRegistered = false;
   /** Cached TUI reference from widget factory callback, used for requestRender(). */
-  private tui: any | undefined;
+  private tui: TuiSurface | undefined;
   /** Last status bar text, used to avoid redundant setStatus calls. */
   private lastStatusText: string | undefined;
 
@@ -180,7 +185,7 @@ export class AgentWidget implements SubagentManagerObserver {
   }
 
   /** Delegate rendering to the pure widget-renderer module. */
-  private renderWidget(tui: any, theme: Theme): string[] {
+  private renderWidget(tui: TuiSurface, theme: Theme): string[] {
     return renderWidgetLines({
       agents: this.listBackgroundAgents().map(r => this.toWidgetAgent(r)),
       registry: this.registry,
