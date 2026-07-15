@@ -152,6 +152,15 @@ describe("buildTypeListText", () => {
     const result = buildTypeListText(registry, "/home/.pi");
     expect(result).not.toContain("Custom agents:");
   });
+
+  it("omits the Default agents header when no default agents exist", () => {
+    const registry = makeRegistry({
+      users: ["my-agent"],
+      resolve: () => ({ description: "My custom agent", model: undefined }),
+    });
+    const result = buildTypeListText(registry, "/home/.pi");
+    expect(result).not.toContain("Default agents:");
+  });
 });
 
 describe("buildAgentGuidelines", () => {
