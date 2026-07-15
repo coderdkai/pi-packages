@@ -79,6 +79,15 @@ Both checks must pass before a diagram is considered done:
 1. Run `mmdc -i <file>` (or pipe the fenced block) — catches semicolons and most syntax errors.
 2. Confirm rendered output in vivify (`:MarkdownPreview`) or GitHub preview — catches angle-bracket cases that `mmdc` misses.
 
+To extract a fenced Mermaid block from a markdown file for step 1:
+
+```bash
+awk '/^```mermaid/{f=1;next} /^```/{f=0} f' doc.md > /tmp/diagram.mmd
+mmdc -i /tmp/diagram.mmd -o /tmp/diagram.svg --quiet && echo "mermaid OK"
+```
+
+This concatenates **all** Mermaid blocks in the file; when the file has several diagrams and you want just one, narrow to its section first (`sed -n 'START,ENDp' doc.md | awk …`).
+
 ## State machines
 
 When a state machine has a layer-stack or other dimension beyond the rendered states, accompany self-edges with a `note right of <state>` block to disambiguate the operation.

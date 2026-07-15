@@ -23,13 +23,13 @@ pnpm fallow:dupes          # duplicated code blocks
 
 ## JSON output for programmatic use
 
-Always use `--format json --quiet 2>/dev/null` and append `|| true`.
-Exit code 1 means "issues found" (normal), not a runtime error.
+Always invoke via `pnpm --silent fallow … --format json --quiet 2>/dev/null` and append `|| true`.
+The `--silent` is load-bearing: fallow exits 1 when issues are found (normal), and without `--silent` pnpm appends `[ELIFECYCLE] Command failed with exit code 1.` to **stdout** after the JSON — `json.load` then fails with "Extra data", and `2>/dev/null` does not strip it.
 Only exit code 2 is a real error.
 
 ```bash
-pnpm fallow dead-code --format json --quiet 2>/dev/null || true
-pnpm fallow health --score --targets --format json --quiet 2>/dev/null || true
+pnpm --silent fallow dead-code --format json --quiet 2>/dev/null || true
+pnpm --silent fallow health --score --targets --format json --quiet 2>/dev/null || true
 ```
 
 ## Useful flags

@@ -96,18 +96,21 @@ Counting `as unknown as` / `vi.mock` occurrences is not reading them — a docum
 The micro lens (test-design quality as a first-class artifact — Category G — plus method-level SOLID, naming, stepdown, and comment quality) is expensive in context, so dispatch it to a subagent:
 
 - Dispatch the `craftsmanship-scout` subagent via the `subagent` tool: `subagent_type: "craftsmanship-scout"`, `description: "Craftsmanship scout for <PKG>"`, and a `prompt` naming the package, the largest test files (from the `fallow health` large-functions list), and the churn hotspots.
+- Hand it the fallow large-function flags for test files and ask it to **adjudicate each one** — fallow counts a whole top-level `describe` callback as one function, so a flagged "giant test" may be a healthy nested tree of small behavior-named tests.
+  A refuted flag is as valuable as found debt: it prevents a phase step manufactured from a false positive.
 - It **opens** the largest test files (not greps) and returns a **scored debt inventory**, flagging each cluster **concentrated** (a hot area worth a step) vs. **scattered** (defer).
   Fold that inventory into your findings; its concentrated/scattered split drives the Step 8 deferral gate.
 - The scout is read-only and its context stays in the subagent — your context stays clear for the plan.
 
-> **First-live-use checkpoint (added 2026-07-13).**
-> The `craftsmanship-scout` is new and its **concentrated** vs. **scattered** judgment is unproven.
-> On its first runs, open one file it flags **concentrated** and one it flags **scattered** and confirm the calls match your own read before letting the split drive the Step 8 deferral gate — an over-clustering scout invents craftsmanship phases; an under-clustering one hides real debt.
-> Recalibrate `.pi/agents/craftsmanship-scout.md` (Step 3) if the calls are off, and remove this callout once the split has proven reliable.
+> **Calibration checkpoint (added 2026-07-13; run 1 passed 2026-07-15).**
+> Until **two consecutive** planning runs have calibrated cleanly, spot-check the scout: open one file it flags **concentrated** and one it flags **scattered** (or, when a class is absent, one of its fallow-flag adjudications) and confirm the calls match your own read before letting the split drive the Step 8 deferral gate — an over-clustering scout invents craftsmanship phases; an under-clustering one hides real debt.
+> Run 1 (pi-permission-system Phase 12, 2026-07-15): all spot-checked calls matched, including refuting two fallow "giant test function" false positives.
+> If a run's calls are off, recalibrate `.pi/agents/craftsmanship-scout.md` (Step 3) and reset the count; after the second consecutive clean run, remove this callout.
 
 ### Step 6: Assess file and directory organization against the domain
 
 **Skip this step when domain subdirectories already exist and the `src/` root file count is small** (fewer than 10 top-level files): the deep directory-organization analysis is a scripted no-op on a package that has already been grouped into domains.
+**Also skip the deep analysis when domain subdirectories exist and the architecture doc already records a forward-looking directory sketch or reorg convention** (e.g. "grow domain directories in phases that rewrite those files"): re-deriving the convention each phase is a repeated no-op — just check this phase's target files against the recorded sketch and note the result.
 Run `ls packages/$1/src | grep -c '\.ts$'` to check the root file count and note the skip.
 
 Otherwise, run `ls packages/$1/src` and look at the shape of the tree, not just the contents of files.
@@ -163,6 +166,7 @@ The section should include:
 
 1. A summary of findings (updated health metrics table).
    Prefer cause-level metrics recomputable by a single command (a `grep -c`, `wc -l`, or fallow field) and record the recompute command with the metric, so `/finish-phase` can verify delivered vs. predicted deterministically.
+   When a metric greps for a symbol or filename the phase has not created yet (a predicted name), the step whose work creates it must either use the roadmap's name or update the metric row in the same commit — note this on that step, or a rename silently breaks `/finish-phase`'s recompute.
 2. Numbered steps with:
    - Title
    - **Cause** — the first-principles structural cause the step dissolves, named explicitly; a fallow signal is cited as the _symptom_ of that cause, never as the step's motivation (a step justified only by a fallow finding is symptom-driven — trace it to a cause or drop it).
@@ -205,6 +209,7 @@ Finally, restate the recommended working sequence: list the issues as `#N — ti
 Before stopping, persist planning observations for cross-session continuity — `/plan-improvements` is phase-scoped, not issue-scoped, so it uses a **phase retro** file rather than the issue-keyed `NNNN-<slug>.md` convention.
 
 1. Write `packages/$1/docs/retro/phase-N-<slug>.md` (create `packages/$1/docs/retro/` if needed), using the phase number N and slug from Step 1.
+   Derive the slug from the phase title so `/finish-phase` reuses it for `history/phase-N-<slug>.md` — the two files should share a slug and stay greppable as a pair.
    This is distinct from the `history/phase-N-<slug>.md` archive `/finish-phase` owns — do not touch that.
 2. If the file does not exist, create it with this frontmatter (a phase-scoped variant — `package`/`phase` keys, not the issue-keyed schema):
 

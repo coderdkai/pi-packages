@@ -29,6 +29,7 @@ The dispatching agent provides:
 - **Package** — the `packages/<PKG>` under analysis.
 - **Largest test files** — a list (from `fallow health` large-functions / `wc -l`), or find them yourself: `ls -S packages/<PKG>/test/**/*.ts | head` and the `fallow health` "Large functions" test entries.
 - **Churn hotspots** — the `fallow health --hotspots` list; concentrate on files that are both large/complex *and* high-churn.
+- **Fallow flags to adjudicate** — large-function flags on test files the dispatcher wants confirmed or refuted (see Step 1).
 
 ## Step 1: Read the largest test files in full
 
@@ -45,6 +46,9 @@ For each, assess against the `testing` and `code-design` skills (load them):
   Prefer `toHaveBeenCalledWith`.
 - **Unclear arrange/act/assert** — setup, exercise, and verification interleaved so the reader cannot find the one thing under test.
 - **Missing behavior coverage** — a public behavior with no test, or only a happy-path test where edge cases (empty, boundary, error) carry the risk.
+
+When the dispatcher hands you fallow large-function flags for test files, **adjudicate each one explicitly**: fallow counts a whole top-level `describe` callback as one function, so a flagged "921-line arrow" may be a healthy nested tree of small behavior-named tests.
+Report each flag as CONFIRMED (a genuinely fused mega-test) or REFUTED (false positive), with a one-line reason — refuting a false flag is as valuable as finding debt, because it prevents the planner manufacturing a step from a metric artifact.
 
 ## Step 2: Sweep production design at the method/module scale
 
@@ -84,6 +88,8 @@ Your final message must be the inventory block and nothing after it — the disp
 - CONCENTRATED — test/bash-external-directory.test.ts:43 (880-line arrow body)
   ~14 behaviors fused into one `it`; no per-behavior isolation. Split into behavior-named cases.
   Impact 4 / Risk 2 / Priority 16
+- FLAG REFUTED — test/program.test.ts:17 (fallow "921-line function")
+  One top-level `describe` callback holding dozens of small behavior-named `it`s; not a fused body. No action.
 - <more items…>
 
 ### Production design (SOLID / naming / organization)
