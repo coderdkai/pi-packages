@@ -72,9 +72,8 @@ export interface TypeListRegistry extends AgentConfigLookup {
  * Extracted from index.ts so it can be called inside createAgentTool.
  */
 export function buildTypeListText(registry: TypeListRegistry, agentDir: string): string {
-  const isEnabled = (name: string) => registry.resolveAgentConfig(name).enabled !== false;
-  const defaultNames = registry.getDefaultAgentNames().filter(isEnabled);
-  const userNames = registry.getUserAgentNames().filter(isEnabled);
+  const defaultNames = registry.getDefaultAgentNames().filter((name) => isEnabledAgent(registry, name));
+  const userNames = registry.getUserAgentNames().filter((name) => isEnabledAgent(registry, name));
 
   const defaultDescs = defaultNames.map((name) => {
     const cfg = registry.resolveAgentConfig(name);
@@ -94,6 +93,11 @@ export function buildTypeListText(registry: TypeListRegistry, agentDir: string):
     "",
     `Custom agents can be defined in .pi/agents/<name>.md (project) or ${agentDir}/agents/<name>.md (global) — they are picked up automatically. Project-level agents override global ones. Creating a .md file with the same name as a default agent overrides it.`,
   ].join("\n");
+}
+
+/** True when an agent config is present and not explicitly disabled. */
+function isEnabledAgent(registry: AgentConfigLookup, name: string): boolean {
+  return registry.resolveAgentConfig(name).enabled !== false;
 }
 
 /** Derive a short model label from a model string. */
