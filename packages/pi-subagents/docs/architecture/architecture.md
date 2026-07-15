@@ -1011,7 +1011,7 @@ Landed: `ModelRegistry.find/getAll/getAvailable` and `resolveModel`'s return are
 
 `Release: independent`
 
-#### Step 5 — Narrow `tui`/`theme` render interfaces ([#539])
+#### ✅ Step 5 — Narrow `tui`/`theme` render interfaces ([#539])
 
 Smell: Category C/D (platform type threading; wide `any` params in render callbacks).
 Target files:
@@ -1023,6 +1023,12 @@ Target files:
 Some disables are irreducible SDK export gaps; the goal is line-level precision, not zero.
 
 Outcome: file-level eslint-disable headers 5 → ≤ 2; remaining suppressions are line-level with named rules.
+
+Landed: `agent-widget.ts` gained a lean local `TuiSurface` interface (`{ terminal: { columns }, requestRender() }`) replacing all three `tui: any` sites; its 4-rule file-level disable is removed.
+`agent-tool.ts`'s `renderCall`/`renderResult` now type `theme` against the existing local `display.Theme` and `result` against the SDK-exported `AgentToolResult<AgentDetails | undefined>`/`ToolRenderResultOptions`; `textResult` was retyped (`details?: AgentDetails`) so the tool's inferred `TDetails` is honest end-to-end, eliminating the `result.details` cast; `ctx` params are typed `ExtensionContext`.
+Its 6-rule file-level disable is removed with zero residual — a pre-existing `params.resume` (`unknown`) gap surfaced at three template-literal sites once the header lifted, fixed with the same `as string` cast already used a few lines away for `getRecord`/`resume`.
+`foreground-runner.ts`'s `details as any` cast and its line-level disable are retired.
+Running disable-header tally 3 → 1 (only `index.ts`'s 1-rule `no-unsafe-argument` remains, an accepted SDK gap outside this step's scope) — under the `≤ 2` Phase 20 target.
 
 `Release: independent`
 
@@ -1083,7 +1089,7 @@ flowchart LR
     S1 -.soft.-> S7["Step 7 (#541)<br/>Decompose notification renderer"]
     S3["✅ Step 3 (#537)<br/>Steer returns an outcome"]
     S4["✅ Step 4 (#538)<br/>Type the model boundary"]
-    S5["Step 5 (#539)<br/>Narrow tui/theme interfaces"]
+    S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
     S6["Step 6 (#540)<br/>Table-driven settings handler"]
     S8["Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["Step 9 (#543)<br/>Consolidate test clones"]
     S2 --> S9
