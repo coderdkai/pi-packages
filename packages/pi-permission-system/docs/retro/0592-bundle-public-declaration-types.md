@@ -49,3 +49,45 @@ Full suite (2472 tests in `pi-permission-system`, 965 in `pi-subagents`, 3068 to
 - No `docs/architecture/architecture.md` roadmap-step `✅` marker was needed — confirmed in planning that #592 has no roadmap step (`Release: ship independently`).
 - Pre-completion reviewer: **PASS**.
   All deterministic checks, Conventional Commits, forward/reverse docs, Mermaid parse, and dead-code passed; several sections were correctly `SKIP` (no `src/` changes → code-design skip; no Vitest cycles in the plan → test-artifact skip against Vitest specifically; no roadmap step → invariants skip; no named follow-up → follow-up skip).
+
+## Stage: Final Retrospective (2026-07-15T00:00:00Z)
+
+### Session summary
+
+Shipped `@gotgenes/pi-permission-system@20.7.3` cleanly across four stages (plan → build → ship → retro): the fix bundles the public type surface into a self-contained `dist/public.d.ts` behind `exports.types`, mirroring the `pi-subagents` convention, and lifts `rollup`/`rollup-plugin-dts` into the shared pnpm catalog.
+The whole change was near-mechanical because planning found an existing sibling convention to port verbatim; the only friction was two minor, self-resolved `missing-context` moments (a `node:` builtin and a `types: ["node"]` probe setting), neither causing rework.
+
+### Observations
+
+#### What went well
+
+1. Porting the `pi-subagents` declaration-bundling convention verbatim turned a fiddly packaging fix into a repeatable, low-risk port — the first reuse of that convention across a second package, which validates it as a pattern rather than a one-off.
+2. The `verify:public-types` guard reproduces the reporter's *exact* repro (the `PERMISSIONS_UI_PROMPT_CHANNEL` import plus the `moduleResolution: "Bundler"` / `verbatimModuleSyntax: true` tsconfig from the issue body), so it fails before the fix and passes after — a true black-box regression guard, not a synthetic proxy.
+3. Ship-stage `release_pr_merge` `UNSTABLE` handling was a clean traversal of the nuanced step-6.4 branch: correctly distinguished a genuine `IN_PROGRESS` PR-branch check from the empty-rollup `GITHUB_TOKEN` case, waited via `ci_watch`, re-verified `mergeStateStatus: CLEAN`, then merged by rebase — no premature `gh pr merge` fallback while a check was running.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the `rollup.dts.config.mjs` `external` list, copied from `pi-subagents`, lacked `/^node:/`; this package's public surface transitively imports `node:path` (via `src/path/path-flavor.ts`, pulled in through `rule.ts`'s `RuleOrigin`), so the first `build:types` emitted an unresolved-dependency warning.
+   Impact: one edit (add `/^node:/`) folded into the same `build:` commit; warning-only (exit 0 throughout), no rework.
+   Self-identified.
+2. `missing-context` — the `verify-public-types.sh` consumer-probe `tsconfig.json` initially copied the reporter's `types: ["node"]`, which failed `TS2688` in the throwaway consumer (no `@types/node` installed there).
+   Impact: one edit (drop the line, matching the sibling script's leaner tsconfig) + one re-run, ~1 tool cycle; the script was uncommitted, so no commit rework.
+   Self-identified.
+
+#### What caused friction (user side)
+
+1. None material.
+   The operator's planning-stage direction-walking (bundled-`dist`-plus-dogfood → fully `pi-subagents`-consistent) and the mid-planning catalog-lift addition were productive strategic steering that sharpened the plan, not rework — the catalog need only became visible once a second consumer of `rollup` existed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — one subagent dispatch this issue: `pre-completion-reviewer` on `anthropic/claude-sonnet-5` (its frontmatter model), a judgment-heavy review task — appropriate; no reasoning-weak-on-judgment or high-cost-on-mechanical mismatch.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; both `missing-context` items resolved in a single tool cycle each, well under the 5-call flag.
+- **Unused-tool detection** — none applicable; no `missing-context` moment would have been shortened by an `Explore`/`colgrep`/`web_search` dispatch (both were config-mechanics gotchas surfaced immediately by running the build).
+- **Feedback-loop gap analysis** — verification ran incrementally after each step (`build:types` → `pnpm pack` + `tar tzf` → `verify:public-types` → `lint:md` → full `pnpm -r run test`/`check`/`lint`), not batched at the end; the sibling regression check ran twice (post-catalog-migration and post-doc-pass).
+  No gap.
+
+### Changes made
+
+1. `packages/pi-permission-system/docs/retro/0592-bundle-public-declaration-types.md` — appended this Final Retrospective stage entry.
+2. No `AGENTS.md` or prompt changes: the one candidate (a `/^node:/` rollup-`external` note for dist-bundling packages) was surfaced but declined by the operator as too low-frequency; it stays captured in the friction notes above.
