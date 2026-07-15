@@ -41,7 +41,7 @@ export async function runForeground(
   manager: ForegroundManagerDeps,
   params: ForegroundParams,
   signal: AbortSignal | undefined,
-  onUpdate: ((update: AgentToolResult<any>) => void) | undefined,
+  onUpdate: ((update: AgentToolResult<AgentDetails>) => void) | undefined,
 ) {
   const { identity, execution, presentation } = params.config;
   let spinnerFrame = 0;
@@ -68,8 +68,7 @@ export async function runForeground(
     };
     onUpdate?.({
       content: [{ type: "text", text: `${toolUses} tool uses...` }],
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Pi SDK ToolCallUpdate details type is not exported
-      details: details as any,
+      details,
     });
   };
 

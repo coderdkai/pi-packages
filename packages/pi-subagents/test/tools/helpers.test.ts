@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TypeListRegistry } from "#src/tools/helpers";
 import { buildAgentGuidelines, buildDetails, buildTypeListText, formatLifetimeTokens, getModelLabelFromConfig, getStatusNote, textResult } from "#src/tools/helpers";
+import type { AgentDetails } from "#src/ui/display";
 import { createTestSubagent } from "#test/helpers/make-subagent";
 
 /** Build a minimal TypeListRegistry stub for tests. */
@@ -33,7 +34,15 @@ describe("textResult", () => {
   });
 
   it("includes details when provided", () => {
-    const details = { displayName: "Agent", status: "completed" };
+    const details: AgentDetails = {
+      displayName: "Agent",
+      description: "",
+      subagentType: "general-purpose",
+      toolUses: 0,
+      tokens: "",
+      durationMs: 0,
+      status: "completed",
+    };
     const result = textResult("done", details);
     expect(result.details).toBe(details);
   });

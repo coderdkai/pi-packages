@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string, @typescript-eslint/restrict-template-expressions -- Pi SDK types are not fully exported; see upstream Pi SDK for type improvements */
-import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, ExtensionContext, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
@@ -12,7 +11,7 @@ import { buildAgentGuidelines, buildDetails, buildTypeListText, textResult } fro
 import { renderAgentResult } from "#src/tools/result-renderer";
 import { type ModelInfo, resolveSpawnConfig } from "#src/tools/spawn-config";
 import type { ParentSessionInfo, Subagent } from "#src/types";
-import { type AgentDetails, getDisplayName } from "#src/ui/display";
+import { type AgentDetails, getDisplayName, type Theme } from "#src/ui/display";
 
 // ---- Deps interfaces ----
 
@@ -60,8 +59,8 @@ export class AgentTool {
 		toolCallId: string,
 		params: Record<string, unknown>,
 		signal: AbortSignal | undefined,
-		onUpdate: ((update: AgentToolResult<any>) => void) | undefined,
-		_ctx: any,
+		onUpdate: ((update: AgentToolResult<AgentDetails>) => void) | undefined,
+		_ctx: ExtensionContext,
 	) {
 		// Reload custom agents so new .pi/agents/*.md files are picked up without restart
 		this.registry.reload();
@@ -85,12 +84,12 @@ export class AgentTool {
 			const existing = this.manager.getRecord(params.resume as string);
 			if (!existing) {
 				return textResult(
-					`Agent not found: "${params.resume}". It may have been cleaned up.`,
+					`Agent not found: "${params.resume as string}". It may have been cleaned up.`,
 				);
 			}
 			if (!existing.isSessionReady()) {
 				return textResult(
-					`Agent "${params.resume}" has no active session to resume.`,
+					`Agent "${params.resume as string}" has no active session to resume.`,
 				);
 			}
 			const record = await this.manager.resume(
@@ -99,7 +98,7 @@ export class AgentTool {
 				signal ?? new AbortController().signal,
 			);
 			if (!record) {
-				return textResult(`Failed to resume agent "${params.resume}".`);
+				return textResult(`Failed to resume agent "${params.resume as string}".`);
 			}
 			return textResult(
 				record.result?.trim() ?? record.error?.trim() ?? "No output.",
@@ -207,7 +206,7 @@ ${guidelines}
 
 			// ---- Custom rendering: inline subagent results ----
 
-			renderCall(args: Record<string, unknown>, theme: any) {
+			renderCall(args: Record<string, unknown>, theme: Theme) {
 				const displayName = args.subagent_type
 					? getDisplayName(args.subagent_type as string, registry)
 					: "Subagent";
@@ -221,8 +220,12 @@ ${guidelines}
 				);
 			},
 
-			renderResult(result: any, { expanded, isPartial }: any, theme: any) {
-				const details = result.details as AgentDetails | undefined;
+			renderResult(
+				result: AgentToolResult<AgentDetails | undefined>,
+				{ expanded, isPartial }: ToolRenderResultOptions,
+				theme: Theme,
+			) {
+				const details = result.details;
 				if (!details) {
 					const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 					return new Text(text, 0, 0);
@@ -239,8 +242,8 @@ ${guidelines}
 				toolCallId: string,
 				params: Record<string, unknown>,
 				signal: AbortSignal | undefined,
-				onUpdate: ((update: AgentToolResult<any>) => void) | undefined,
-				ctx: any,
+				onUpdate: ((update: AgentToolResult<AgentDetails>) => void) | undefined,
+				ctx: ExtensionContext,
 			) => this.execute(toolCallId, params, signal, onUpdate, ctx),
 		});
 	}

@@ -48,7 +48,7 @@ export function buildDetails(
 }
 
 /** Tool execute return value for a text response. */
-export function textResult(msg: string, details?: unknown) {
+export function textResult(msg: string, details?: AgentDetails) {
   return { content: [{ type: "text" as const, text: msg }], details };
 }
 

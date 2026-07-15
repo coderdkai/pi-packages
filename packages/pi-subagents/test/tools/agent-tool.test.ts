@@ -1,3 +1,4 @@
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { AgentTool } from "#src/tools/agent-tool";
 import { createToolDeps, createToolDepsWithDisabledBuiltInAgents } from "#test/helpers/make-deps";
@@ -8,7 +9,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 	return {
 		ui: { fake: true },
 		...overrides,
-	};
+	} as unknown as ExtensionContext;
 }
 
 function makeTool(deps: ReturnType<typeof createToolDeps>) {
