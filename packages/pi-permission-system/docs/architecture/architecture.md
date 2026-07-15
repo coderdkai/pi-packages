@@ -496,7 +496,7 @@ The `PermissionsService` interface exposes three methods:
 The sections above describe the current implementation.
 This section records the organizing concept the package is built around — the spine the elicitation, forwarding, and yolo machinery collapse into.
 It is now current state, not merely a target: the `Authorizer` interface, its three implementations, and once-per-activation selection landed in Phase 9 Step 1 ([#555]); `canConfirm()` was dissolved in Phase 9 Step 2 ([#556]) — the ask path now always escalates to the selected `Authorizer`; serving (`ForwardedRequestServer`) was rebuilt onto `evaluate()` + the serving `Authorizer` in Phase 9 Step 3 ([#557]); human-selectable grant-scope landed in Phase 9 Step 4 ([#558]); and the mechanical `authority/` directory migration completed in Phase 9 Step 5 ([#559]) — the yolo, elicitation, and forwarding machinery now collapse onto the spine as built.
-Only the ["beyond the target"](#beyond-the-target-a-non-deterministic-access-intent-classifier) extension points below (the model-triage `Authorizer`, a non-deterministic access-intent classifier, a pluggable escalation seam) remain aspirational.
+Of the ["beyond the target"](#beyond-the-target-a-non-deterministic-access-intent-classifier) extension points below, the model-triage `Authorizer` chain is now designed ([ADR 0007](../decisions/0007-model-judge-authorizer-chain-adr.md), pending [#472]) and its named-link registration subsumes the pluggable escalation seam; a non-deterministic access-intent classifier remains aspirational.
 
 ### Why this is worth doing
 
@@ -605,30 +605,41 @@ It is not built, and it would be requested by name, never conflated with yolo.
 
 Nothing constrains an `Authorizer` to be deterministic.
 `LocalUserAuthorizer` is already a non-deterministic oracle — the human — and the determinism principle governs *recorded* authority (`evaluate()`), never the live-authority layer.
-A model (e.g. Claude Haiku) can hold the `Authorizer` role on the same terms: it is live authority, so it never touches `evaluate()` or the deterministic core.
+A model (e.g. Claude Haiku) can hold an `Authorizer` role on the same terms: it is live authority, so it never touches `evaluate()` or the deterministic core.
 
-Shape it as a **decorator, not a fourth channel**: `ModelTriageAuthorizer(inner)` wraps whichever selection context produced (`LocalUser` / `Parent` / `Denying`), rules `allow` on the asks it judges to be false positives, and delegates every other ask to `inner`.
-This is the [recursion](#the-recursion) above with the model's parent being the human — "a node's `Authorizer` is its own `ParentAuthorizer`."
+The design is settled in [ADR 0007](../decisions/0007-model-judge-authorizer-chain-adr.md); the essentials follow.
+
+**The live-authority layer is a Chain of Responsibility.**
+Each link returns `allow | deny | defer`; on `defer` the next link decides.
+The chain ends at a **terminal that cannot defer** — today the human (`LocalUserAuthorizer`), the headless `DenyingAuthorizer`, or `ParentAuthorizer` (terminal for its node, forwarding up to the parent node's chain — the [recursion](#the-recursion) above).
+The invariant is type-level: a terminal returns only `allow | deny`, so a deferring link cannot occupy the terminal slot.
+`selectAuthorizer` becomes the terminal-selection step of `composeAuthorizerChain` — registered non-terminal links, then the context-selected terminal.
 
 ```text
-ask -> ModelTriageAuthorizer(inner)
-         ├─ model rules "allow"          -> auto-permit (false positive dismissed)
-         └─ model escalates / uncertain  -> inner.authorize(...)  // human, Parent, or Denying
+ask -> [ model-judge link ] --defer--> … --defer--> [ terminal: human | Parent | Denying ]
+              ├─ deny (with teaching reason)   -> denied
+              ├─ allow (slice 2, if not excluded) -> permitted
+              └─ defer                          -> next link
 ```
 
-It is a **discriminating, deny-preserving yolo**, and inherits yolo's safety boundary exactly.
-Denies never reach an `Authorizer` — they are decided by recorded authority — so the model *structurally cannot* grant a hard deny; the safeguard for a sensitive resource is an explicit `deny` rule, which survives the model just as it survives the yolo rewrite.
-Where yolo rewrites every `ask` to `allow`, the model resolves only the asks it is confident about and escalates the rest — a middle rung between prompt-everything and allow-everything.
+**The model judge is a non-terminal link**, not a decorator or a fourth channel.
+It reviews an `ask`, decides the ones it is confident about, and defers the rest to its successor — a middle rung between prompt-everything and allow-everything.
+Denies are decided by recorded authority and structurally never reach an `Authorizer`, so a model link cannot grant a hard deny; the safeguard for a sensitive resource stays an explicit `deny` rule, which survives the model just as it survives the yolo rewrite.
 
-Three properties keep it reviewable and fail-closed:
+The verdict range is `allow | deny | defer` — a superset of the earlier allow-or-escalate framing — because the first use case is **deny-first**.
+A light model reviews `external_directory` asks, denies an errant "typo" path with a teaching `reason` (wrong path; correct location) so the invoking model self-corrects, and defers everything else.
+A second use case adjudicates **opaque bash**: the model decomposes a `bash -c "…"` / `eval` command and queries the deterministic engine per sub-command through an injected, narrow `PermissionQuery` (never a reach-through to `PermissionsService`), allowing only what the engine already grants for the pieces it identifies.
+The two are one link on a **capability gradient**: the deny/defer reviewer is strictly more restrictive and ships first; the allow-capable adjudicator loosens privilege and is gated behind the full envelope (hard exclusions, audit `origin: "authorizer:model"`, non-persistence, off by default), because its safety property holds only if the model's decomposition is faithful.
 
-- **Audited** — a model grant is tagged `origin: "authorizer:model"` (with model version and the structured intent) so the review log distinguishes it from a human, policy, or yolo allow, mirroring how yolo grants carry `origin: "yolo"`.
-- **Non-persistent** — unlike a human's "for this session" ruling, a model verdict does *not* silently become recorded authority; it stays live-only (or is persisted quarantined for human review), so a probabilistic judgment never hardens into durable config.
-- **Fail-closed** — model unreachable, timeout, or low confidence delegates to `inner` (the human, the `ParentAuthorizer`, or `DenyingAuthorizer`), never an auto-allow; bounded delegation (which surfaces the model may auto-allow) is itself ruleset-expressible, with `external_directory` and secret-shaped `path` rules excluded so they always reach the human.
+Registration mirrors `registerToolAccessExtractor`: a downstream extension offers a **named** capability (`registerAuthorizer("model-judge", …)`) on `permissions:ready`, and this package makes no LLM call itself.
+Three invariants govern the seam: config order (not registration order) fixes the security-relevant chain order; a missing configured link is skipped fail-safe (more prompting, never less); and **registration alone grants no authority** — a link decides nothing until the operator names it in the `authorizerChain` config (opt-in).
+Bounded delegation is operator config this package enforces at a checkpoint that downgrades an excluded-surface `allow` to `defer`, with `external_directory` and secret-shaped `path` always excluded; the model's provider/prompt/threshold live in the downstream extension's own config.
 
 This is the principled successor to the per-command argument-position work deferred from [#509].
-Rule-driven promotion ([#509]) produces the `ask` for a bare filename that matches a `path` rule and deliberately accepts a fail-safe false positive (`git grep id_rsa` prompts); that false positive lives on the *ask-producing* side of `evaluate()`, and the `ModelTriageAuthorizer` dismisses it on the *ask-consuming* side without hard-coding per-command file-argument tables.
-The two compose cleanly because a promoted token emits the same structured descriptor a prefixed path does, so the `Authorizer` needs no promotion-specific knowledge.
+Rule-driven promotion ([#509]) produces the `ask` for a bare filename that matches a `path` rule and deliberately accepts a fail-safe false positive (`git grep id_rsa` prompts); that false positive lives on the *ask-producing* side of `evaluate()`, and the model link dismisses it on the *ask-consuming* side without hard-coding per-command file-argument tables.
+The two compose cleanly because a promoted token emits the same structured descriptor a prefixed path does, so a link needs no promotion-specific knowledge.
+
+**Dogfooded:** a first-party monorepo package (`packages/pi-permission-model-judge`) implements the deny-first typo-path reviewer against the real seam, so `registerAuthorizer` is born consumed (the [#267] vacant-surface guard).
 
 ### Resolved direction
 
@@ -640,7 +651,7 @@ These were the open decisions; they are now settled.
    Identical in policy, not anonymous in presentation: a forwarded ask carries its provenance (requester agent/session, original `source`/`surface`/`value`) as part of the question — data on the escalated ask's details, not a separate emission path — so the `permissions:ui_prompt` broadcast observers receive stays non-degraded (`forwarding` populated, the [#292] contract hardening).
    Provenance-as-data is the live-authority echo of the principal identity the [access-intent direction](#remaining-design-work) requires, and it rides a future multi-hop escalation chain with no per-hop special-casing.
 2. **Multi-level escalation: admitted, not shipped.**
-   The model is recursive — a middle node's `Authorizer` is its own `ParentAuthorizer`, so an unanswerable `ask` re-escalates up with no special-casing.
+   The model is recursive — a middle node's chain terminates in a `ParentAuthorizer`, so an unanswerable `ask` re-escalates up with no special-casing.
    In practice the tree is depth-2: pi-subagents' recursion guard removes the subagent tool from children, so there are no grandchildren to escalate.
    The one-hop ceiling is therefore the *shadow* of that guard, external to this package — not a permission-model choice — and if pi-subagents ever allows nesting, no change is needed here.
    A cheap **one-hop canary** (assert/log if a forwarded request arrives from a node that is itself a non-root subagent) turns a future invariant break into a loud failure instead of silent mishandling.
@@ -680,7 +691,8 @@ The access-intent domain the gates emit into is the natural seam for such a plug
 
 ### Beyond the target: a pluggable escalation seam
 
-Like the classifier above, this is a **more distant** direction than the target — noted as a candidate extension point, not planned work; input to the Phase 9 spine design, not a step of it.
+The **registration seam** this section anticipated is now designed: [ADR 0007](../decisions/0007-model-judge-authorizer-chain-adr.md) settles the `Authorizer` chain and its named-link registration (`registerAuthorizer`), with the model judge as its first consumer.
+What remains a **more distant** direction — a candidate extension point, not planned work — is applying that same seam to *replace the terminal* (a delegation framework other than pi-subagents, a chat-approval bot, or a remote review surface *as* the authority) and refactoring the built-in subagent integration to register through it.
 
 The [#261]/[#267] inversion made pi-subagents pure — it publishes its child lifecycle and knows nothing about consumers ([ADR-0002]) — but the purity is one-sided: this package is the integration owner.
 It knows pi-subagents' event channel names (`subagent-lifecycle-events.ts`), hardcodes an env-hint inventory of known third-party subagent extensions (`SUBAGENT_ENV_HINT_KEYS`), and bakes in a session-directory heuristic.
@@ -897,7 +909,7 @@ Recompute commands (run from the repo root):
 - [#573] — scheduled as Step 4.
 - [#571] — scheduled as Step 5.
 - [#575] — scheduled as Step 6.
-- [#472] — two-phase repeat deferral: [#581] attempted the decision record but the mechanical ADR was found premature and reverted; the real design (two concrete use cases, a tool-augmented model reviewer) moved to [#591], which supersedes [#581] and is the design gate for [#472].
+- [#472] — two-phase repeat deferral, now resolved: [#581]'s mechanical ADR was premature and reverted; the real design (two concrete use cases, the tool-augmented `Authorizer` chain) landed as [ADR 0007](../decisions/0007-model-judge-authorizer-chain-adr.md) under [#591] (Step 7), which supersedes [#581] and makes [#472] schedulable.
 - [#519] — stays open by decision (not a silent sweep): blocked on Pi SDK UIContext evolution; Step 4's select-fallback constraint keeps frontend-driven flows working meanwhile.
 - [#565] — stays open, non-gating: the designated post-ship observation of the Phase 9 serving decisions, and now also the evidence-gathering input for the Phase 12 cross-session intent spine.
 
@@ -981,13 +993,14 @@ Release: independent
 
 Release: independent
 
-#### Step 7: Decision record for the case-by-case judge ([#581] → superseded by [#591])
+#### ✅ Step 7: Decision record for the case-by-case judge ([#581] → [#591])
 
-**Cause:** [#472] has been deferred by name in Phases 9 and 10; the repeat-deferral rule requires a decision this phase, and the [`ModelTriageAuthorizer` design](#discriminating-delegation-a-model-authorizer) is settled enough to commit to paper — deciding the open parameters is what stands between "designed" and "schedulable".
+**Cause:** [#472] was deferred by name in Phases 9 and 10; the repeat-deferral rule required a decision this phase.
+[#581]'s first attempt transcribed the [architecture prose](#discriminating-delegation-a-model-authorizer) and was reverted as premature; [#591] re-derived the design interactively (two concrete use cases) and landed it as ADR 0007.
 
 - **Smell:** process debt (repeat deferral), resolved as documentation.
-- **Target:** new `docs/decisions/0007-model-triage-authorizer.md`: decision surface (ask-only, per the deny-preserving boundary), failure behavior (fail-closed delegation to `inner`), audit tagging (`origin: "authorizer:model"`), non-persistence, bounded delegation (surface exclusions: `external_directory` and secret-shaped `path` rules), and the decorator shape.
-- **Outcome:** [#472] carries a linked ADR and becomes schedulable in a future phase on its own merits; no code change.
+- **Target:** new [`docs/decisions/0007-model-judge-authorizer-chain-adr.md`](../decisions/0007-model-judge-authorizer-chain-adr.md): the `Authorizer` chain (verdict range `allow | deny | defer`, type-level non-deferring terminal), the model judge as a non-terminal link, injected `PermissionQuery`, named opt-in `registerAuthorizer` registration, the config split, and the two-slice capability gradient — superseding the reverted ask-only decorator ADR.
+- **Outcome:** [#472] carries a linked ADR and becomes schedulable on its own merits; the deny-first slice is dogfooded by a first-party `packages/pi-permission-model-judge`; no code change.
 - **Impact 3 / Risk 1 / Priority 15.**
 
 Release: independent
@@ -1002,7 +1015,7 @@ flowchart TD
     S4["✅ Step 4: Inline keybind permission dialog (#573)"]
     S5["✅ Step 5: Containment unification (#571)"]
     S6["✅ Step 6: Indirection-wrapper survey (#575)"]
-    S7["Step 7: Model-judge decision record (#581 → #591)"]
+    S7["✅ Step 7: Model-judge decision record (#581 → #591)"]
     S1 --> S3
     S2 --> S3
 ```
@@ -1038,7 +1051,7 @@ Phase 9 built the [authority model](#target-the-authority-model) spine that Phas
 
 All 5 steps are closed: [#555], [#556], [#557], [#558], [#559].
 Open issues swept and confirmed out of scope during planning: [#309], [#490], [#520], [#521], [#519], [#23].
-The `ModelTriageAuthorizer` ([#472]) remains deferred to a later phase with its own decision record.
+The `ModelTriageAuthorizer` ([#472]) was deferred past Phase 9; its design later landed as ADR 0007 in Phase 11 Step 7 ([#591]).
 Follow-on issue [#565] (validate serving-is-resolution decisions post-ship) remains open, tracking live observation of the new parent-governs-child-escalation behavior; it is non-gating.
 
 Full findings, step details, dependency diagram, and release batches: [history/phase-9-authorizer-spine.md](history/phase-9-authorizer-spine.md).
