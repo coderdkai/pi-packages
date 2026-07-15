@@ -914,7 +914,7 @@ Recompute commands (run from the repo root):
 
 ### Steps
 
-#### Step 1: ADR 0008 — forwarded access-intent portability and principal identity
+#### Step 1: ADR 0008 — forwarded access-intent portability and principal identity ([#595])
 
 **Cause:** the escalation edge has no defined semantics for what a forwarded path *means* across cwds nor for which agent identity governs serving evaluation — [#565] items 2–3 are unanswerable because the questions were never decided, only accepted as failure modes at [#557] ship time.
 
@@ -926,7 +926,7 @@ Recompute commands (run from the repo root):
 
 Release: batch "cross-session-intent"
 
-#### Step 2: Carry the structured intent to the escalation edge and onto the forwarded wire
+#### Step 2: Carry the structured intent to the escalation edge and onto the forwarded wire ([#596])
 
 **Cause:** the gate computes a full `AccessIntent` (with the `AccessPath` alias set) and then discards it — `PromptPermissionDetails` and `ForwardedPermissionRequest` carry only display strings, so the intent the parent needs is unrecoverable downstream (the display-field floor in `hasDisplayFields` is the symptom).
 
@@ -938,7 +938,7 @@ Release: batch "cross-session-intent"
 
 Release: batch "cross-session-intent"
 
-#### Step 3: Serving resolves the forwarded intent at gate parity
+#### Step 3: Serving resolves the forwarded intent at gate parity ([#597])
 
 **Cause:** same cause, consumed at the serving node — `ServingPolicy.check(surface, value)` re-interprets a child's path string through the parent's `PathNormalizer`/cwd, so a parent `allow` that would match the child's alias set can silently miss (and vice versa), and any multi-alias fidelity floors to `ask`.
 
@@ -950,7 +950,7 @@ Release: batch "cross-session-intent"
 
 Release: batch "cross-session-intent"
 
-#### Step 4: Authorizer chain infrastructure
+#### Step 4: Authorizer chain infrastructure ([#598])
 
 **Cause:** the live-authority layer's shape (one terminal `Authorizer` selected once per activation) is closed against non-terminal participants — a link that reviews an ask and defers cannot be seated, which is the structural reason [#472] has had no home since Phase 9 built the spine.
 
@@ -961,7 +961,7 @@ Release: batch "cross-session-intent"
 
 Release: batch "authorizer-chain"
 
-#### Step 5: `registerAuthorizer` seam, `authorizerChain` config, and the enforcement checkpoint
+#### Step 5: `registerAuthorizer` seam, `authorizerChain` config, and the enforcement checkpoint ([#599])
 
 **Cause:** same cause, consumed — the chain needs a registration surface and an operator-owned naming step, honoring ADR 0007's invariants: config order (not registration order) fixes the chain order, a missing configured link is skipped fail-safe, and registration alone grants no authority.
 
@@ -973,7 +973,7 @@ Release: batch "authorizer-chain"
 
 Release: batch "authorizer-chain"
 
-#### Step 6: Dogfood package — `@gotgenes/pi-permission-model-judge`
+#### Step 6: Dogfood package — `@gotgenes/pi-permission-model-judge` ([#600])
 
 **Cause:** the [#267] history guard — an inbound registration surface nobody consumes goes vacant; ADR 0007 requires the seam born consumed by a first-party deny-first reviewer, which also exercises the config split (chain policy here, model mechanism there) end to end.
 
@@ -988,10 +988,10 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["Step 1: ADR 0008 — forwarded-intent portability + principal identity"] --> S2["Step 2: structured intent on the forwarded wire"]
-    S2 --> S3["Step 3: serving resolves the forwarded intent"]
-    S4["Step 4: Authorizer chain infrastructure"] --> S5["Step 5: registerAuthorizer seam + authorizerChain config"]
-    S5 --> S6["Step 6: pi-permission-model-judge dogfood package"]
+    S1["Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["Step 2 (#596): structured intent on the forwarded wire"]
+    S2 --> S3["Step 3 (#597): serving resolves the forwarded intent"]
+    S4["Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
+    S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
 ```
 
 ### Parallel tracks
@@ -1147,6 +1147,12 @@ Seven steps ([#579], [#580], [#574], [#573], [#571], [#575], [#581] → [#591]),
 [#342]: https://github.com/gotgenes/pi-packages/issues/342
 [#362]: https://github.com/gotgenes/pi-packages/issues/362
 [#368]: https://github.com/gotgenes/pi-packages/issues/368
+[#595]: https://github.com/gotgenes/pi-packages/issues/595
+[#596]: https://github.com/gotgenes/pi-packages/issues/596
+[#597]: https://github.com/gotgenes/pi-packages/issues/597
+[#598]: https://github.com/gotgenes/pi-packages/issues/598
+[#599]: https://github.com/gotgenes/pi-packages/issues/599
+[#600]: https://github.com/gotgenes/pi-packages/issues/600
 [#332]: https://github.com/gotgenes/pi-packages/issues/332
 [#345]: https://github.com/gotgenes/pi-packages/issues/345
 [#347]: https://github.com/gotgenes/pi-packages/issues/347
