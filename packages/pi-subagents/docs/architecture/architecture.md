@@ -656,23 +656,7 @@ That method — testability friction as a boundary probe, with its limits — is
 
 ### Dependency bag inventory
 
-These interfaces carry hidden dependencies that obscure true coupling.
-Bags with 10+ fields are the highest priority for decomposition.
-
-| Interface                     | Fields                                                       | Consumers                                         | Severity  |
-| ----------------------------- | ------------------------------------------------------------ | ------------------------------------------------- | --------- |
-| `ResolvedSpawnConfig`         | 3 nested                                                     | foreground-runner, background-spawner, agent-tool | ✓ done    |
-| `AgentSpawnConfig`            | 13 → 13 (ParentSessionInfo nested)                           | agent-manager (internal)                          | ✓ done    |
-| `CreateSubagentSessionParams` | 6 (snapshot, type, cwd, parentSession, model, thinkingLevel) | create-subagent-session                           | ✓ done    |
-| `TurnLoopOptions`             | 4 (maxTurns, defaultMaxTurns, graceTurns, signal)            | subagent-session                                  | ✓ done    |
-| `SessionConfig`               | 6 (flat fields; extensions/noSkills/extras removed in #264)  | session-config (output of assembler)              | ✓ done    |
-| `NotificationDetails`         | 10                                                           | notification                                      | Low (DTO) |
-| `ResourceLoaderOptions`       | 10                                                           | create-subagent-session (SDK bridge)              | Low (SDK) |
-| `SubagentSessionIO`           | split → `EnvironmentIO` (3) + `SessionFactoryIO` (5+1)       | create-subagent-session                           | ✓ done    |
-| `CreateSessionOptions`        | 9                                                            | create-subagent-session (SDK bridge)              | Low (SDK) |
-| `AgentToolDeps`               | 8                                                            | agent-tool                                        | ✓ done    |
-| `SubagentInit`                | 5 (id, type, description, invocation, execution, state)      | subagent (one production site)                    | ✓ done    |
-| `SubagentExecution`           | 12 (4 mandatory: factory, snapshot, prompt, baseCwd)         | subagent (mandatory collaborator)                 | ✓ done    |
+The 10+-field dependency bags flagged in prior phases (`ResolvedSpawnConfig`, `AgentSpawnConfig`, `RunOptions`, `SessionConfig`, `SubagentSessionIO`, `SubagentExecution`) were all decomposed into focused value objects; the remaining wide interfaces (`NotificationDetails`, `ResourceLoaderOptions`, `CreateSessionOptions`) are DTO/SDK-boundary types accepted as-is.
 
 ### Complexity hotspots
 
@@ -697,135 +681,7 @@ Files with highest commit frequency × complexity:
 
 ### Production duplication
 
-The prior clone group between `agent-runner.ts` and `message-formatters.ts` was resolved in #172.
-The 20-line clone group between `agent-config-editor.ts` and `agent-creation-wizard.ts` was resolved in #217 — extracted into `ui/agent-file-writer.ts` (`writeAgentFile`).
-The final 11-line internal clone group within `agent-config-editor.ts` was eliminated in Phase 19 Step 6 ([#441]) when the file itself was deleted; production duplication is 0 lines.
-
-### Session encapsulation debt (Law of Demeter) — resolved by [#277] ✔️
-
-All consumer reach-throughs to the raw SDK `AgentSession` via `Subagent.session` have been eliminated.
-`Subagent.session` is removed; `SubagentSession.session` is marked `@internal` (lifecycle use only).
-The intent-revealing replacements added by [#277]:
-
-| Reach-through                            | Sites                                                                              | Replacement                                        |
-| ---------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Steer buffer-or-deliver (was duplicated) | `service-adapter.ts`, `steer-tool.ts`                                              | `Subagent.steer(message)`                          |
-| Conversation viewing                     | `get-result-tool.ts`, `agent-menu.ts`, `conversation-viewer.ts`                    | `Subagent.getConversation()` / `Subagent.messages` |
-| Session-readiness guard                  | `agent-tool.ts`, `subagent-manager.ts`                                             | `Subagent.isSessionReady()`                        |
-| Context-window stats                     | `steer-tool.ts`, `get-result-tool.ts`, `notification.ts`, `conversation-viewer.ts` | `Subagent.getContextPercent()`                     |
-| Live updates (subscription)              | `conversation-viewer.ts`                                                           | `Subagent.subscribeToUpdates(fn)`                  |
-| Observer callback session param          | `background-spawner.ts`, `foreground-runner.ts`                                    | `subagent.subagentSession` (narrowed callback)     |
-| Session disposal                         | `subagent-manager.ts`                                                              | `SubagentSession.dispose()` — resolved by [#265]   |
-
-### Proposed bag decompositions
-
-#### ResolvedSpawnConfig (15 fields → 3 value objects)
-
-This bag mixes three concerns: who the agent is, how it should run, and how it should be displayed.
-Each consumer uses a different subset.
-
-```typescript
-/** Who this agent is — type resolution result. */
-interface SpawnIdentity {
-  subagentType: string;
-  rawType: SubagentType;
-  fellBack: boolean;
-  displayName: string;
-}
-
-/** How the agent should run — execution parameters. */
-interface SpawnExecution {
-  prompt: string;
-  description: string;
-  model: Model<any> | undefined;
-  effectiveMaxTurns: number | undefined;
-  thinking: ThinkingLevel | undefined;
-  inheritContext: boolean;
-  runInBackground: boolean;
-  agentInvocation: AgentInvocation;
-}
-
-/** How the agent is presented — display metadata. */
-interface SpawnPresentation {
-  modelName: string | undefined;
-  agentTags: string[];
-  detailBase: Pick<AgentDetails, ...>;
-}
-```
-
-`foreground-runner` and `background-spawner` primarily consume `SpawnExecution` + `SpawnIdentity`.
-`agent-tool` uses all three to build the `AgentSpawnConfig` and the result text.
-After decomposition, each consumer declares its real dependencies explicitly.
-
-#### AgentSpawnConfig — ParentSessionInfo extracted (done, [#166][166])
-
-The `parentSessionFile`, `parentSessionId`, and `toolCallId` fields were grouped into `ParentSessionInfo`:
-
-```typescript
-/** Parent session identity — always travel together from the tool boundary. */
-export interface ParentSessionInfo {
-  parentSessionFile?: string;
-  parentSessionId?: string;
-  toolCallId?: string;
-}
-```
-
-`AgentSpawnConfig` now carries `parentSession?: ParentSessionInfo` instead of three flat optional fields.
-
-#### RunOptions (12 fields → extract RunContext) — done ([#169][169]), updated by [#231]
-
-`RunContext` was extracted and nested as `RunOptions.context` in #169.
-Issue #231 moved the two static dependencies (`exec`, `registry`) to `RunnerDeps` on `ConcreteAgentRunner`, leaving `RunContext` with only per-call fields:
-
-```typescript
-/** Per-call execution context — fields that vary per spawn. */
-export interface RunContext {
-  cwd?: string;
-  parentSession?: ParentSessionInfo;
-}
-```
-
-The remaining `RunOptions` fields (`model`, `maxTurns`, `signal`, `thinkingLevel`, `defaultMaxTurns`, `graceTurns`, `onSessionCreated`) are genuine execution parameters.
-`RunOptions` now has 9 fields: 1 nested `context: RunContext` (2 per-call fields) plus 8 flat execution fields.
-
-#### SessionConfig (11 fields → extract ToolFilterConfig) — done ([#168][168])
-
-The tool-filtering cluster (`toolNames`, `disallowedSet`, `extensions`) was extracted into `ToolFilterConfig` and nested as `SessionConfig.toolFilter`.
-`filterActiveTools` now accepts a single `ToolFilterConfig` argument instead of three positional parameters.
-`SessionConfig` reduced from 10 to 8 top-level fields.
-
-#### RunnerIO (9 methods → 2 focused interfaces) — done ([#167][167])
-
-The IO boundary was split into two focused interfaces:
-
-```typescript
-/** Environment discovery — detect runtime context and resolve directories. */
-export interface EnvironmentIO {
-  detectEnv: (exec: ShellExec, cwd: string) => Promise<EnvInfo>;
-  getAgentDir: () => string;
-  deriveSessionDir: (
-    parentSessionFile: string | undefined,
-    effectiveCwd: string,
-  ) => string;
-}
-
-/** Session factory — create SDK objects for a child agent session. */
-export interface SessionFactoryIO {
-  createResourceLoader: (opts: ResourceLoaderOptions) => ResourceLoaderLike;
-  createSessionManager: (cwd: string, sessionDir: string) => SessionManagerLike;
-  createSettingsManager: (cwd: string, agentDir: string) => SettingsManager;
-  createSession: (
-    opts: CreateSessionOptions,
-  ) => Promise<{ session: AgentSession }>;
-  assemblerIO: AssemblerIO;
-}
-
-/** Backward-compatible intersection of the two focused interfaces. */
-export type RunnerIO = EnvironmentIO & SessionFactoryIO;
-```
-
-`RunnerIO` is kept as a type alias for the intersection.
-All existing consumers satisfy both sub-interfaces via structural typing with no call-site changes.
+Production duplication is 0 lines — the last clone group was eliminated in Phase 19 Step 6 ([#441]).
 
 ## Phase 11 (complete)
 
@@ -1194,10 +1050,6 @@ The upstream test suite is run periodically as a regression canary for the sessi
 [earendil-works/pi#4207]: https://github.com/earendil-works/pi/issues/4207
 [gotgenes/pi-packages]: https://github.com/gotgenes/pi-packages
 [tintinweb/pi-subagents]: https://github.com/tintinweb/pi-subagents
-[166]: https://github.com/gotgenes/pi-packages/issues/166
-[167]: https://github.com/gotgenes/pi-packages/issues/167
-[168]: https://github.com/gotgenes/pi-packages/issues/168
-[169]: https://github.com/gotgenes/pi-packages/issues/169
 [#205]: https://github.com/gotgenes/pi-packages/issues/205
 [#206]: https://github.com/gotgenes/pi-packages/issues/206
 [#207]: https://github.com/gotgenes/pi-packages/issues/207
@@ -1219,7 +1071,6 @@ The upstream test suite is run periodically as a regression canary for the sessi
 [#263]: https://github.com/gotgenes/pi-packages/issues/263
 [#264]: https://github.com/gotgenes/pi-packages/issues/264
 [#265]: https://github.com/gotgenes/pi-packages/issues/265
-[#277]: https://github.com/gotgenes/pi-packages/issues/277
 [#373]: https://github.com/gotgenes/pi-packages/issues/373
 [#374]: https://github.com/gotgenes/pi-packages/issues/374
 [#375]: https://github.com/gotgenes/pi-packages/issues/375
