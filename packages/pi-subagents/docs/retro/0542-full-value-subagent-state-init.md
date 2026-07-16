@@ -40,3 +40,45 @@ Test count went from 991 → 996 in `pi-subagents` (5 new `subagent-state.test.t
 - Behavior-preservation check: `createTestSubagent` callers pass `toolUses: 0` and `turnCount: 1`/higher; the `??` seeding preserves both (`0 ?? 3` = 0; `1 ?? 1` = 1), and no caller passes `turnCount: 0`, so no drift from the old `turnCount > 1` loop guard.
 - Verified the quantitative target via `fallow health --format json`: `createTestSubagent` dropped off both the `targets` and `large_functions` lists (was 19 cyclomatic, the workspace's most complex function).
 - Pre-completion reviewer: PASS — all deterministic checks green (996 tests), Mermaid validated, cross-step invariants (#373 defaults) preserved, no stale doc references.
+
+## Stage: Final Retrospective (2025-02-14T18:00:00Z)
+
+### Session summary
+
+Shipped Phase 20 Step 8 across three sessions (plan → TDD → ship) with near-zero friction: 4 implementation commits plus plan/retro breadcrumbs, all gates green on the first CI run.
+The change widened `SubagentStateInit` to a full-value construction surface and collapsed `createTestSubagent` off the top of the fallow complexity list (19 → gone).
+No release cut — the whole range since `pi-subagents-v18.0.3` is `refactor:`/`test:`/`docs:`(exclude-path), all hidden changelog types that auto-batch into the next unhidden release.
+
+### Observations
+
+#### What went well
+
+- The plan's two flagged design hazards (`lifetimeUsage` aliasing, `activeTools` key-seq collision) both landed as concrete tests and constructor decisions without rework — planning-stage foresight paid off directly at implementation.
+- The `fallow dead-code` gate in `/tdd-plan` caught the three orphaned `Subagent` delegation wrappers the plan did not anticipate, converting a latent dead-code leak into a clean 4th `refactor:` commit — the designed safety net worked exactly as intended.
+- Incremental verification held: `pnpm run check` ran right after the Step 1 interface change, the full package suite after the Step 2 shared-helper change, and `fallow health --format json` confirmed the quantitative target before commit — no end-of-session verification pile-up.
+
+#### What caused friction (agent side)
+
+- `missing-context` — the plan's Module-Level Changes asserted "No removed or renamed exports, so no cross-file symbol grep for deletions is needed," but collapsing the test factory removed the sole callers of three public `Subagent` methods, orphaning them.
+  Impact: one extra `refactor:` commit (`db4bb3a4`); no rework, caught by the `fallow dead-code` gate.
+  Self-identified via the workflow gate.
+- `instruction-violation` — the planning commit added a `[#542]:` reference-link definition for the doc's own issue number, which `rumdl` MD053 rejected; the `markdown-conventions` skill already says "Do not add a definition for the doc's own issue number — it lives in frontmatter."
+  Impact: one edit before the plan commit; no rework.
+  Self-identified (caught by the pre-commit `rumdl check`).
+
+#### What caused friction (user side)
+
+- None — the operator authored the issue and the plan direction was unambiguous, so no mid-session redirection was needed or missed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — two read-only subagents dispatched: `tidy-first-assessor` (68s, 4 tool calls) correctly reported no preparatory commits warranted and stayed change-scoped; `pre-completion-reviewer` (216s, 37 tool calls) did judgment-heavy work (deterministic checks, Mermaid validation, cross-step invariant tracing) appropriate for a capable model.
+  No mismatch.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; no error sequence exceeded one tool call.
+- **Unused-tool detection** — none; `colgrep`/`grep` used for caller discovery and `fallow` for the complexity target as designed.
+- **Feedback-loop gap analysis** — verification was incremental, not end-loaded (see "What went well"); no gap.
+
+### Changes made
+
+1. `packages/pi-subagents/docs/retro/0542-full-value-subagent-state-init.md` — added this Final Retrospective stage entry.
+   No prompt or `AGENTS.md` changes: both friction points (the plan-time dead-wrapper gap and the MD053 self-reference slip) were self-caught by existing gates (`fallow dead-code`, `rumdl`) and covered by existing rules, so no new instruction was warranted.
