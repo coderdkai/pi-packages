@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationDetails } from "#src/observation/notification";
 import {
+  buildPreviewLines,
   buildStatsParts,
   createNotificationRenderer,
   resolveStatusPresentation,
@@ -137,6 +138,34 @@ describe("buildStatsParts", () => {
       durationMs: 0,
     });
     expect(parts).toEqual(["2 tool uses"]);
+  });
+});
+
+describe("buildPreviewLines", () => {
+  it("returns only the first line, sliced to 80 columns, when collapsed", () => {
+    const long = "x".repeat(100);
+    expect(buildPreviewLines(`${long}\nsecond line`, false)).toEqual([long.slice(0, 80)]);
+  });
+
+  it("returns the first line unsliced when under 80 columns and collapsed", () => {
+    expect(buildPreviewLines("short result\nsecond line", false)).toEqual(["short result"]);
+  });
+
+  it("returns up to 30 lines when expanded", () => {
+    const lines = Array.from({ length: 35 }, (_, i) => `line${i}`);
+    expect(buildPreviewLines(lines.join("\n"), true)).toEqual(lines.slice(0, 30));
+  });
+
+  it("returns all lines when expanded and under 30 lines", () => {
+    expect(buildPreviewLines("line1\nline2\nline3", true)).toEqual(["line1", "line2", "line3"]);
+  });
+
+  it("returns a single empty string for empty input when collapsed", () => {
+    expect(buildPreviewLines("", false)).toEqual([""]);
+  });
+
+  it("returns a single empty string for empty input when expanded", () => {
+    expect(buildPreviewLines("", true)).toEqual([""]);
   });
 });
 

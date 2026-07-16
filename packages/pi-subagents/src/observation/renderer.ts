@@ -52,6 +52,15 @@ export function buildStatsParts(d: StatsSource): string[] {
 }
 
 /**
+ * Content lines for the result preview: the whole result (capped at 30 lines)
+ * when expanded, or just the first line (capped at 80 columns) when collapsed.
+ */
+export function buildPreviewLines(resultPreview: string, expanded: boolean): string[] {
+  if (expanded) return resultPreview.split("\n").slice(0, 30);
+  return [resultPreview.split("\n")[0]?.slice(0, 80) ?? ""];
+}
+
+/**
  * Create the notification renderer callback for `pi.registerMessageRenderer`.
  * Returns a factory so the renderer is independently testable without the Pi SDK.
  */
@@ -72,12 +81,11 @@ export function createNotificationRenderer() {
     }
 
     // Line 3: result preview (collapsed) or full (expanded)
+    const previewLines = buildPreviewLines(d.resultPreview, expanded);
     if (expanded) {
-      const lines = d.resultPreview.split("\n").slice(0, 30);
-      for (const l of lines) line += "\n" + theme.fg("dim", `  ${l}`);
+      for (const l of previewLines) line += "\n" + theme.fg("dim", `  ${l}`);
     } else {
-      const preview = d.resultPreview.split("\n")[0]?.slice(0, 80) ?? "";
-      line += "\n  " + theme.fg("dim", `⎿  ${preview}`);
+      line += "\n  " + theme.fg("dim", `⎿  ${previewLines[0] ?? ""}`);
     }
 
     // Line 4: output file link (if present)
