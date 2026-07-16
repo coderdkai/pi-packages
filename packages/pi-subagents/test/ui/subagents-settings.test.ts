@@ -86,6 +86,15 @@ describe("SubagentsSettingsHandler — max concurrency", () => {
     await handler.handle({ ui });
     expect(settings.applyMaxConcurrent).not.toHaveBeenCalled();
   });
+
+  it("rejects non-numeric input with a warning and does not apply", async () => {
+    const { handler, settings } = makeHandler();
+    const ui = makeMenuUI(["Max concurrency (current: 4)"]);
+    ui.input = vi.fn().mockResolvedValue("abc");
+    await handler.handle({ ui });
+    expect(settings.applyMaxConcurrent).not.toHaveBeenCalled();
+    expect(ui.notify).toHaveBeenCalledWith("Must be a positive integer.", "warning");
+  });
 });
 
 describe("SubagentsSettingsHandler — default max turns", () => {
