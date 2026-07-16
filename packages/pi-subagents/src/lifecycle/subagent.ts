@@ -339,21 +339,6 @@ export class Subagent {
 		}
 	}
 
-	/** Increment tool use count. Called by record-observer on tool_execution_end. */
-	incrementToolUses(): void {
-		this.state.incrementToolUses();
-	}
-
-	/** Accumulate a usage delta into lifetimeUsage. Called by record-observer on message_end. */
-	addUsage(delta: { input: number; output: number; cacheWrite: number }): void {
-		this.state.addUsage(delta);
-	}
-
-	/** Increment compaction count. Called by record-observer on compaction_end. */
-	incrementCompactions(): void {
-		this.state.incrementCompactions();
-	}
-
 	/** Transition to running state. Sets status and startedAt. */
 	markRunning(startedAt: number): void {
 		this.state.markRunning(startedAt);
