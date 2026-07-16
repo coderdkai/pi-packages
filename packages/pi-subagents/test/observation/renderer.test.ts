@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationDetails } from "#src/observation/notification";
-import { createNotificationRenderer, resolveStatusPresentation } from "#src/observation/renderer";
+import {
+  buildStatsParts,
+  createNotificationRenderer,
+  resolveStatusPresentation,
+} from "#src/observation/renderer";
 
 /** Minimal theme stub — satisfies RendererTheme structurally. */
 function stubTheme() {
@@ -77,6 +81,62 @@ describe("resolveStatusPresentation", () => {
       iconStyle: "success",
       statusText: "completed",
     });
+  });
+});
+
+describe("buildStatsParts", () => {
+  it("includes all parts in order when all fields are present", () => {
+    const parts = buildStatsParts({
+      turnCount: 5,
+      maxTurns: 10,
+      toolUses: 3,
+      totalTokens: 1000,
+      durationMs: 5000,
+    });
+    expect(parts).toEqual(["⟳5≤10", "3 tool uses", "1.0k token", "5.0s"]);
+  });
+
+  it("omits a part when its field is zero", () => {
+    expect(
+      buildStatsParts({ turnCount: 0, maxTurns: 10, toolUses: 3, totalTokens: 1000, durationMs: 5000 }),
+    ).toEqual(["3 tool uses", "1.0k token", "5.0s"]);
+    expect(
+      buildStatsParts({ turnCount: 5, maxTurns: 10, toolUses: 0, totalTokens: 1000, durationMs: 5000 }),
+    ).toEqual(["⟳5≤10", "1.0k token", "5.0s"]);
+    expect(
+      buildStatsParts({ turnCount: 5, maxTurns: 10, toolUses: 3, totalTokens: 0, durationMs: 5000 }),
+    ).toEqual(["⟳5≤10", "3 tool uses", "5.0s"]);
+    expect(
+      buildStatsParts({ turnCount: 5, maxTurns: 10, toolUses: 3, totalTokens: 1000, durationMs: 0 }),
+    ).toEqual(["⟳5≤10", "3 tool uses", "1.0k token"]);
+  });
+
+  it("returns an empty array when all fields are zero", () => {
+    expect(
+      buildStatsParts({ turnCount: 0, maxTurns: undefined, toolUses: 0, totalTokens: 0, durationMs: 0 }),
+    ).toEqual([]);
+  });
+
+  it("pluralizes tool use for exactly one", () => {
+    const parts = buildStatsParts({
+      turnCount: 0,
+      maxTurns: undefined,
+      toolUses: 1,
+      totalTokens: 0,
+      durationMs: 0,
+    });
+    expect(parts).toEqual(["1 tool use"]);
+  });
+
+  it("pluralizes tool uses for more than one", () => {
+    const parts = buildStatsParts({
+      turnCount: 0,
+      maxTurns: undefined,
+      toolUses: 2,
+      totalTokens: 0,
+      durationMs: 0,
+    });
+    expect(parts).toEqual(["2 tool uses"]);
   });
 });
 

@@ -35,6 +35,22 @@ export function resolveStatusPresentation(status: string): StatusPresentation {
   return { iconGlyph: "✓", iconStyle: "success", statusText };
 }
 
+/** Fields `buildStatsParts` reads from a `NotificationDetails`. */
+type StatsSource = Pick<
+  NotificationDetails,
+  "turnCount" | "maxTurns" | "toolUses" | "totalTokens" | "durationMs"
+>;
+
+/** Assemble the stats-line parts (turns, tool uses, tokens, duration), omitting zero fields. */
+export function buildStatsParts(d: StatsSource): string[] {
+  const parts: string[] = [];
+  if (d.turnCount > 0) parts.push(formatTurns(d.turnCount, d.maxTurns));
+  if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? "" : "s"}`);
+  if (d.totalTokens > 0) parts.push(formatTokens(d.totalTokens));
+  if (d.durationMs > 0) parts.push(formatMs(d.durationMs));
+  return parts;
+}
+
 /**
  * Create the notification renderer callback for `pi.registerMessageRenderer`.
  * Returns a factory so the renderer is independently testable without the Pi SDK.
@@ -50,11 +66,7 @@ export function createNotificationRenderer() {
     let line = `${theme.fg(iconStyle, iconGlyph)} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
 
     // Line 2: stats
-    const parts: string[] = [];
-    if (d.turnCount > 0) parts.push(formatTurns(d.turnCount, d.maxTurns));
-    if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? "" : "s"}`);
-    if (d.totalTokens > 0) parts.push(formatTokens(d.totalTokens));
-    if (d.durationMs > 0) parts.push(formatMs(d.durationMs));
+    const parts = buildStatsParts(d);
     if (parts.length) {
       line += "\n  " + parts.map((p) => theme.fg("dim", p)).join(" " + theme.fg("dim", "·") + " ");
     }
