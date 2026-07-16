@@ -23,7 +23,7 @@ Load `docs/architecture/architecture.md` for the current domain model, health me
 Check which bags/hotspots have already been addressed vs. remain open.
 Before touching any tool, write down a **cause hypothesis** — the first-principles structural problem the next phase should dissolve (structural fusion, a coupling/boundary flaw, a dead subsystem).
 The later steps corroborate, refine, or refute it.
-A cause-level finding must trace to a named target concept in the architecture doc's first-principles section (the pattern: pi-permission-system's "Target: the authority model").
+A cause-level finding must trace to a named target concept in the architecture doc's first-principles section (the pattern: pi-permission-system's "The authority model").
 When no such section exists, writing one — naming the organizing concept and recording resolved design directions — is itself a phase deliverable, not an emergent artifact: settled-in-writing directions are what make the next phase's plan cheap.
 
 ### 2. Sweep open issues
