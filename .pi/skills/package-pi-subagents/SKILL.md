@@ -74,7 +74,7 @@ service-adapter ─wraps─→ SubagentManager
 
 ### Architectural direction
 
-The target architecture is documented in `docs/architecture/architecture.md` under "Target architecture."
+The target architecture is documented in `docs/architecture/architecture.md` under "Architecture direction."
 The key phases are:
 
 - **Phase 14** - Strip policy from core: remove `disallowed_tools`, `extensions` filtering, collapse `filterActiveTools` (#237, #238, #239). ✅ Complete

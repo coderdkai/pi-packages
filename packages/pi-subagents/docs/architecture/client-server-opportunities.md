@@ -2,7 +2,7 @@
 
 This note is forward-looking.
 Pi's client-server split is **not on the near-term roadmap** — it is a long-term vision recorded in Mario Zechner's [pi session sync unification][session-sync] plan.
-This document captures what that architecture would let pi-subagents do, so the opportunity is on record alongside the existing [Target architecture](./architecture.md#target-architecture) section.
+This document captures what that architecture would let pi-subagents do, so the opportunity is on record alongside the existing [Architecture direction](./architecture.md#architecture-direction) section.
 
 It assumes the session-sync plan's shape:
 

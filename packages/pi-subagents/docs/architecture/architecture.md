@@ -488,11 +488,12 @@ The core emits events on `pi.events` that any extension can observe:
 
 These are fire-and-forget broadcast events — no request IDs, no reply channels.
 
-## Target architecture
+## Architecture direction
 
-The long-term architectural direction is to make pi-subagents a **minimal orchestrator** with inverted dependencies.
+pi-subagents **is** a minimal orchestrator with inverted dependencies.
 The core spawns a child session derived from the parent, runs the turn loop, tracks and streams and collects the result, gates concurrency, supports resume, and **publishes its lifecycle**.
 Everything else — permissions, worktree/workspace isolation, UI, telemetry — is an extension that attaches through one of two surfaces and never reaches into the core.
+This inversion landed across Phases 14, 16, 18, and 19; the sections below describe the resulting boundary and the deeper direction still being sharpened.
 
 The rationale and the full reasoning chain that led here are recorded in [`docs/decisions/0002-extensions-on-a-minimal-core.md`](../decisions/0002-extensions-on-a-minimal-core.md).
 
@@ -539,16 +540,13 @@ The observational surface then carries only fire-and-forget broadcasts of immuta
 - **Workspace provider seam** — accept a registered `WorkspaceProvider` and consult it for the child's cwd; default to the parent's cwd when none is registered.
 - **Service API** — publish `SubagentsService` via `Symbol.for()` for cross-extension access.
 
-### Responsibilities to remove
+### Responsibilities removed from the core
 
-- **Tool policy** (`disallowed_tools`) — access control belongs in pi-permission-system's `permission:` frontmatter.
-- **Extension filtering** (`extensions: string[]` allowlist) — tool visibility is pi-permission-system's job.
-- **Worktree isolation** (`worktree.ts`, `worktree-isolation.ts`, `GitWorktreeManager`, the `isolation: "worktree"` spawn mode) — environment policy, not core.
-  Git worktrees are one _strategy_ for choosing the child's working directory; containers, throwaway tmpdirs, and remote sandboxes are others.
-  Evicted to `@gotgenes/pi-subagents-worktrees` (#263), the first consumer of the workspace provider seam.
-- **Extension lifecycle control** (`extensions: false`, `isolated`, `noSkills`) — removed in #264.
-  Deny-at-use (the in-child permission layer blocking disallowed tool calls) covers what `isolated` pretended to do for tools.
-  Prevent-load (refusing to bind an extension because of load-time side effects, cost, or true sandboxing) is genuinely generative and is left as a _latent_ (un-built) provider seam, added only if a real consumer needs it.
+These policy and environment concerns were removed so the core stays narrow; each now lives in a consumer or behind the workspace seam:
+
+- **Tool policy** (`disallowed_tools`) and **extension filtering** (`extensions: string[]`) — access control and tool visibility belong in pi-permission-system's `permission:` frontmatter (Phase 14, #237/#238).
+- **Worktree isolation** (`GitWorktreeManager`, the `isolation: "worktree"` mode) — one _strategy_ for choosing the child's cwd, evicted to `@gotgenes/pi-subagents-worktrees` (#263), the first consumer of the workspace provider seam.
+- **Extension lifecycle control** (`extensions: false`, `isolated`, `noSkills`) — removed in #264; deny-at-use covers what `isolated` pretended to do for tools, and prevent-load is left as a _latent_ (un-built) provider seam, added only if a real consumer needs it.
 
 ### Composition model
 
@@ -619,15 +617,14 @@ Behavior is a third interface: **tell by id, with outcomes**.
 
 #### Consequences
 
-Two consequences fall straight out, and both cut scope.
+Two consequences fell straight out, and both cut scope — both have since landed.
 
-1. **The activity/metrics push tier is provisional.**
-   Its only reactive consumer is the inherited widget.
-   Treated from first principles, metrics are accumulated by an observer, exposed as a discrete query, and folded into the completion snapshot — so the high-frequency stream may not need to exist at all.
-   We do not contort the core's event design to feed an inherited consumer.
-2. **Phase 18 is "reconsider the UI," not "extract the UI."**
-   The widget and `/agents` menu predate the fork; they are consumers to be judged on our principles, not requirements to preserve.
-   If a UI survives, it survives as a reactive consumer of the broadcast and a caller of the query/behavior interfaces — built on our terms, possibly smaller, possibly removed.
+1. **The activity/metrics push tier was provisional and is gone.**
+   Its only reactive consumer was the inherited widget; treated from first principles, metrics are accumulated by an observer, exposed as a discrete query, and folded into the completion snapshot.
+   Phase 18 deleted `AgentActivityTracker` and `ui-observer` and made the widget a pure reactive consumer of lifecycle events — the high-frequency stream did not need to exist.
+2. **Phase 18 was "reconsider the UI," not "extract the UI."**
+   The widget and `/agents` menu predated the fork; they were consumers judged on our principles, not requirements to preserve.
+   [ADR-0004] recorded the per-component verdict and Phase 19 implemented it: the widget shrank to background agents, the bespoke viewer and `/agents` menu were removed, and the surviving UI stays in-core as a reactive consumer.
 
 #### Sibling packages follow the same discipline
 
@@ -871,7 +868,7 @@ See [phase-15-domain-model-evolution.md](history/phase-15-domain-model-evolution
 Phase 16 inverted the core's outbound dependencies: worktree isolation joined permissions as an _extension_ on a minimal core, leaving pi-subagents a pure child-session orchestrator.
 The core now attaches extensions through exactly two surfaces — observational lifecycle events (unlimited) and rationed generative provider seams (today only the workspace provider) — and has zero knowledge of its consumers.
 The "runner" concept is gone: `createSubagentSession()` returns a born-complete `SubagentSession` that owns turn driving, steering, and disposal, and `Subagent.run()` is coordination, not assembly.
-The decision and the full reasoning chain are recorded in [ADR-0002]; the two-surface extension model is described under [Target architecture](#target-architecture).
+The decision and the full reasoning chain are recorded in [ADR-0002]; the two-surface extension model is described under [Architecture direction](#architecture-direction).
 All five steps are closed: [#261], [#262], [#263], [#264], [#265].
 The earlier "agent collaborator architecture" framing (#256 superseded, #257 parked, #258 and #259 closed not-planned) was abandoned; its structural win was reached cleanly via the workspace seam.
 See [phase-16-invert-dependencies.md](history/phase-16-invert-dependencies.md) for details.
