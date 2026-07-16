@@ -31,6 +31,24 @@ Two adaptation decisions were confirmed with the operator via `ask_user`; both f
 - **Follow-ups already filed by #601:** [#606] (`/finish-phase` doc-hygiene) and [#607] (generalize the regrowth guard) — out of scope; #605 pays down the existing backlog only, so no skill regrowth guard is added here (unlike #601's op 5).
 - **Self-caught lint slip:** the plan's own `[#277]:` definition tripped MD053 because both uses sit inside backtick code spans (a code-span `[#N]` is not a live reference) — removed the definition before commit.
 
+## Stage: Implementation — Build (2026-07-17T01:30:00Z)
+
+### Session summary
+
+Executed the four-operation build in three `docs:` commits plus a no-op link-sweep verification, slimming `architecture.md` 1265 → 1111 lines.
+Commit 1 renamed `## Target architecture` → `## Architecture direction` and folded its shipped subsections (reframed intro, collapsed `### Responsibilities to remove`, current-tensed the shipped `#### Consequences`), re-pointing all four live anchor/name touch points (in-file link, `phase-16` history, `client-server-opportunities.md`, `package-pi-subagents` skill).
+Commit 2 aggressively collapsed `## Current structural analysis` (removed the 109-line `### Proposed bag decompositions` and the resolved `### Session encapsulation debt` table, collapsed the done inventory + production-duplication narration to one-liners, kept Health/Complexity/Churn), and commit 3 stripped the module-tree `#164` provenance.
+Pre-completion reviewer returned PASS.
+
+### Observations
+
+- **Two deviations, both plan-sanctioned.** (1) Step 3 went beyond deleting the one `#164` sentence: the module-org intro also carried stale `62 files`/`six domains` counts contradicting the eight-directory tree below it, so the whole intro was reframed to current-state (the plan's op 3 explicitly allowed "reframe to current-state, dropping the migration archaeology"). (2) Step 4 (link sweep) was a no-op with no commit — per-step `rumdl` (MD053) forced each earlier commit to prune its own orphans (`[166]`–`[169]` in commit 2, `[#277]` in commit 2), so the final bijection was already clean, exactly as the plan predicted.
+- **`ask_user` fields worked out cleanly at build time** — the aggressive structural-analysis fold removed the single biggest bulk (151 net deletions in commit 2), and the rename's anchor blast radius was fully enumerated at plan time, so no touch point was missed (reviewer confirmed 0 stale `#target-architecture` fragments in live docs).
+- **`### First-principles refinement and the deeper target` deliberately kept** (heading + anchor) to avoid touching its 4 `history/` citers; only its `#### Consequences` shipped-narration was current-tensed.
+- **`[#231]` correctly retained** — it appears in both the removed `### Proposed bag decompositions` and the kept Phase 15 completion summary, so removing the former did not orphan it (reviewer verified).
+- **Line-count landed at 1111 vs. the ~1050 soft target** — the residual is the keep-list content (active Phase 20 roadmap, the `## Phase N (complete)` chain, the `/finish-phase`-maintained history tables); the plan disclaimed the count as soft, with zero information loss and a lint-clean bidirectional link graph as the real gates (both met).
+- **Pre-completion reviewer: PASS** — lint (biome + eslint + rumdl), fallow dead-code, 7 Mermaid charts, link bijection, Non-Goals-intact, and full rename propagation all green; check/test N/A (no `.ts` touched).
+
 [#543]: https://github.com/gotgenes/pi-packages/issues/543
 [#601]: https://github.com/gotgenes/pi-packages/issues/601
 [#606]: https://github.com/gotgenes/pi-packages/issues/606
