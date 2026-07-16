@@ -40,3 +40,50 @@ Package test count went `975 → 991`; the pre-completion reviewer returned PASS
 - Architecture-doc update (✅ Step 7 heading, `Landed:` note, Mermaid `S7` node) landed as its own `docs:` commit at completion, per the roadmap step-mark convention — Phase 20's phase-status row was correctly left unflipped since Steps 8–9 remain incomplete.
 - Pre-completion reviewer: **PASS** — all deterministic checks, doc updates, design review, Mermaid rendering, dead-code gate, and the Step 5 (`#539`) narrow-`RendererTheme` invariant (strengthened, not just preserved) confirmed clean.
   No WARN findings.
+
+## Stage: Final Retrospective (2026-07-16T13:32:19Z)
+
+### Session summary
+
+Shipped issue #541 end-to-end across four stages (plan → TDD → ship → retro) in a single continuous session with zero rework and zero deviations from the plan.
+The `createNotificationRenderer` arrow was decomposed into three pure, exported helpers over four `refactor:`/`test:` commits; the pre-completion reviewer returned PASS on first dispatch, CI passed, and the issue closed with no release cut (all commits hidden/excluded types, auto-batching forward).
+
+### Observations
+
+#### What went well
+
+- Exceptionally clean end-to-end execution: the plan's Module-Level Changes matched the actually-touched files exactly (`renderer.ts` + `renderer.test.ts`), every TDD step landed red→green→commit without a downstream break, and the pre-completion reviewer passed on the first dispatch.
+  The plan was precise enough that implementation carried no surprises.
+- The `tidy-first-assessor` correctly judged "the extraction itself is the tidying" and recommended zero preparatory commits, avoiding busywork churn on code about to be rewritten — good scope discipline from the subagent.
+- Quantitative claims were verified via `fallow health --targets --format json` (empty `targets` array) and `fallow dead-code --format json` rather than grepping human-readable output, exactly per the Refs #537 rule — confirming `renderer.ts` left the triage list rather than asserting it.
+- Feedback loops ran incrementally and by the book: the affected test file after every Red and Green, `pnpm run check` immediately after each shared-type change (turns 33/41/46), and the full suite + lint + fallow only at the end.
+  No end-of-session verification pileup.
+
+#### What caused friction (agent side)
+
+- `missing-context` (self-caught, near-zero impact) — in TDD step 2, the `buildStatsParts` test expectations were first written by inferring formatter output from names (`5/10 turns`, `1.0k tokens`, `5s`).
+  Caught before running Red by reading `src/ui/display.ts`, which revealed the real shapes (`⟳5≤10`, `1.0k token` singular, `5.0s`), then corrected in one edit.
+  Impact: one extra `Read` + one extra `Edit`; no failed test run, no rework of committed code.
+- `other` (tool portability, self-corrected in one step) — the stacked-release scan used `grep -oP` (turn 93), which BSD/macOS `grep` rejects (`invalid option -- P`); re-run as `grep -oE` (turn 94) succeeded.
+  Impact: one wasted tool call.
+
+#### What caused friction (user side)
+
+- None.
+  The operator drove the four slash commands in sequence; the plan was clear and the execution clean, so no strategic intervention or earlier context-sharing was called for — the ideal case for a well-scoped refactor.
+
+### Diagnostic details
+
+- **Model-performance correlation** — all four stages and both subagents were model-matched to task difficulty: planning and retro (judgment-heavy) on `claude-opus-4-8`; TDD (implementation) on `claude-sonnet-5`; both read-only subagents (`tidy-first-assessor`, `pre-completion-reviewer`) on `claude-sonnet-5`.
+  The ship stage ran on `opencode-go/deepseek-v4-flash` (a lighter model) — mostly mechanical (git/CI/close), but it also handled the one judgment step (reasoning through `exclude-paths` and hidden changelog types to conclude no release cuts) correctly.
+  No mismatch; the `grep -oP` slip above was the only visible cost and was self-corrected.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; the one tool error (`grep -oP`) resolved on the next call.
+  Nothing approached the 5-call escalation threshold.
+- **Unused-tool detection** — no `missing-context`/`rabbit-hole` gap a subagent or `colgrep` would have closed; the single missing-context slip was resolved by one direct `Read` of the formatter source.
+- **Feedback-loop gap analysis** — no gap; verification was incremental throughout (per-step test runs, per-type-change `pnpm run check`), with the full suite/lint/fallow reserved for the end.
+
+### Changes made
+
+1. No prompt or `AGENTS.md` changes — the operator chose retro-file-only.
+   Both friction points were self-caught with near-zero impact, and the one candidate rule (read a helper's implementation before asserting its exact formatted output) was judged too low-value to add to the `testing` skill.
+   The observation is preserved here as a breadcrumb instead.
