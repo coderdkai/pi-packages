@@ -92,10 +92,27 @@ Stale counts, files missing from the layout tree, and mid-phase labels are **exp
 Stop and report **only** when a documented `Outcome:` / `Landed:` claim is contradicted by the code: a symbol that should be gone still exists, a field documented as "mandatory" is still optional, a module said to be removed is still present.
 That is an outcome failure — do not paper over it in the archive.
 
-## Step 4: Archive the phase
+## Step 4: Bounded doc hygiene (change-scoped)
 
-Follow the package's **existing** convention — read `history/` and the document's "Refactoring history" section first, and match the established style (pi-subagents uses a Phase/Title/Status table plus a structural-issues table; pi-permission-system uses prose `### Phase N (complete)` subsections).
-Do not impose a new format.
+Before archiving, do a bounded hygiene pass over the regions this phase **already touched** — the modules the phase changed and the target prose the phase delivered against.
+This is not a full-doc rewrite: mirror the tidy-first "only touch what the change touches" discipline, and leave unrelated doc regions alone.
+Without this pass, every phase close re-inflates the document and the read cost `/plan-improvements` Step 1 pays keeps climbing (Refs #601, #605).
+
+1. No duplicate phase prose on archive.
+   When you archive in Step 5, emit **only** the concise completion summary and the "Refactoring history" history-table row — do **not** also write a `### Phase N` prose paragraph under "Refactoring history".
+   The `## Improvement roadmap — Phase N (complete)` summary and the `history/phase-N-*.md` file already carry that content; a third copy is the near-verbatim duplication #601 and #605 deleted.
+   Leave the `## Improvement roadmap — Phase N (complete)` summary chain itself intact — the `/plan-improvements` hard gate greps for it.
+2. Strip provenance from touched module-tree entries.
+   For each module-tree entry the phase changed, reduce it to what the module is **now**; cite an issue only when the ref encodes an active constraint (a lint-guarded boundary, an ADR string boundary, a structural invariant), never as a provenance trail ("relocated #559, dissolved #505, renamed #510…"), which belongs in git log and `history/`.
+   This mirrors the `package-$1` skill's regrowth guard where the package carries one.
+3. Re-frame delivered `Target:`/pending prose.
+   Where the phase's delivered outcomes have made a `**Target:**` or otherwise-pending passage current state, re-frame it as current — but only for prose the phase actually delivered against.
+   Leave genuinely-open targets (later-phase directions the phase did not deliver) as targets.
+
+## Step 5: Archive the phase
+
+Follow the package's **existing** convention — read `history/` and the document's "Refactoring history" section first, and match the established style (both packages now use an intro paragraph plus a per-phase table under "Refactoring history" — pi-subagents adds a structural-issues table).
+Do not impose a new format, and per Step 4 do **not** add a `### Phase N (complete)` prose subsection.
 
 1. Create `packages/$1/docs/architecture/history/phase-N-<slug>.md` (create the `history/` directory if the package does not have one yet) and move the **full** detailed roadmap — findings table, numbered steps with outcomes, dependency diagram, and tracks — into it.
    Move the prose verbatim, but **rebase link targets**: same-doc anchors become `../architecture.md#…`, and relative paths gain one `../` level (`../decisions/…` → `../../decisions/…`).
@@ -116,7 +133,7 @@ Do not impose a new format.
    Removing the roadmap **orphans** any `[#N]:` definition that was referenced only inside the moved block — after the move, re-run the markdown lint and delete each now-orphaned definition from `architecture.md` (its references moved to history), while confirming the history file defines everything *it* now references.
    `rumdl` flags these as `MD053` "unused link/image reference"; fix them before committing rather than in a follow-up round-trip.
 
-## Step 5: Verify and commit
+## Step 6: Verify and commit
 
 1. Run `pnpm run lint` (or at least the markdown lint) to confirm the documents are clean — fix any `rumdl`/MD0xx findings.
 2. Confirm the move is loss-free with deterministic checks against the history file rather than eyeballing.
