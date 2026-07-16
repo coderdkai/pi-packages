@@ -1067,7 +1067,7 @@ The steered-status wrapper test was pruned as fully subsumed by the new `resolve
 
 `Release: independent`
 
-#### Step 8 — Full-value `SubagentStateInit` ([#542])
+#### ✅ Step 8 — Full-value `SubagentStateInit` ([#542])
 
 Smell: Category D (shared factory complexity → narrow/complete the production init surface) — `createTestSubagent` (19 cyclomatic, 25 cognitive) seeds metrics via mutation loops because `SubagentStateInit` accepts only transition fields.
 Target files:
@@ -1076,6 +1076,10 @@ Target files:
 - `test/helpers/make-subagent.ts` — collapse the mutation loops into direct init.
 
 Outcome: `createTestSubagent` cyclomatic ≤ 8; off the fallow complexity list; no production behavior change.
+
+Landed: extended `SubagentStateInit` with six optional value fields (`toolUses`, `lifetimeUsage`, `compactionCount`, `turnCount`, `activeTools`, `responseText`), seeded in the constructor — `lifetimeUsage` is spread-copied so a later `addUsage` cannot mutate the caller's object, and `activeTools` is seeded by name through `addActiveTool` to preserve the `_toolKeySeq` keying invariant.
+`createTestSubagent` collapsed its post-construction mutation loops into direct init and dropped off both the fallow refactoring-targets and large-functions lists (was 19 cyclomatic, the workspace's most complex function).
+No production behavior change — the accumulation methods stay as the `record-observer` runtime path.
 
 `Release: independent`
 
@@ -1100,7 +1104,7 @@ flowchart LR
     S4["✅ Step 4 (#538)<br/>Type the model boundary"]
     S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
     S6["✅ Step 6 (#540)<br/>Table-driven settings handler"]
-    S8["Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["Step 9 (#543)<br/>Consolidate test clones"]
+    S8["✅ Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["Step 9 (#543)<br/>Consolidate test clones"]
     S2 --> S9
     S3 --> S9
 ```
