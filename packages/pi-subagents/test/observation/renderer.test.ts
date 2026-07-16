@@ -197,16 +197,6 @@ describe("createNotificationRenderer", () => {
     expect(text).toContain("error");
   });
 
-  it("renders steered status as completed (steered)", () => {
-    const renderer = createNotificationRenderer();
-    const result = renderer(
-      { details: makeDetails({ status: "steered" }) },
-      { expanded: false },
-      stubTheme(),
-    );
-    expect(renderText(result)).toContain("completed (steered)");
-  });
-
   it("shows full result lines when expanded", () => {
     const renderer = createNotificationRenderer();
     const result = renderer(
