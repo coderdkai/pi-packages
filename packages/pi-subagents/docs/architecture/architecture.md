@@ -1048,7 +1048,7 @@ The validation comparison direction (`n >= descriptor.minimum`) was kept unchang
 
 `Release: independent`
 
-#### Step 7 — Decompose the notification renderer ([#541])
+#### ✅ Step 7 — Decompose the notification renderer ([#541])
 
 Smell: Category B/D (oversized arrow, untested complexity) — the renderer arrow in `src/observation/renderer.ts` is fallow's top triage concern (17 cyclomatic, CRAP 79.4).
 Target files:
@@ -1059,6 +1059,11 @@ Target files:
 Soft ordering: land after Step 1 so the notification-domain files settle first.
 
 Outcome: renderer arrow cyclomatic < 10; `renderer.ts` off the top of the fallow triage list.
+
+Landed: extracted three pure, exported helpers — `resolveStatusPresentation` (status→icon/label, the one OCP dispatch point), `buildStatsParts` (ISP-narrowed `StatsSource` `Pick` over `NotificationDetails`), and `buildPreviewLines` (collapsed 80-column slice vs. expanded 30-line cap).
+The arrow now composes the three helpers and applies theme styling only; marker/indentation/`theme.fg` assembly stayed in the wrapper so rendered output is unchanged.
+`renderer.ts` no longer appears in `fallow health --targets` (0 refactoring targets) or the file-scores list for the package — off the triage list entirely.
+The steered-status wrapper test was pruned as fully subsumed by the new `resolveStatusPresentation` unit test; all other wrapper tests were kept because each exercises genuine multi-piece theme composition the pure helpers don't cover.
 
 `Release: independent`
 
@@ -1090,7 +1095,7 @@ Outcome: in-package clone groups 9 → ≤ 5; duplicated lines 81 → ≤ 40.
 ```mermaid
 flowchart LR
     S1["✅ Step 1 (#535)<br/>Result delivery off Subagent"] --> S2["✅ Step 2 (#536)<br/>Decompose get-result-tool"]
-    S1 -.soft.-> S7["Step 7 (#541)<br/>Decompose notification renderer"]
+    S1 -.soft.-> S7["✅ Step 7 (#541)<br/>Decompose notification renderer"]
     S3["✅ Step 3 (#537)<br/>Steer returns an outcome"]
     S4["✅ Step 4 (#538)<br/>Type the model boundary"]
     S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
