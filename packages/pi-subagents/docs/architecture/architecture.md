@@ -1032,7 +1032,7 @@ Running disable-header tally 3 → 1 (only `index.ts`'s 1-rule `no-unsafe-argume
 
 `Release: independent`
 
-#### Step 6 — Table-driven settings handler ([#540])
+#### ✅ Step 6 — Table-driven settings handler ([#540])
 
 Smell: Category B (function duplication inside one function) — `subagents-settings.handle` (13 cyclomatic, 24 cognitive, 52 lines) repeats the select→input→parse→validate→apply→notify flow three times.
 Target files:
@@ -1041,6 +1041,10 @@ Target files:
 - `test/ui/subagents-settings.test.ts` — assert per-descriptor behavior.
 
 Outcome: `handle` cyclomatic ≤ 6 and cognitive ≤ 10; off the fallow high-complexity list.
+
+Landed: `handle` now dispatches through a module-private `NumericSettingDescriptor` table (label, current-value display, input title/default, minimum, validation message, apply method) with a single `select` → `find` → `input` → `parse` → `validate` → `apply`/`notify` pass; the three copy-pasted branches are gone.
+The validation comparison direction (`n >= descriptor.minimum`) was kept unchanged and pinned with a new non-numeric-input regression test before the rewrite, so `NaN` from a malformed input still warns rather than silently applying.
+`subagents-settings.ts` no longer appears in fallow's hotspot list (file-level cyclomatic 19 / cognitive 7 across 13 small functions, `crap_above_threshold: 0`) — off the fallow high-complexity list.
 
 `Release: independent`
 
@@ -1090,7 +1094,7 @@ flowchart LR
     S3["✅ Step 3 (#537)<br/>Steer returns an outcome"]
     S4["✅ Step 4 (#538)<br/>Type the model boundary"]
     S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
-    S6["Step 6 (#540)<br/>Table-driven settings handler"]
+    S6["✅ Step 6 (#540)<br/>Table-driven settings handler"]
     S8["Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["Step 9 (#543)<br/>Consolidate test clones"]
     S2 --> S9
     S3 --> S9
