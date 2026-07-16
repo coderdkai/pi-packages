@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationDetails } from "#src/observation/notification";
-import { createNotificationRenderer } from "#src/observation/renderer";
+import { createNotificationRenderer, resolveStatusPresentation } from "#src/observation/renderer";
 
 /** Minimal theme stub — satisfies RendererTheme structurally. */
 function stubTheme() {
@@ -29,6 +29,56 @@ function renderText(result: ReturnType<ReturnType<typeof createNotificationRende
   expect(result).toBeDefined();
   return result!.render(120).join("\n");
 }
+
+describe("resolveStatusPresentation", () => {
+  it("resolves completed status", () => {
+    expect(resolveStatusPresentation("completed")).toEqual({
+      iconGlyph: "✓",
+      iconStyle: "success",
+      statusText: "completed",
+    });
+  });
+
+  it("resolves steered status to completed (steered)", () => {
+    expect(resolveStatusPresentation("steered")).toEqual({
+      iconGlyph: "✓",
+      iconStyle: "success",
+      statusText: "completed (steered)",
+    });
+  });
+
+  it("resolves error status", () => {
+    expect(resolveStatusPresentation("error")).toEqual({
+      iconGlyph: "✗",
+      iconStyle: "error",
+      statusText: "error",
+    });
+  });
+
+  it("resolves stopped status", () => {
+    expect(resolveStatusPresentation("stopped")).toEqual({
+      iconGlyph: "✗",
+      iconStyle: "error",
+      statusText: "stopped",
+    });
+  });
+
+  it("resolves aborted status", () => {
+    expect(resolveStatusPresentation("aborted")).toEqual({
+      iconGlyph: "✗",
+      iconStyle: "error",
+      statusText: "aborted",
+    });
+  });
+
+  it("resolves an unknown status as completed", () => {
+    expect(resolveStatusPresentation("unknown")).toEqual({
+      iconGlyph: "✓",
+      iconStyle: "success",
+      statusText: "completed",
+    });
+  });
+});
 
 describe("createNotificationRenderer", () => {
   it("returns undefined when message has no details", () => {

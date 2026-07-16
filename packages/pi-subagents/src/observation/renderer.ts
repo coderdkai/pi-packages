@@ -18,6 +18,23 @@ interface RenderOptions {
   expanded: boolean;
 }
 
+// ---- Pure helpers (exported for unit testing) ----
+
+/** Resolved status→presentation product: icon glyph/style and status label. */
+export interface StatusPresentation {
+  iconGlyph: string;
+  iconStyle: string;
+  statusText: string;
+}
+
+/** Decide the icon and status label for a notification's status, once. */
+export function resolveStatusPresentation(status: string): StatusPresentation {
+  const isError = status === "error" || status === "stopped" || status === "aborted";
+  if (isError) return { iconGlyph: "✗", iconStyle: "error", statusText: status };
+  const statusText = status === "steered" ? "completed (steered)" : "completed";
+  return { iconGlyph: "✓", iconStyle: "success", statusText };
+}
+
 /**
  * Create the notification renderer callback for `pi.registerMessageRenderer`.
  * Returns a factory so the renderer is independently testable without the Pi SDK.
@@ -27,16 +44,10 @@ export function createNotificationRenderer() {
     const d = message.details;
     if (!d) return undefined;
 
-    const isError = d.status === "error" || d.status === "stopped" || d.status === "aborted";
-    const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-    const statusText = isError
-      ? d.status
-      : d.status === "steered"
-        ? "completed (steered)"
-        : "completed";
+    const { iconGlyph, iconStyle, statusText } = resolveStatusPresentation(d.status);
 
     // Line 1: icon + agent description + status
-    let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
+    let line = `${theme.fg(iconStyle, iconGlyph)} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
 
     // Line 2: stats
     const parts: string[] = [];
