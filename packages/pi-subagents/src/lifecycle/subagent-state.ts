@@ -36,6 +36,14 @@ export interface SubagentStateInit {
 	error?: string;
 	startedAt?: number;
 	completedAt?: number;
+	// Stats — seed a populated value without replaying the accumulation methods
+	toolUses?: number;
+	lifetimeUsage?: LifetimeUsage;
+	compactionCount?: number;
+	// Live activity — activeTools is seeded by name (each entry calls addActiveTool)
+	turnCount?: number;
+	activeTools?: string[];
+	responseText?: string;
 }
 
 export class SubagentState {
@@ -56,17 +64,17 @@ export class SubagentState {
 	get completedAt(): number | undefined { return this._completedAt; }
 
 	// Stats — accumulated via mutation methods, readable via getters
-	private _toolUses = 0;
+	private _toolUses: number;
 	get toolUses(): number { return this._toolUses; }
 
-	private _lifetimeUsage: LifetimeUsage = { input: 0, output: 0, cacheWrite: 0 };
+	private _lifetimeUsage: LifetimeUsage;
 	get lifetimeUsage(): Readonly<LifetimeUsage> { return this._lifetimeUsage; }
 
-	private _compactionCount = 0;
+	private _compactionCount: number;
 	get compactionCount(): number { return this._compactionCount; }
 
 	// Live activity — accumulated via transition methods, readable via getters
-	private _turnCount = 1;
+	private _turnCount: number;
 	get turnCount(): number { return this._turnCount; }
 
 	private _activeTools = new Map<string, string>();
@@ -74,7 +82,7 @@ export class SubagentState {
 
 	private _toolKeySeq = 0;
 
-	private _responseText = "";
+	private _responseText: string;
 	get responseText(): string { return this._responseText; }
 
 	constructor(init: SubagentStateInit = {}) {
@@ -83,6 +91,17 @@ export class SubagentState {
 		this._error = init.error;
 		this._startedAt = init.startedAt ?? Date.now();
 		this._completedAt = init.completedAt;
+		this._toolUses = init.toolUses ?? 0;
+		// Copy so a later addUsage() cannot mutate the caller's object.
+		this._lifetimeUsage = init.lifetimeUsage
+			? { ...init.lifetimeUsage }
+			: { input: 0, output: 0, cacheWrite: 0 };
+		this._compactionCount = init.compactionCount ?? 0;
+		this._turnCount = init.turnCount ?? 1;
+		this._responseText = init.responseText ?? "";
+		for (const name of init.activeTools ?? []) {
+			this.addActiveTool(name);
+		}
 	}
 
 	/** Increment tool use count. Called by record-observer on tool_execution_end. */

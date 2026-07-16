@@ -22,6 +22,13 @@ describe("SubagentState — constructor", () => {
 		expect(state.lifetimeUsage).toEqual({ input: 0, output: 0, cacheWrite: 0 });
 	});
 
+	it("defaults live-activity fields", () => {
+		const state = new SubagentState();
+		expect(state.turnCount).toBe(1);
+		expect(state.responseText).toBe("");
+		expect(state.activeTools.size).toBe(0);
+	});
+
 	it("passes through optional transition fields", () => {
 		const state = new SubagentState({
 			status: "completed",
@@ -42,6 +49,45 @@ describe("SubagentState — constructor", () => {
 		expect(state.result).toBeUndefined();
 		expect(state.error).toBeUndefined();
 		expect(state.completedAt).toBeUndefined();
+	});
+});
+
+describe("SubagentState — constructor full-value seeding", () => {
+	it("seeds stats fields", () => {
+		const state = new SubagentState({
+			toolUses: 4,
+			lifetimeUsage: { input: 100, output: 200, cacheWrite: 30 },
+			compactionCount: 2,
+		});
+		expect(state.toolUses).toBe(4);
+		expect(state.lifetimeUsage).toEqual({ input: 100, output: 200, cacheWrite: 30 });
+		expect(state.compactionCount).toBe(2);
+	});
+
+	it("copies lifetimeUsage so mutating the source does not change state", () => {
+		const source = { input: 10, output: 20, cacheWrite: 5 };
+		const state = new SubagentState({ lifetimeUsage: source });
+		source.input = 999;
+		expect(state.lifetimeUsage).toEqual({ input: 10, output: 20, cacheWrite: 5 });
+	});
+
+	it("seeds live-activity fields", () => {
+		const state = new SubagentState({
+			turnCount: 3,
+			activeTools: ["read", "bash"],
+			responseText: "partial output",
+		});
+		expect(state.turnCount).toBe(3);
+		expect([...state.activeTools.values()]).toEqual(["read", "bash"]);
+		expect(state.responseText).toBe("partial output");
+	});
+
+	it("seeds activeTools by name and stays removable by name", () => {
+		const state = new SubagentState({ activeTools: ["read", "read"] });
+		expect(state.activeTools.size).toBe(2);
+		state.removeActiveTool("read");
+		expect(state.activeTools.size).toBe(1);
+		expect([...state.activeTools.values()]).toEqual(["read"]);
 	});
 });
 
