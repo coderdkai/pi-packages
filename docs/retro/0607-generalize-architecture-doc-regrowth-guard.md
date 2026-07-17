@@ -23,6 +23,21 @@ The change is three coordinated edits in repo-root tooling — add a canonical `
   This issue is the last of that quartet.
 - Next stage is `/build-plan` (docs/tooling, no test cycles).
 
+## Stage: Implementation — Build (2025-07-16T00:00:00Z)
+
+### Session summary
+
+Executed the single-commit build plan as one `docs:` commit (`794f9a7e`): added the canonical `### Architecture-doc conventions` subsection to `AGENTS.md`, removed the redundant two-line regrowth guard from `.pi/skills/package-pi-permission-system/SKILL.md`, and repointed `/finish-phase` Step 4 directive 2 at the shared `AGENTS.md` convention.
+No `src/`/`test/`/`.ts` files were touched, so only `rumdl`/lint ran (clean on all three files); no test or typecheck was needed.
+
+### Observations
+
+- No deviations from the plan — the three coordinated edits landed exactly as designed, in one logical commit per the Build Order.
+- Verified no dangling reference to the removed guard survives: `grep -rn "regrowth guard\|package-$1 skill\|module-tree entries describe" .pi/ AGENTS.md` returns only the new canonical `AGENTS.md` statement.
+- `.pi/skills/package-pi-subagents/SKILL.md` was deliberately left untouched (no mirror), matching the operator's confirmed single-source direction.
+- Pre-completion reviewer: PASS — all deterministic checks green (`check`/`lint`/`test`/`fallow dead-code`), all three Goals code-verified, conventional-commit compliant, no stale references, direction matches operator's `ask_user` choices.
+  No warnings.
+
 [#601]: https://github.com/gotgenes/pi-packages/issues/601
 [#605]: https://github.com/gotgenes/pi-packages/issues/605
 [#606]: https://github.com/gotgenes/pi-packages/issues/606
