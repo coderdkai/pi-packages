@@ -43,7 +43,7 @@ Note:
 Determine the next phase number N (last completed phase + 1), then immediately call `set_session_name` with `$1 — Phase N Planning` so the session is labelled for the rest of the work.
 
 **Hard gate — the previous phase must be archived first.**
-If Phase N−1's full detailed roadmap (numbered steps with `Outcome:` lines and a dependency diagram) is still inline in `architecture.md` rather than condensed to a completion summary linking a `history/phase-(N−1)-<slug>.md` file, stop and tell the user to run `/finish-phase $1` first, then resume `/plan-improvements $1`.
+If Phase N−1's full detailed roadmap (numbered steps with `Outcome:` lines and a dependency diagram) is still inline in `architecture.md` rather than archived to a `history/phase-(N−1)-<slug>.md` file with only a "Refactoring history" table row left behind, stop and tell the user to run `/finish-phase $1` first, then resume `/plan-improvements $1`.
 Archiving the prior phase — with its step-completion gate and doc reconciliation — is `/finish-phase`'s job; do not do it inline here.
 
 A declared direction for Phase N most often lives **not** in `architecture.md` but in the previous phase's history file — `history/phase-(N−1)-<slug>.md`, whose **Findings** section is where `/finish-phase` records the "leading Phase N candidate."
@@ -159,8 +159,8 @@ For an SDK **UI or behavioral** capability (not just "does this method exist"), 
 
 ## Output
 
-Write the proposed plan as a new `## Improvement roadmap — Phase N: <title>` section in `packages/$1/docs/architecture/architecture.md`, inserted **above the most recent completed-phase summary**.
-`/finish-phase` has already condensed prior phases into a chain of `## Improvement roadmap — Phase N−1: … (complete)` summaries; insert above them, do not overwrite them.
+Write the proposed plan as a new `## Improvement roadmap — Phase N: <title>` section in `packages/$1/docs/architecture/architecture.md`, inserted **immediately above the `## Refactoring history` section**.
+`/finish-phase` archives prior phases to `history/` and leaves only their "Refactoring history" table rows — there is no completed-phase summary chain to sit above, so the active roadmap you are writing is the only `## Improvement roadmap` section in the doc while it is in progress.
 
 The section should include:
 

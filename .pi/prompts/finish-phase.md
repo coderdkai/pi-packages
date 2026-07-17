@@ -83,7 +83,7 @@ Do not copy a doc metric forward — recompute it:
 - "Total LOC" / "Source LOC" counts `src/` only (`find packages/$1/src -name '*.ts' | wc -l` for the file count; `… -exec wc -l {} +` for LOC).
   Test counts come from `pnpm --filter @gotgenes/$1 run test`.
 - If a doc metric carries a mid-phase label ("as of Step N", "Phase N Step M"), replace it with the end-of-phase value and drop the label — the archived doc should read as the settled post-phase baseline, not a snapshot.
-- When the phase findings table records a recompute command for a target metric (a `grep -c`, `wc -l`, or fallow field), run it and record predicted vs. delivered in the completion summary.
+- When the phase findings table records a recompute command for a target metric (a `grep -c`, `wc -l`, or fallow field), run it and record predicted vs. delivered in the history file's health-metrics table (a "delivered" column) and summarise it in the reconciliation commit body.
   Report misses honestly — they are retro input for the next planning round, not something to paper over (the Phase 8 precedent: "fallow refactoring targets did not clear to 0" was recorded verbatim).
 
 ### Stop versus fix
@@ -98,10 +98,11 @@ Before archiving, do a bounded hygiene pass over the regions this phase **alread
 This is not a full-doc rewrite: mirror the tidy-first "only touch what the change touches" discipline, and leave unrelated doc regions alone.
 Without this pass, every phase close re-inflates the document and the read cost `/plan-improvements` Step 1 pays keeps climbing (Refs #601, #605).
 
-1. No duplicate phase prose on archive.
-   When you archive in Step 5, emit **only** the concise completion summary and the "Refactoring history" history-table row — do **not** also write a `### Phase N` prose paragraph under "Refactoring history".
-   The `## Improvement roadmap — Phase N (complete)` summary and the `history/phase-N-*.md` file already carry that content; a third copy is the near-verbatim duplication #601 and #605 deleted.
-   Leave the `## Improvement roadmap — Phase N (complete)` summary chain itself intact — the `/plan-improvements` hard gate greps for it.
+1. No completion summary on archive — two tiers only.
+   An archived phase gets exactly two representations: the **"Refactoring history" table row** (title + history link) and the **`history/phase-N-*.md`** file that carries the full narrative.
+   Do **not** write a `## Phase N (complete)` / `## Improvement roadmap — Phase N (complete)` prose summary in `architecture.md`, and do **not** write a `### Phase N` prose paragraph under "Refactoring history".
+   Both are the near-verbatim third copy that #601 and #605 deleted; the completion-summary tier itself was retired because each `history/phase-N-*.md` already opens with the same abstract and the table row indexes it.
+   Step 5.2 deletes the whole roadmap section outright — the table row is the only thing about the phase that stays in `architecture.md`.
 2. Strip provenance from touched module-tree entries.
    For each module-tree entry the phase changed, reduce it to what the module is **now**; cite an issue only when the ref encodes an active constraint (a lint-guarded boundary, an ADR string boundary, a structural invariant), never as a provenance trail ("relocated #559, dissolved #505, renamed #510…"), which belongs in git log and `history/`.
    This is the shared architecture-doc convention in `AGENTS.md` (`### Architecture-doc conventions`); hold every touched module-tree entry to it.
@@ -112,7 +113,7 @@ Without this pass, every phase close re-inflates the document and the read cost 
 ## Step 5: Archive the phase
 
 Follow the package's **existing** convention — read `history/` and the document's "Refactoring history" section first, and match the established style (both packages now use an intro paragraph plus a per-phase table under "Refactoring history" — pi-subagents adds a structural-issues table).
-Do not impose a new format, and per Step 4 do **not** add a `### Phase N (complete)` prose subsection.
+Do not impose a new format, and per Step 4 do **not** add a completion-summary paragraph or a `### Phase N (complete)` prose subsection — the table row plus the history file are the only two tiers.
 
 1. Create `packages/$1/docs/architecture/history/phase-N-<slug>.md` (create the `history/` directory if the package does not have one yet) and move the **full** detailed roadmap — findings table, numbered steps with outcomes, dependency diagram, and tracks — into it.
    Move the prose verbatim, but **rebase link targets**: same-doc anchors become `../architecture.md#…`, and relative paths gain one `../` level (`../decisions/…` → `../../decisions/…`).
@@ -122,11 +123,9 @@ Do not impose a new format, and per Step 4 do **not** add a `### Phase N (comple
    Before moving, verify every `[#N]` reference in the block has a matching `[#N]:` definition somewhere in `architecture.md`; a live roadmap can carry a reference whose definition was never added (it renders as literal `[#N]` text on GitHub) — add the missing definitions to the history file when you move the references.
    Mechanics: author the history file fresh with the `Write` tool, then delete the roadmap from `architecture.md` with a scripted start/end-marker replacement (a small `python3` or `sed` block keyed on the section heading and the next `##` heading).
    Do **not** attempt an `Edit` `oldText` match on the roadmap block — it is typically multiple KB and the match is impractical and error-prone.
-2. In `architecture.md`, replace the detailed roadmap section with a concise completion summary that:
-   - States the phase goal and what it delivered in a few sentences.
-   - Lists the closed step issues (`All N steps are closed: [#A], …, [#Z].`).
-   - Notes any abandoned / superseded / parked / not-planned issues.
-   - Links to the new history file.
+2. In `architecture.md`, **delete** the detailed roadmap section entirely — the `history/phase-N-*.md` file now carries it and the "Refactoring history" table row (Step 5.3) indexes it.
+   Do not leave a completion-summary paragraph behind.
+   Any abandoned / superseded / parked / not-planned issues live in the history file (and in the package's structural-issues table, if it keeps one), not in a summary paragraph.
 3. Update the "Refactoring history" table/section: mark Phase N **Complete**, link the new history file, and add it to any structural-refactoring-issues mapping table the package keeps.
 4. Update the intro/summary line that enumerates completed phases (e.g. "Phases 1–N complete").
 5. Use reference-style issue links (`[#N]` in the body, `[#N]:` definitions at the end of the file) per `markdown-conventions`, and verify every definition has a matching reference (MD053).
@@ -142,8 +141,8 @@ Do not impose a new format, and per Step 4 do **not** add a `### Phase N (comple
    - a tolerant count — `grep -cE '^#+ .*\bStep [0-9]' …/history/phase-N-<slug>.md` — equals the step count.
    - `grep -c '```mermaid' …` accounts for the dependency diagram (and any others moved).
    - the tracks table and findings table are present.
-   - the archived phase's section in `architecture.md` retains only the concise summary — **scope the count to that section**, not the whole file, since a coexisting roadmap (another open phase) also carries `Step` headings and makes a whole-file count non-zero.
-     Slice from the `## Improvement roadmap — Phase N …` heading to the next `##` and confirm 0 step headings in that slice (e.g. `awk '/^## Improvement roadmap . Phase N/{f=1} f&&/^## /&&!/Phase N/{f=0} f' architecture.md | grep -cE '^#+ .*\bStep [0-9]'`).
+   - `architecture.md` no longer contains the phase's roadmap section at all — only its "Refactoring history" table row.
+     Confirm nothing was left behind: `grep -nE '^## (Improvement roadmap — Phase N|Phase N \(complete\))' architecture.md` returns nothing, and no `Step`-heading for the archived phase survives outside the history file.
      Also confirm the package skill (`.pi/skills/package-$1/SKILL.md`) — note any stale phase-scored numbers it carries (test counts, file/domain counts); flag them in the hand-off but do not necessarily fix them here.
 3. Once checks pass, commit and push automatically:
 
