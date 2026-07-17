@@ -640,17 +640,17 @@ That method — testability friction as a boundary probe, with its limits — is
 
 ### Health metrics
 
-| Metric                     | Value                       |
-| -------------------------- | --------------------------- |
-| Health score               | 78/100 (B), end of Phase 19 |
-| Total LOC                  | 7,068 (57 files)            |
-| Dead code                  | 0 files, 0 exports          |
-| Maintainability index      | 91.0 (good)                 |
-| Avg cyclomatic complexity  | 1.4                         |
-| P90 cyclomatic complexity  | 2                           |
-| Production duplication     | 0 lines                     |
-| Test duplication           | 9 clone groups, 81 lines    |
-| Fallow refactoring targets | 0                           |
+| Metric                     | Value                                                                   |
+| -------------------------- | ----------------------------------------------------------------------- |
+| Health score               | 78/100 (B), end of Phase 20                                             |
+| Total LOC                  | 7,211 (57 files)                                                        |
+| Dead code                  | 0 files, 0 exports                                                      |
+| Maintainability index      | 91.1 (good)                                                             |
+| Avg cyclomatic complexity  | 1.3                                                                     |
+| P90 cyclomatic complexity  | 2                                                                       |
+| Production duplication     | 0 lines                                                                 |
+| Test duplication           | retired (fallow 3.2.0 excludes test files; see Phase 20 Step 9 history) |
+| Fallow refactoring targets | 0                                                                       |
 
 ### Dependency bag inventory
 
@@ -660,7 +660,8 @@ The 10+-field dependency bags flagged in prior phases (`ResolvedSpawnConfig`, `A
 
 Functions with cyclomatic complexity ≥ 21 (critical threshold):
 
-No functions remain above the critical threshold — all hotspots resolved in Phase 12. 6 functions remain at HIGH severity (CRAP ≥ 65); 13 at moderate.
+No functions remain above the critical threshold — all hotspots resolved in Phase 12. 1 function remains at HIGH severity (a test helper, `subagent-manager.test.ts`'s `createManager`); 14 at moderate.
+No `src/` function reaches HIGH severity or CRAP ≥ 60 (Phase 20 target met).
 
 ### Churn hotspots
 
@@ -669,13 +670,13 @@ Files with highest commit frequency × complexity:
 | Score | File                          | Commits | Trend          |
 | ----- | ----------------------------- | ------- | -------------- |
 | 27.1  | `index.ts`                    | 109     | ▼ cooling      |
-| 9.6   | `tools/agent-tool.ts`         | 56      | ▼ cooling      |
-| 8.8   | `ui/agent-widget.ts`          | 22      | ▼ cooling      |
-| 7.3   | `tools/foreground-runner.ts`  | 22      | ▼ cooling      |
-| 6.6   | `service/service-adapter.ts`  | 15      | ▲ accelerating |
-| 6.3   | `config/custom-agents.ts`     | 13      | ▼ cooling      |
+| 10.1  | `tools/agent-tool.ts`         | 58      | ▼ cooling      |
+| 8.8   | `ui/agent-widget.ts`          | 23      | ▼ cooling      |
+| 8.2   | `service/service-adapter.ts`  | 17      | ▼ cooling      |
+| 7.7   | `tools/foreground-runner.ts`  | 23      | ▼ cooling      |
+| 7.5   | `lifecycle/subagent.ts`       | 17      | ▼ cooling      |
 
-`index.ts` remains the top churn hotspot but has cooled after the Phase 19 terminal cut removed its four `/agents`-wiring blocks; `service-adapter.ts` is now the sole accelerating file.
+`index.ts` remains the top churn hotspot but has cooled after the Phase 19 terminal cut removed its four `/agents`-wiring blocks; `service-adapter.ts` cooled after Phase 20 Step 4 extracted its model-resolution branch, so no file is currently accelerating.
 
 ### Production duplication
 
@@ -761,233 +762,16 @@ All nine steps are closed: [#446], [#447], [#444], [#445], [#462], [#463], [#442
 A follow-on issue, [#470] (README staleness after the terminal cut), was filed and closed independently.
 See [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md) for the full findings, step outcomes, dependency diagram, and tracks.
 
-## Phase 20 improvement roadmap
-
-Phase 20 realizes the last un-extracted domain from the [first-principles refinement](#first-principles-refinement-and-the-deeper-target) — **result delivery** — and clears the residual boundary and complexity debt discovery surfaced around it.
-
-Discovery findings (fallow + entry-point trace + test-constructibility audit, 2026-07-03):
-
-1. `NotificationState` (`toolCallId`, `resultConsumed`) still lives on `Subagent`; `get-result-tool` reaches through `record.notification?.markConsumed()` twice, always paired with `notifications.cancelNudge(id)` — the doc's own "homeless field" (result-delivery domain) plus a scattered two-step reset.
-2. Both `steer-tool` and `service-adapter` pre-check `status !== "running"` before calling `record.steer()` — ask-then-tell, contradicting the target's "tell by id, with outcomes" rule.
-3. Five file-level eslint-disable headers (`agent-tool` disables 6 rules; `spawn-config` and `agent-widget` 4 each; `model-resolver` 2; `index` 1) and `model: unknown`/`Model<any>`/`any` threading through 8 files mark the SDK type boundary as the largest remaining `any` surface.
-4. Three src functions carry HIGH CRAP scores (notification renderer arrow 79.4, `service-adapter.spawn` 71.3, `get-result-tool.execute` 63.6 — resolved by Step 2); `subagents-settings.handle` (13 cyclomatic, 24 cognitive) is three copy-pasted select→input→validate→apply branches; `service-adapter.ts` is the sole accelerating churn file.
-5. `createTestSubagent` is the most complex function in the workspace (19 cyclomatic, 25 cognitive) because `SubagentStateInit` accepts only transition fields, forcing mutation loops to seed metrics — a Category D "shared factory complexity" signal pointing at the production init surface.
-6. Test duplication sits at 9 in-package clone groups (81 lines), at the ≤ 10 target but with two consolidatable clone families.
-
-No finding scores ≥ 20 on the priority scale (Impact × (6 − Risk)); the phase is a should-fix band (10–15) consolidation.
-Directory organization is healthy (seven domain directories, six root files) — no reorg this phase.
-
-### Health metrics (Phase 20)
-
-| Metric                                           | Phase 19 (end)   | Phase 20 target        |
-| ------------------------------------------------ | ---------------- | ---------------------- |
-| Health score                                     | 78/100 (B)       | ≥ 78 (B)               |
-| Source LOC                                       | 7,068 (57 files) | ~7,050 (no net growth) |
-| `record.notification?.` reach-throughs           | 4 sites          | 0                      |
-| Steer status pre-checks outside `Subagent.steer` | 2 sites          | 0                      |
-| src functions with CRAP ≥ 60                     | 3                | 0                      |
-| File-level eslint-disable headers                | 5                | ≤ 2                    |
-| `createTestSubagent` cyclomatic                  | 19               | ≤ 8                    |
-| Test clone groups (in-package)                   | 9 (81 lines)     | — retired (see note)   |
-
-The "Test clone groups (in-package)" metric is retired as of Step 9 ([#543]). fallow 3.2.0 excludes `**/*.test.*` from duplication detection by default, so `pnpm fallow dupes --workspace @gotgenes/pi-subagents` no longer surfaces test-file clones — the tool treats test-suite token runs as expected scaffolding.
-The suites' arrange was already well-factored by Phase 17 and Phase 20 Step 8; the residual repetition is the system-under-test act call, which stays explicit per the `testing` skill.
-
-### Steps
-
-#### ✅ Step 1 — Extract result delivery from `Subagent` ([#535])
-
-Smell: Category C (anemic domain / misplaced state, Law of Demeter, scattered resets) — the result-delivery domain named in the first-principles refinement is still fused into the execution record.
-Target files:
-
-- `src/lifecycle/subagent.ts` — drop `_notification` / `notification`; stop constructing `NotificationState` from `parentSession.toolCallId`.
-- `src/observation/notification.ts` — `NotificationManager` owns consumed-state keyed by agent id behind a single tell operation (e.g. `consume(id)`) that also cancels the pending nudge.
-- `src/observation/notification-state.ts` — dissolve into the manager or move wholly into the observation domain.
-- `src/observation/subagent-events-observer.ts`, `src/tools/get-result-tool.ts` — call the new delivery interface instead of reaching through the record.
-
-The `toolCallId` needed by `formatTaskNotification` already travels on `execution.parentSession`; expose it without routing through a notification object.
-The pre-await consumption ordering (the "Bug 1" race tests in `test/lifecycle/subagent-manager.test.ts`) is a preserved invariant — consuming before awaiting must still suppress the completion nudge.
-
-Outcome: zero `record.notification?.` reach-throughs in `src/`; `Subagent` carries no notification field; delivery state lives in the observation domain.
-
-Landed: `notification-state.ts` deleted; `Subagent.toolCallId` getter added over `execution.parentSession`; `NotificationManager` owns `consumed: Set<string>` behind one `consume(id)` tell that adds to the set and cancels the pending nudge atomically.
-Collapsing the old two-step reset (`markConsumed()` + `cancelNudge()`) into one atomic operation structurally eliminates the historical "Bug 1" race rather than just reordering it — `consume()` now suppresses the nudge regardless of whether it runs before or after the completion promise resolves, as long as it runs within the 200 ms hold window.
-
-`Release: batch "result-delivery"`
-
-#### ✅ Step 2 — Decompose `get-result-tool.execute` ([#536])
-
-Smell: Category B (oversized function) — 61 lines, 15 cyclomatic, CRAP 63.6; mixes wait/consume policy, stats formatting, and output assembly.
-Target files:
-
-- `src/tools/get-result-tool.ts` — extract a pure report formatter (status line, stats parts, body selection) alongside the existing `result-renderer.ts` pattern; consume via the Step 1 delivery interface.
-- `test/tools/get-result-tool.test.ts` — unit-test the pure formatter directly.
-
-Outcome: `execute` ≤ 30 lines with cyclomatic < 10; off the fallow high-complexity list.
-
-Landed: `src/tools/get-result-report.ts` added — `AgentReport` value object plus `renderStatsParts` / `renderReportBody` / `formatAgentReport` pure functions, unit-tested directly in `test/tools/get-result-report.test.ts`.
-`GetResultTool.execute` now owns only record lookup and the wait/consume policy (13 lines), delegating report assembly to a private `buildReport` + `formatAgentReport`; output is byte-identical.
-`get-result-tool.execute` is off the HIGH-CRAP list (3 → 2 remaining: `service-adapter.spawn`, the notification renderer arrow).
-
-`Release: batch "result-delivery"`
-
-#### ✅ Step 3 — `Subagent.steer` returns an outcome ([#537])
-
-Smell: Category C (ask-then-tell) — coordinators pre-check status before telling.
-Target files:
-
-- `src/lifecycle/subagent.ts` — `steer` owns the non-running rejection and returns a discriminated outcome (`delivered` / `buffered` / `rejected` with the observed status).
-- `src/tools/steer-tool.ts`, `src/service/service-adapter.ts` — drop the status pre-checks and switch on the outcome; the adapter maps the outcome to the public `SubagentsService.steer` boolean, so the published contract is unchanged.
-
-Outcome: zero steer status pre-checks outside `Subagent.steer`; `steer-tool.execute` cyclomatic drops below 10.
-
-Landed: `Subagent.steer` returns a discriminated `SteerOutcome` (`delivered` / `buffered` / `rejected` with the observed status) and owns the non-running rejection as its first guard; `SteerOutcome` is exported from `subagent.ts` and re-exported via `types.ts`.
-`SteerTool.execute` and `SubagentsServiceAdapter.steer` dropped their `status !== "running"` pre-checks and switch on the outcome — the adapter maps `outcome.kind !== "rejected"` to the unchanged public boolean, and the tool's delivered-path stats moved into a private `renderDelivered` helper.
-Zero steer status pre-checks remain outside `Subagent.steer`.
-
-`Release: independent`
-
-#### ✅ Step 4 — Type the model boundary ([#538])
-
-Smell: Category C (platform type threading) — `ModelRegistry.find/getAll/getAvailable` return `any`, forcing `any`/`unknown` model threading through `model-resolver`, `spawn-config`, `service-adapter`, and `parent-snapshot`.
-Target files:
-
-- `src/session/model-resolver.ts` — type the registry against `Model<any>` from `@earendil-works/pi-ai` (already imported elsewhere); remove the file-level eslint-disable; extract the fuzzy-scoring loop as a named helper if `resolveModel` (17 cyclomatic, 60 lines) still trips the threshold.
-- `src/service/service-adapter.ts` — type the resolved model in `spawn` (16 cyclomatic, CRAP 71.3, sole accelerating churn file) and extract the model-resolution branch.
-- `src/tools/spawn-config.ts` — shrink the 4-rule file-level disable to line-level or remove it.
-
-Outcome: `model-resolver.ts` file-level eslint-disable removed; `service-adapter.spawn` off the HIGH CRAP list; `any` model returns eliminated from the resolver.
-
-Landed: `ModelRegistry.find/getAll/getAvailable` and `resolveModel`'s return are typed against `Model<any>` from `@earendil-works/pi-ai`; the file-level eslint-disable headers on `model-resolver.ts` (2 rules) and `spawn-config.ts` (4 rules) are both removed — running disable-header tally 5 → 3 (`agent-tool` 6, `agent-widget` 4, `index` 1 remain, all Step 5 scope).
-`resolveModel`'s fuzzy-scoring loop was extracted to a private `findBestFuzzyMatch` helper, dropping `resolveModel` off the complexity list entirely.
-`service-adapter.spawn`'s model-resolution branch was extracted to a private `resolveModelOption`, dropping `spawn` from 16 cyclomatic / CRAP 71.3 (HIGH) to 13 cyclomatic / CRAP 49.5 (moderate) — off the HIGH-CRAP list; running HIGH-CRAP tally 2 → 1 remaining (the notification renderer arrow, untouched — Step 7 scope).
-`resolveInvocationModel` gained a `registry: ModelRegistry | undefined` guard (typed error instead of a crash when a model override is requested with no registry present); the residual `unknown` thread through `ParentSnapshot.model` / `SessionContext.model` is a separate SDK-boundary gap, deferred.
-
-`Release: independent`
-
-#### ✅ Step 5 — Narrow `tui`/`theme` render interfaces ([#539])
-
-Smell: Category C/D (platform type threading; wide `any` params in render callbacks).
-Target files:
-
-- `src/ui/agent-widget.ts` — replace `tui: any` with a lean local interface (`terminal.columns`, `requestRender()`); shrink the 4-rule file-level disable.
-- `src/tools/agent-tool.ts` — type `renderCall`/`renderResult` params (`theme`, `result`) with lean local interfaces; shrink the 6-rule file-level disable to the genuinely SDK-gapped lines.
-- `src/tools/foreground-runner.ts` — retire the line-level `details as any` cast if the SDK surface allows.
-
-Some disables are irreducible SDK export gaps; the goal is line-level precision, not zero.
-
-Outcome: file-level eslint-disable headers 5 → ≤ 2; remaining suppressions are line-level with named rules.
-
-Landed: `agent-widget.ts` gained a lean local `TuiSurface` interface (`{ terminal: { columns }, requestRender() }`) replacing all three `tui: any` sites; its 4-rule file-level disable is removed.
-`agent-tool.ts`'s `renderCall`/`renderResult` now type `theme` against the existing local `display.Theme` and `result` against the SDK-exported `AgentToolResult<AgentDetails | undefined>`/`ToolRenderResultOptions`; `textResult` was retyped (`details?: AgentDetails`) so the tool's inferred `TDetails` is honest end-to-end, eliminating the `result.details` cast; `ctx` params are typed `ExtensionContext`.
-Its 6-rule file-level disable is removed with zero residual — a pre-existing `params.resume` (`unknown`) gap surfaced at three template-literal sites once the header lifted, fixed with the same `as string` cast already used a few lines away for `getRecord`/`resume`.
-`foreground-runner.ts`'s `details as any` cast and its line-level disable are retired.
-Running disable-header tally 3 → 1 (only `index.ts`'s 1-rule `no-unsafe-argument` remains, an accepted SDK gap outside this step's scope) — under the `≤ 2` Phase 20 target.
-
-`Release: independent`
-
-#### ✅ Step 6 — Table-driven settings handler ([#540])
-
-Smell: Category B (function duplication inside one function) — `subagents-settings.handle` (13 cyclomatic, 24 cognitive, 52 lines) repeats the select→input→parse→validate→apply→notify flow three times.
-Target files:
-
-- `src/ui/subagents-settings.ts` — describe each numeric setting as a descriptor (label, prompt, minimum, validation message, apply method) and drive one loop over the table.
-- `test/ui/subagents-settings.test.ts` — assert per-descriptor behavior.
-
-Outcome: `handle` cyclomatic ≤ 6 and cognitive ≤ 10; off the fallow high-complexity list.
-
-Landed: `handle` now dispatches through a module-private `NumericSettingDescriptor` table (label, current-value display, input title/default, minimum, validation message, apply method) with a single `select` → `find` → `input` → `parse` → `validate` → `apply`/`notify` pass; the three copy-pasted branches are gone.
-The validation comparison direction (`n >= descriptor.minimum`) was kept unchanged and pinned with a new non-numeric-input regression test before the rewrite, so `NaN` from a malformed input still warns rather than silently applying.
-`subagents-settings.ts` no longer appears in fallow's hotspot list (file-level cyclomatic 19 / cognitive 7 across 13 small functions, `crap_above_threshold: 0`) — off the fallow high-complexity list.
-
-`Release: independent`
-
-#### ✅ Step 7 — Decompose the notification renderer ([#541])
-
-Smell: Category B/D (oversized arrow, untested complexity) — the renderer arrow in `src/observation/renderer.ts` is fallow's top triage concern (17 cyclomatic, CRAP 79.4).
-Target files:
-
-- `src/observation/renderer.ts` — extract pure line-assembly helpers (status→icon/label selection, stats-parts assembly, preview truncation) that are unit-testable without `Text` or a theme; the arrow becomes a thin wrapper.
-- `test/observation/renderer.test.ts` — test the pure helpers directly.
-
-Soft ordering: land after Step 1 so the notification-domain files settle first.
-
-Outcome: renderer arrow cyclomatic < 10; `renderer.ts` off the top of the fallow triage list.
-
-Landed: extracted three pure, exported helpers — `resolveStatusPresentation` (status→icon/label, the one OCP dispatch point), `buildStatsParts` (ISP-narrowed `StatsSource` `Pick` over `NotificationDetails`), and `buildPreviewLines` (collapsed 80-column slice vs. expanded 30-line cap).
-The arrow now composes the three helpers and applies theme styling only; marker/indentation/`theme.fg` assembly stayed in the wrapper so rendered output is unchanged.
-`renderer.ts` no longer appears in `fallow health --targets` (0 refactoring targets) or the file-scores list for the package — off the triage list entirely.
-The steered-status wrapper test was pruned as fully subsumed by the new `resolveStatusPresentation` unit test; all other wrapper tests were kept because each exercises genuine multi-piece theme composition the pure helpers don't cover.
-
-`Release: independent`
-
-#### ✅ Step 8 — Full-value `SubagentStateInit` ([#542])
-
-Smell: Category D (shared factory complexity → narrow/complete the production init surface) — `createTestSubagent` (19 cyclomatic, 25 cognitive) seeds metrics via mutation loops because `SubagentStateInit` accepts only transition fields.
-Target files:
-
-- `src/lifecycle/subagent-state.ts` — extend `SubagentStateInit` to optionally seed the full value (toolUses, lifetimeUsage, compactionCount, turnCount, activeTools, responseText); a value object is legitimately constructible at any point in its value space.
-- `test/helpers/make-subagent.ts` — collapse the mutation loops into direct init.
-
-Outcome: `createTestSubagent` cyclomatic ≤ 8; off the fallow complexity list; no production behavior change.
-
-Landed: extended `SubagentStateInit` with six optional value fields (`toolUses`, `lifetimeUsage`, `compactionCount`, `turnCount`, `activeTools`, `responseText`), seeded in the constructor — `lifetimeUsage` is spread-copied so a later `addUsage` cannot mutate the caller's object, and `activeTools` is seeded by name through `addActiveTool` to preserve the `_toolKeySeq` keying invariant.
-`createTestSubagent` collapsed its post-construction mutation loops into direct init and dropped off both the fallow refactoring-targets and large-functions lists (was 19 cyclomatic, the workspace's most complex function).
-No production behavior change — the accumulation methods stay as the `record-observer` runtime path.
-
-`Release: independent`
-
-#### ✅ Step 9 — Consolidate remaining test clone families ([#543])
-
-Smell: Category D (test duplication) — two clone families (`spawn-config.test.ts`: 2 groups / 21 lines; `subagent-manager.test.ts`: 2 groups / 15 lines) plus the `session-config.test.ts` pair (16 lines).
-Target files: the three test files and `test/helpers/` as needed.
-
-Runs last — Steps 1–3 and 8 rewrite portions of these suites, so consolidating first would churn twice.
-
-Outcome: the numeric clone-group target is retired — fallow 3.2.0 excludes `**/*.test.*` from duplication detection, so `fallow dupes` no longer surfaces in-package test clones.
-The suites' arrange was already well-factored by Phase 17 and Phase 20 Step 8; the residual repetition is the system-under-test act call, retained explicitly per the `testing` skill.
-
-`Release: independent`
-
-Landed: the `SubagentManager — lifecycle observer forwarding` describe's shared arrange hoisted into a describe-scoped `beforeEach` (`subagent-manager.test.ts`) — the one genuine arrange consolidation found.
-`spawn-config.test.ts` and `session-config.test.ts` are unchanged: their only repetition is the act call.
-The Phase 20 health-metrics row is retired with a rationale note (fallow's test-ignore).
-
-### Step dependencies
-
-```mermaid
-flowchart LR
-    S1["✅ Step 1 (#535)<br/>Result delivery off Subagent"] --> S2["✅ Step 2 (#536)<br/>Decompose get-result-tool"]
-    S1 -.soft.-> S7["✅ Step 7 (#541)<br/>Decompose notification renderer"]
-    S3["✅ Step 3 (#537)<br/>Steer returns an outcome"]
-    S4["✅ Step 4 (#538)<br/>Type the model boundary"]
-    S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
-    S6["✅ Step 6 (#540)<br/>Table-driven settings handler"]
-    S8["✅ Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["✅ Step 9 (#543)<br/>Consolidate test clones"]
-    S2 --> S9
-    S3 --> S9
-```
-
-### Parallel tracks
-
-- **Track A — Result delivery:** Steps 1 → 2, then 7 (soft).
-- **Track B — Tell-don't-ask:** Step 3.
-- **Track C — SDK boundary:** Steps 4, 5 (independent of each other).
-- **Track D — UI polish:** Step 6.
-- **Track E — Test health:** Step 8, then 9 (9 also waits on Tracks A/B test churn).
-
-Tracks A–D can proceed in parallel; only Step 9 serializes behind the rest.
-
-### Release batches
-
-- **Batch "result-delivery":** Steps 1, 2 (ship together; tail = Step 2).
-- Independently releasable: Steps 3, 4, 5, 6, 7, 8, 9.
-
-Every step lands as a `refactor:`/`test:` commit — hidden changelog types that cut no release on their own; the work auto-batches into the next unhidden release.
+## Phase 20 (complete)
+
+Phase 20 extracted the last un-extracted domain from the [first-principles refinement](#first-principles-refinement-and-the-deeper-target) — result delivery — off `Subagent`, made `Subagent.steer` tell-don't-ask (a discriminated outcome instead of caller pre-checks), typed the model boundary and narrowed `tui`/`theme` render interfaces (file-level eslint-disable headers 5 → 1), replaced `subagents-settings.handle`'s three copy-pasted branches with a table-driven descriptor loop, decomposed the notification renderer and `get-result-tool.execute` off the HIGH-CRAP list, and extended `SubagentStateInit` to a full-value init surface so `createTestSubagent` no longer needs post-construction mutation loops.
+All nine steps are closed: [#535], [#536], [#537], [#538], [#539], [#540], [#541], [#542], [#543].
+Two metrics missed their target — source LOC grew 143 lines instead of holding flat, and `createTestSubagent`'s cyclomatic complexity landed at 13 rather than the targeted ≤ 8 (still off fallow's refactoring-target and large-function lists).
+See [phase-20-result-delivery.md](history/phase-20-result-delivery.md) for the full findings, step outcomes, dependency diagram, and tracks.
 
 ## Refactoring history
 
-Phases 1–5, 7–19 are complete.
+Phases 1–5, 7–20 are complete.
 Phase 6 (UI extraction to a separate package) was deferred to Phase 18; its intent was resolved by [ADR-0004] (Phase 18 Step 8).
 Detailed records are preserved in per-phase history files:
 
@@ -1012,32 +796,34 @@ Detailed records are preserved in per-phase history files:
 | 17    | Core consolidation                                  | Complete               | [phase-17-core-consolidation.md](history/phase-17-core-consolidation.md)             |
 | 18    | Reconsider UI (first principles)                    | Complete               | [phase-18-reconsider-ui.md](history/phase-18-reconsider-ui.md)                       |
 | 19    | Implement ADR-0004 UI decisions                     | Complete               | [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md)     |
+| 20    | Result delivery extraction and boundary cleanup     | Complete               | [phase-20-result-delivery.md](history/phase-20-result-delivery.md)                   |
 
 ### Structural refactoring issues
 
-| Phase                | Issue                                                      | Summary                                                                                                                                                                                        |
-| -------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation           | #69, #71, #76, #80                                         | SubagentRuntime, pure assembler, cwd injection, config consolidation                                                                                                                           |
-| Core decomposition   | #84, #72, #87, #70                                         | WorktreeManager, AgentManager DI, runtime methods, handler extraction                                                                                                                          |
-| Interface polish     | #66, #77                                                   | SDK types, projectAgentsDir                                                                                                                                                                    |
-| Features             | #61                                                        | JSONL session transcripts                                                                                                                                                                      |
-| AgentManager         | #98, #99, #100, #102                                       | Record state machine, ParentSnapshot, session-event observation, test factory                                                                                                                  |
-| Encapsulation        | #108, #109, #110, #111, #112, #113, #114, #115, #116, #118 | Registry, settings, activity tracker, record lifecycle, observer, spawn options, deps narrowing, tool split, type housekeeping                                                                 |
-| Testability          | #131, #132, #133, #134, #135, #136                         | Shared fixtures, session-config IO, runner SDK boundary, as-any reduction, display extraction, menu decomposition                                                                              |
-| Observation/ctx      | #144, #145, #146, #147, #148                               | Observation consolidation, execute decomposition, UI context, text wrapping injection, widget rendering split                                                                                  |
-| Phase 10             | #164, #165, #166, #167, #168, #169, #170, #171, #172       | Domain directories, ResolvedSpawnConfig, ParentSessionInfo, RunnerIO split, ToolFilterConfig, RunContext, buildContentLines, renderResult, content-items                                       |
-| Phase 11             | #192, #193, #194, #195, #196                               | SessionContext, runtime queries, interface alignment, tool classes, runner/menu classes, index.ts simplification                                                                               |
-| Phase 12             | #205, #206, #207, #208                                     | renderWidgetLines, showAgentDetail, widget update, shared test fixtures                                                                                                                        |
-| Phase 13             | #214, #215, #216, #217, #218, #219                         | Closure-to-class, buildParentContext, startAgent decomp, overwrite guard, settings SDK, test duplication                                                                                       |
-| Phase 14             | #237, #238, #239, #242                                     | Remove disallowed_tools, remove extensions filtering, collapse filterActiveTools, rename Agent to subagent                                                                                     |
-| Phase 15             | #227, #228, #231, #229, #230, #232                         | Agent domain model, async startAgent, runner self-contained, Agent.run(), ConcurrencyQueue, Agent.resume()                                                                                     |
-| Phase 16             | #261, #262, #263, #264, #265                               | Lifecycle events (retire permission-bridge), WorkspaceProvider seam, extract worktrees package, remove isolated, born-complete execution / dissolve runner                                     |
-| Phase 16 (abandoned) | #256 (superseded), #257 (parked), #258, #259 (not planned) | Agent collaborator architecture — replaced by the inversion approach above ([ADR-0002])                                                                                                        |
-| Phase 17             | #381, #373, #374, #375, #376, #377, #378, #379, #380       | ConcurrencyLimiter, SubagentState, run-start encapsulation, run collaborators, events observer, widget decoupling, lifecycle test fixtures, UI/tools test fixtures, settings-loader extraction |
-| Phase 17 (follow-on) | #412, #415                                                 | Session-mock builder unification, worktrees settings-helper migration                                                                                                                          |
-| Phase 18             | #420, #421, #422, #423, #424, #425, #426, #427             | Fold metrics onto record, migrate readers, delete activity tier, widget self-drives, drop widget from tool, reconcile event contract, consolidate test clones, UI-direction ADR                |
-| Phase 19             | #446, #447, #444, #445, #462, #463, #442, #441, #443       | ADR-0004 spike, settings command, background widget, native session nav slice, TUI renderer, file-snapshot source, dissolve /agents + viewer, remove definition mgmt, consolidate test clones  |
-| Phase 19 (follow-on) | #470                                                       | README refresh for the removed /agents command surface                                                                                                                                         |
+| Phase                | Issue                                                      | Summary                                                                                                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation           | #69, #71, #76, #80                                         | SubagentRuntime, pure assembler, cwd injection, config consolidation                                                                                                                                                    |
+| Core decomposition   | #84, #72, #87, #70                                         | WorktreeManager, AgentManager DI, runtime methods, handler extraction                                                                                                                                                   |
+| Interface polish     | #66, #77                                                   | SDK types, projectAgentsDir                                                                                                                                                                                             |
+| Features             | #61                                                        | JSONL session transcripts                                                                                                                                                                                               |
+| AgentManager         | #98, #99, #100, #102                                       | Record state machine, ParentSnapshot, session-event observation, test factory                                                                                                                                           |
+| Encapsulation        | #108, #109, #110, #111, #112, #113, #114, #115, #116, #118 | Registry, settings, activity tracker, record lifecycle, observer, spawn options, deps narrowing, tool split, type housekeeping                                                                                          |
+| Testability          | #131, #132, #133, #134, #135, #136                         | Shared fixtures, session-config IO, runner SDK boundary, as-any reduction, display extraction, menu decomposition                                                                                                       |
+| Observation/ctx      | #144, #145, #146, #147, #148                               | Observation consolidation, execute decomposition, UI context, text wrapping injection, widget rendering split                                                                                                           |
+| Phase 10             | #164, #165, #166, #167, #168, #169, #170, #171, #172       | Domain directories, ResolvedSpawnConfig, ParentSessionInfo, RunnerIO split, ToolFilterConfig, RunContext, buildContentLines, renderResult, content-items                                                                |
+| Phase 11             | #192, #193, #194, #195, #196                               | SessionContext, runtime queries, interface alignment, tool classes, runner/menu classes, index.ts simplification                                                                                                        |
+| Phase 12             | #205, #206, #207, #208                                     | renderWidgetLines, showAgentDetail, widget update, shared test fixtures                                                                                                                                                 |
+| Phase 13             | #214, #215, #216, #217, #218, #219                         | Closure-to-class, buildParentContext, startAgent decomp, overwrite guard, settings SDK, test duplication                                                                                                                |
+| Phase 14             | #237, #238, #239, #242                                     | Remove disallowed_tools, remove extensions filtering, collapse filterActiveTools, rename Agent to subagent                                                                                                              |
+| Phase 15             | #227, #228, #231, #229, #230, #232                         | Agent domain model, async startAgent, runner self-contained, Agent.run(), ConcurrencyQueue, Agent.resume()                                                                                                              |
+| Phase 16             | #261, #262, #263, #264, #265                               | Lifecycle events (retire permission-bridge), WorkspaceProvider seam, extract worktrees package, remove isolated, born-complete execution / dissolve runner                                                              |
+| Phase 16 (abandoned) | #256 (superseded), #257 (parked), #258, #259 (not planned) | Agent collaborator architecture — replaced by the inversion approach above ([ADR-0002])                                                                                                                                 |
+| Phase 17             | #381, #373, #374, #375, #376, #377, #378, #379, #380       | ConcurrencyLimiter, SubagentState, run-start encapsulation, run collaborators, events observer, widget decoupling, lifecycle test fixtures, UI/tools test fixtures, settings-loader extraction                          |
+| Phase 17 (follow-on) | #412, #415                                                 | Session-mock builder unification, worktrees settings-helper migration                                                                                                                                                   |
+| Phase 18             | #420, #421, #422, #423, #424, #425, #426, #427             | Fold metrics onto record, migrate readers, delete activity tier, widget self-drives, drop widget from tool, reconcile event contract, consolidate test clones, UI-direction ADR                                         |
+| Phase 19             | #446, #447, #444, #445, #462, #463, #442, #441, #443       | ADR-0004 spike, settings command, background widget, native session nav slice, TUI renderer, file-snapshot source, dissolve /agents + viewer, remove definition mgmt, consolidate test clones                           |
+| Phase 19 (follow-on) | #470                                                       | README refresh for the removed /agents command surface                                                                                                                                                                  |
+| Phase 20             | #535, #536, #537, #538, #539, #540, #541, #542, #543       | Extract result delivery, decompose get-result-tool, steer outcome, type model boundary, narrow tui/theme, table-driven settings, decompose notification renderer, full-value SubagentStateInit, consolidate test clones |
 
 The remaining open issue is #22 (parent-session resolution), a cross-extension track that does not gate the structural work.
 
