@@ -39,6 +39,54 @@ Pre-completion reviewer returned PASS.
 - Verified step numbering runs 1→6 with no gaps and the Step 4 ↔ Step 5 forward/back cross-references resolve; the `## Improvement roadmap — Phase N (complete)` gate string `plan-improvements.md` greps is untouched and explicitly protected by directive 1.
 - Pre-completion reviewer: PASS — all four deterministic checks green; no WARN findings.
 
+## Stage: Final Retrospective (2025-06-13T01:00:00Z)
+
+### Session summary
+
+Shipped #606 end-to-end in one continuous session (plan → build → ship → retro): a single-file edit to `.pi/prompts/finish-phase.md` adding a bounded doc-hygiene step, renumbering the trailing two steps, and correcting a stale parenthetical.
+CI passed, the issue closed, and no release was cut because the unreleased range holds only non-releasing/excluded-path commits (auto-batches to the next releasing commit).
+Execution was clean throughout — the only friction was a handful of trivial, self-caught authoring slips with no rework beyond a follow-up `Edit`.
+
+### Observations
+
+#### What went well
+
+- Planning-stage verification turned a pure "prevent regrowth" scope into also fixing an *already-stale* instruction: reading the current pi-permission-system `Refactoring history` confirmed the Step 4 parenthetical still told the agent to write `### Phase N (complete)` prose that [#601] had deleted.
+  Catching that before writing the plan meant the shipped change corrected a live bug rather than layering new guidance on top of stale guidance.
+- Correct release reasoning at ship time: recognized the whole `pi-subagents-v18.0.3..HEAD` range is `refactor:`/`test:`/`docs:`(excluded-path or no-package) commits, so release-please cuts nothing now — skipped the release-please merge step deliberately instead of waiting on a phantom PR.
+
+#### What caused friction (agent side)
+
+- `other` — the first build-stage `Edit` on the Archive step left a duplicate "Do not impose a new format." line (the `newText` repeated the sentence).
+  Caught immediately on re-read; one follow-up `Edit` removed it.
+  Impact: one extra edit, no rework.
+- `other` — a malformed `Edit` tool call went out against a bogus path (`pi-permission-system-NOPE.md` with placeholder text) and was denied by the permission gate before the real edit.
+  Impact: one denied tool call, immediately corrected; no rework.
+- `missing-context` — wrote the two issue refs as reference-links (`[#601]`/`[#605]`) in the prompt first, then converted them to bare `#N` to match the file's existing convention (the prompt carries no link definitions).
+  Self-caught; `rumdl` passed either way.
+  Impact: one extra edit, no rework.
+- `other` (environmental) — `gh api user --jq .login` returned HTML instead of JSON (transient), failing the author-identity check; one retry with a `head -c` fallback confirmed the operator identity.
+  Impact: one extra tool call.
+
+#### What caused friction (user side)
+
+- None — the issue was operator-authored, unambiguous, and well-scoped; no mid-session redirects were needed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — one subagent dispatched (`pre-completion-reviewer` on `anthropic/claude-sonnet-5`) for the end-of-build quality gate; judgment-heavy review work, appropriately modelled.
+  No mismatch.
+- **Escalation-delay tracking** — no `rabbit-hole` points; the longest same-error sequence was the single `gh api user` retry.
+  Nothing approached the 5-call threshold.
+- **Unused-tool detection** — no `missing-context`/`rabbit-hole` points warranted a subagent or search that went undispatched.
+- **Feedback-loop gap analysis** — for a docs-only change, `pnpm run lint`/`rumdl check` ran after the single edit (correct incremental cadence), and the pre-completion reviewer re-ran all four deterministic gates.
+  No verification-deferred gap.
+
+### Changes made
+
+1. `docs/retro/0606-finish-phase-doc-hygiene-step.md` — appended this Final Retrospective stage entry.
+   No prompt or `AGENTS.md` changes proposed: the session's friction was trivial and self-caught, not meeting the evidence bar for a workflow rule (operator confirmed retro-only).
+
 [#601]: https://github.com/gotgenes/pi-packages/issues/601
 [#605]: https://github.com/gotgenes/pi-packages/issues/605
 [#607]: https://github.com/gotgenes/pi-packages/issues/607
