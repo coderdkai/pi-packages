@@ -684,32 +684,31 @@ Production duplication is 0 lines — the last clone group was eliminated in Pha
 
 ## Refactoring history
 
-Phases 1–5, 7–20 are complete.
-Phase 6 (UI extraction to a separate package) was deferred to Phase 18; its intent was resolved by [ADR-0004] (Phase 18 Step 8).
-Detailed records are preserved in per-phase history files:
+The architecture above is the product of nineteen completed improvement phases; Phase 6 (UI extraction to a separate package) was folded into [ADR-0004] rather than executed.
+Each phase's findings, numbered plan, dependency diagram, and health metrics are preserved in a per-phase history file under [`history/`](history/).
 
-| Phase | Title                                               | Status                 | History                                                                              |
-| ----- | --------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
-| 1     | Export SubagentsService API boundary                | Complete               | [phase-1-api-boundary.md](history/phase-1-api-boundary.md)                           |
-| 2     | Remove scheduling subsystem                         | Complete               | [phase-2-remove-scheduling.md](history/phase-2-remove-scheduling.md)                 |
-| 3     | Remove group-join, RPC; replace output-file         | Complete               | [phase-3-remove-rpc-groupjoin.md](history/phase-3-remove-rpc-groupjoin.md)           |
-| 4     | Implement and publish SubagentsService              | Complete               | [phase-4-implement-service.md](history/phase-4-implement-service.md)                 |
-| 5     | Decompose index.ts                                  | Complete               | [phase-5-decompose-index.md](history/phase-5-decompose-index.md)                     |
-| 6     | Extract UI to separate package                      | Superseded by ADR-0004 | —                                                                                    |
-| 7     | Encapsulation and dependency narrowing              | Complete               | [phase-7-encapsulation.md](history/phase-7-encapsulation.md)                         |
-| 8     | Testability, display extraction, menu decomposition | Complete               | [phase-8-testability.md](history/phase-8-testability.md)                             |
-| 9     | Observation consolidation, ctx elimination          | Complete               | [phase-9-observation-ctx.md](history/phase-9-observation-ctx.md)                     |
-| 10    | Domain organization, bag decomposition, complexity  | Complete               | [phase-10-structural-decomposition.md](history/phase-10-structural-decomposition.md) |
-| 11    | Closure factories to classes                        | Complete               | [phase-11-closure-to-class.md](history/phase-11-closure-to-class.md)                 |
-| 12    | Complexity reduction and test fixture extraction    | Complete               | [phase-12-complexity-test-fixtures.md](history/phase-12-complexity-test-fixtures.md) |
-| 13    | Remaining structural smells                         | Complete               | [phase-13-remaining-smells.md](history/phase-13-remaining-smells.md)                 |
-| 14    | Strip policy from core                              | Complete               | [phase-14-strip-policy.md](history/phase-14-strip-policy.md)                         |
-| 15    | Domain model evolution                              | Complete               | [phase-15-domain-model-evolution.md](history/phase-15-domain-model-evolution.md)     |
-| 16    | Invert dependencies (extensions on a minimal core)  | Complete               | [phase-16-invert-dependencies.md](history/phase-16-invert-dependencies.md)           |
-| 17    | Core consolidation                                  | Complete               | [phase-17-core-consolidation.md](history/phase-17-core-consolidation.md)             |
-| 18    | Reconsider UI (first principles)                    | Complete               | [phase-18-reconsider-ui.md](history/phase-18-reconsider-ui.md)                       |
-| 19    | Implement ADR-0004 UI decisions                     | Complete               | [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md)     |
-| 20    | Result delivery extraction and boundary cleanup     | Complete               | [phase-20-result-delivery.md](history/phase-20-result-delivery.md)                   |
+| Phase | Theme                                               | History                                                                              |
+| ----- | --------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1     | Export SubagentsService API boundary                | [phase-1-api-boundary.md](history/phase-1-api-boundary.md)                           |
+| 2     | Remove scheduling subsystem                         | [phase-2-remove-scheduling.md](history/phase-2-remove-scheduling.md)                 |
+| 3     | Remove group-join, RPC; replace output-file         | [phase-3-remove-rpc-groupjoin.md](history/phase-3-remove-rpc-groupjoin.md)           |
+| 4     | Implement and publish SubagentsService              | [phase-4-implement-service.md](history/phase-4-implement-service.md)                 |
+| 5     | Decompose index.ts                                  | [phase-5-decompose-index.md](history/phase-5-decompose-index.md)                     |
+| 6     | Extract UI to separate package                      | Superseded by [ADR-0004]                                                             |
+| 7     | Encapsulation and dependency narrowing              | [phase-7-encapsulation.md](history/phase-7-encapsulation.md)                         |
+| 8     | Testability, display extraction, menu decomposition | [phase-8-testability.md](history/phase-8-testability.md)                             |
+| 9     | Observation consolidation, ctx elimination          | [phase-9-observation-ctx.md](history/phase-9-observation-ctx.md)                     |
+| 10    | Domain organization, bag decomposition, complexity  | [phase-10-structural-decomposition.md](history/phase-10-structural-decomposition.md) |
+| 11    | Closure factories to classes                        | [phase-11-closure-to-class.md](history/phase-11-closure-to-class.md)                 |
+| 12    | Complexity reduction and test fixture extraction    | [phase-12-complexity-test-fixtures.md](history/phase-12-complexity-test-fixtures.md) |
+| 13    | Remaining structural smells                         | [phase-13-remaining-smells.md](history/phase-13-remaining-smells.md)                 |
+| 14    | Strip policy from core                              | [phase-14-strip-policy.md](history/phase-14-strip-policy.md)                         |
+| 15    | Domain model evolution                              | [phase-15-domain-model-evolution.md](history/phase-15-domain-model-evolution.md)     |
+| 16    | Invert dependencies (extensions on a minimal core)  | [phase-16-invert-dependencies.md](history/phase-16-invert-dependencies.md)           |
+| 17    | Core consolidation                                  | [phase-17-core-consolidation.md](history/phase-17-core-consolidation.md)             |
+| 18    | Reconsider UI (first principles)                    | [phase-18-reconsider-ui.md](history/phase-18-reconsider-ui.md)                       |
+| 19    | Implement ADR-0004 UI decisions                     | [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md)     |
+| 20    | Result delivery extraction and boundary cleanup     | [phase-20-result-delivery.md](history/phase-20-result-delivery.md)                   |
 
 ### Structural refactoring issues
 
