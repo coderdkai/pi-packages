@@ -22,5 +22,5 @@ Discovery corroborated that and surfaced two stronger already-filed causes — s
 - Doc/tracker drift found and fixed in the roadmap commit: the architecture doc claimed #22 was the only open issue; #22 is closed and 10 labeled issues were open.
 - Explicit dispositions recorded for silently-skipped issues (second sweep): #451 deferred as repo-level CI tooling; #465/#482/#608/#519/#600/#610 deferred as feature/cross-package tracks, with #466 noted as the prerequisite for #465's ask-back design.
 - Issue filing is pending: #563 and #466 exist; Step 3 needs a new issue plus doc back-links — deferred by the user to a later session/model.
-- A background `craftsmanship-scout` dispatch lost its agent handle (`Agent not found` on result retrieval); a foreground re-dispatch worked.
-  Worth watching whether background subagent cleanup is racing result retrieval.
+- A background `craftsmanship-scout` dispatch appeared lost (`Agent not found` on result retrieval), prompting a duplicate foreground run; the original later completed and delivered its result.
+  Corrected diagnosis (from the user): the background run was blocked waiting on a permission approval for an `xargs` command while the operator was away — not a cleanup race; the lesson is to wait for the completion notification rather than polling a stalled background agent and re-dispatching.
