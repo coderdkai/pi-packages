@@ -43,7 +43,7 @@ pnpm fallow dead-code --workspace @gotgenes/<PKG> 2>&1 || true
 pnpm fallow dupes --workspace @gotgenes/<PKG> 2>&1 || true
 ```
 
-Capture: health score, dead exports, duplication (production vs. test), hotspots, refactoring targets.
+Capture: health score, dead exports, production duplication (`fallow dupes` excludes test files by default), hotspots, refactoring targets.
 
 Fallow is blind to repeated discriminators — scattered one-line conditionals never form a token-run clone — so sweep for them alongside it:
 
@@ -131,13 +131,13 @@ They are ordered from most impactful (structural) to least (cosmetic).
 
 ### Category D: Testability
 
-| Signal                      | Evidence                                 | Typical fix                               |
-| --------------------------- | ---------------------------------------- | ----------------------------------------- |
-| `vi.mock()` at module level | Module-level mocking in test files       | Inject dependency via IO interface        |
-| `as any` casts in tests     | Constructing wide mocks for narrow usage | Narrow the interface the code depends on  |
-| Test duplication (high)     | fallow dupes in test/                    | Extract shared fixtures or test factories |
-| Shared factory complexity   | Factory needs its own unit tests         | Narrow the production interface (ISP)     |
-| Untestable pure logic       | Logic embedded in stateful class         | Extract as pure function                  |
+| Signal                      | Evidence                                                                                  | Typical fix                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `vi.mock()` at module level | Module-level mocking in test files                                                        | Inject dependency via IO interface                                 |
+| `as any` casts in tests     | Constructing wide mocks for narrow usage                                                  | Narrow the interface the code depends on                           |
+| Test duplication (high)     | `craftsmanship-scout` reads test files (`fallow dupes` excludes `**/*.test.*` by default) | Extract shared fixtures or test factories (never wrap the SUT act) |
+| Shared factory complexity   | Factory needs its own unit tests                                                          | Narrow the production interface (ISP)                              |
+| Untestable pure logic       | Logic embedded in stateful class                                                          | Extract as pure function                                           |
 
 ### Category E: Naming and organization
 

@@ -41,3 +41,42 @@ Test count unchanged (996 pass); the two observer-forwarding tests kept their ex
 - The dated 2026-07-03 discovery-findings list (finding #6, "9 in-package clone groups") was left untouched — it is a historical snapshot, not a current-behavior metric.
 - Pre-completion reviewer: PASS.
   No warnings; deterministic checks all green (`check`, `lint`, full `test` suite, `fallow dead-code`); Mermaid diagrams parse; no earlier phase-step invariant regressed.
+
+## Stage: Final Retrospective (2026-07-17T16:24:57Z)
+
+### Session summary
+
+Single continuous session spanning Planning → TDD → Ship → Retro for Phase 20 Step 9.
+The defining moment was in planning: discovery established that the issue's premise had gone stale (fallow 3.2.0 excludes `**/*.test.*` from `dupes` by default, and the residual duplication is the system-under-test act call the `testing` skill forbids wrapping), so the `Decide` gate + `ask-user` reframed the work from "extract helpers to hit a clone number" to "retire an unmeasurable metric and land the one genuine arrange hoist."
+Execution was clean: two commits (one `test:` refactor, one `docs:`), pre-completion PASS, CI green, issue closed, no release (all hidden types auto-batch).
+
+### Observations
+
+#### What went well
+
+- The planning `Decide` gate did exactly its job: it treated the issue's "Proposed change" as a hypothesis, discovery falsified the premise, and `ask-user` surfaced the direction change to the operator instead of mechanically implementing a stale spec.
+  This is the process working as designed on a genuinely ambiguous case — the shifted-premise catch the gate exists for.
+- The `tidy-first-assessor` and `pre-completion-reviewer` both returned cleanly and their scope held; the reviewer independently confirmed the one plan deviation (`const factory` inside `beforeEach` vs. the plan's `let factory`) as a legitimate scope-narrowing simplification, so no rework was needed.
+
+#### What caused friction (agent side)
+
+- `other` (tooling-diagnosis, minor) — confirming why `fallow dupes` reported zero test clones took ~6 planning tool calls (two JSON `dupes` runs, then the human-readable run whose `skipped 235 files matching default duplicates ignores` note revealed the `**/*.test.*` default, then `--explain-skipped`, `--help`, and a schema read for `ignoreDefaults`).
+  Running the human-readable `dupes` output first would have surfaced the skip note immediately.
+  Impact: a few extra tool calls in planning; no rework — the investigation produced the finding that reframed the issue.
+
+#### What caused friction (user side)
+
+- None.
+  The operator's single `ask-user` answer (narrow arrange-only tidy + metric update) was decisive and drove the rest of the work without further correction.
+
+### Diagnostic details
+
+- **Feedback-loop gap analysis** — no gap.
+  Verification ran incrementally: the affected test file after the refactor, `check`/`lint` before each commit, and the full suite + `fallow dead-code` at the end.
+- **Model-performance / escalation-delay / unused-tool lenses** — nothing notable.
+  No `rabbit-hole` friction (the fallow diagnosis was a bounded, productive investigation, not a symptom chase); the subagent dispatches (`tidy-first-assessor`, `pre-completion-reviewer`) matched their read-only judgment tasks.
+
+### Changes made
+
+1. `.pi/skills/improvement-discovery/SKILL.md` — updated the fallow-capture line to note `fallow dupes` excludes test files by default (was "duplication (production vs. test)").
+2. `.pi/skills/improvement-discovery/SKILL.md` — updated the Category D "Test duplication (high)" row: evidence source is now `craftsmanship-scout` reading test files (not `fallow dupes in test/`), and the fix note adds "never wrap the SUT act."
