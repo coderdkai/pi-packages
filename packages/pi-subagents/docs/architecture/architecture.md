@@ -788,7 +788,10 @@ Directory organization is healthy (seven domain directories, six root files) —
 | src functions with CRAP ≥ 60                     | 3                | 0                      |
 | File-level eslint-disable headers                | 5                | ≤ 2                    |
 | `createTestSubagent` cyclomatic                  | 19               | ≤ 8                    |
-| Test clone groups (in-package)                   | 9 (81 lines)     | ≤ 5 (≤ 40 lines)       |
+| Test clone groups (in-package)                   | 9 (81 lines)     | — retired (see note)   |
+
+The "Test clone groups (in-package)" metric is retired as of Step 9 ([#543]). fallow 3.2.0 excludes `**/*.test.*` from duplication detection by default, so `pnpm fallow dupes --workspace @gotgenes/pi-subagents` no longer surfaces test-file clones — the tool treats test-suite token runs as expected scaffolding.
+The suites' arrange was already well-factored by Phase 17 and Phase 20 Step 8; the residual repetition is the system-under-test act call, which stays explicit per the `testing` skill.
 
 ### Steps
 
@@ -934,16 +937,21 @@ No production behavior change — the accumulation methods stay as the `record-o
 
 `Release: independent`
 
-#### Step 9 — Consolidate remaining test clone families ([#543])
+#### ✅ Step 9 — Consolidate remaining test clone families ([#543])
 
 Smell: Category D (test duplication) — two clone families (`spawn-config.test.ts`: 2 groups / 21 lines; `subagent-manager.test.ts`: 2 groups / 15 lines) plus the `session-config.test.ts` pair (16 lines).
 Target files: the three test files and `test/helpers/` as needed.
 
 Runs last — Steps 1–3 and 8 rewrite portions of these suites, so consolidating first would churn twice.
 
-Outcome: in-package clone groups 9 → ≤ 5; duplicated lines 81 → ≤ 40.
+Outcome: the numeric clone-group target is retired — fallow 3.2.0 excludes `**/*.test.*` from duplication detection, so `fallow dupes` no longer surfaces in-package test clones.
+The suites' arrange was already well-factored by Phase 17 and Phase 20 Step 8; the residual repetition is the system-under-test act call, retained explicitly per the `testing` skill.
 
 `Release: independent`
+
+Landed: the `SubagentManager — lifecycle observer forwarding` describe's shared arrange hoisted into a describe-scoped `beforeEach` (`subagent-manager.test.ts`) — the one genuine arrange consolidation found.
+`spawn-config.test.ts` and `session-config.test.ts` are unchanged: their only repetition is the act call.
+The Phase 20 health-metrics row is retired with a rationale note (fallow's test-ignore).
 
 ### Step dependencies
 
@@ -955,7 +963,7 @@ flowchart LR
     S4["✅ Step 4 (#538)<br/>Type the model boundary"]
     S5["✅ Step 5 (#539)<br/>Narrow tui/theme interfaces"]
     S6["✅ Step 6 (#540)<br/>Table-driven settings handler"]
-    S8["✅ Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["Step 9 (#543)<br/>Consolidate test clones"]
+    S8["✅ Step 8 (#542)<br/>Full-value SubagentStateInit"] --> S9["✅ Step 9 (#543)<br/>Consolidate test clones"]
     S2 --> S9
     S3 --> S9
 ```
