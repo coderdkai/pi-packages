@@ -38,6 +38,35 @@ No `src/`/`test/`/`.ts` files were touched, so only `rumdl`/lint ran (clean on a
 - Pre-completion reviewer: PASS — all deterministic checks green (`check`/`lint`/`test`/`fallow dead-code`), all three Goals code-verified, conventional-commit compliant, no stale references, direction matches operator's `ask_user` choices.
   No warnings.
 
+## Stage: Final Retrospective (2026-07-17T01:17:41Z)
+
+### Session summary
+
+Shipped the shared architecture-doc regrowth guard across the full planning → build → ship arc as a single `docs:` implementation commit (`794f9a7e`), closing the last of the [#601]/[#605]/[#606]/[#607] quartet.
+The planning-stage `ask_user` decision (canonical home = `AGENTS.md`, remove per-package copies with no pointer, repoint `/finish-phase`) carried through build and ship with zero rework — the pre-completion reviewer verified every Goal and the rejected "mirror" branch against the plan's Non-Goals.
+No release was cut: every unreleased commit is a non-releasing `docs:` type, so the work auto-batches.
+
+### Observations
+
+#### What went well
+
+- **Plan-as-contract paid off end to end.**
+  The one design ambiguity ("and/or mirror it into each `package-<PKG>` skill") was resolved once via `ask_user` in planning, encoded as an explicit Non-Goal, and then independently re-verified by the pre-completion reviewer at build.
+  The rejected branch (`pi-subagents` mirror) never accidentally got "helpfully" added — a recurring risk the plan pre-empted.
+- **Reference-site grep bounded the change precisely.** `grep -rn "regrowth guard\|package-$1 skill\|module-tree entries describe"` established up front that exactly two live sites needed editing and every other hit was a point-in-time archive — the edit set matched the plan with no surprises.
+
+#### What caused friction (agent side)
+
+- `other` — During ship, re-verified a valid 40-char HEAD SHA (`3648a3db…`) three times (`git rev-parse HEAD`, then `| cat`, then `| wc -c; git log -1 --format=%H`) after mis-perceiving it as malformed.
+  The SHA was correct on the first call.
+  Impact: 2 extra tool calls, no rework.
+  Low-impact behavioral tic, not a process gap.
+
+#### What caused friction (user side)
+
+- None.
+  A single `ask_user` answer in planning supplied all the direction the three stages needed; no mid-session corrections were required.
+
 [#601]: https://github.com/gotgenes/pi-packages/issues/601
 [#605]: https://github.com/gotgenes/pi-packages/issues/605
 [#606]: https://github.com/gotgenes/pi-packages/issues/606
