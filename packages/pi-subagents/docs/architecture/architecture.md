@@ -725,7 +725,7 @@ Impact 4 / Risk 2 / Priority 16.
 
 Release: independent
 
-### Step 3 — Finish typing the model boundary
+### Step 3 — Finish typing the model boundary ([#611])
 
 Cause: the SDK model boundary is half-typed — Phase 20 Step 4 typed the resolver/tools layer against `Model<any>` but explicitly deferred the snapshot/session-assembly thread, leaving `model: unknown` at 7 sites, an `as Model<any>` cast in `src/runtime.ts`, and a `ctx.modelRegistry!` assertion in `src/lifecycle/parent-snapshot.ts`.
 Feasibility probed against the real surface: `ExtensionContext.model: Model<any> \| undefined` and `ModelRegistry` are exported by `@earendil-works/pi-coding-agent` (`dist/core/extensions/types.d.ts`), and `src/session/model-resolver.ts` already imports `Model<any>` from `@earendil-works/pi-ai`.
@@ -741,7 +741,7 @@ Release: independent
 ```mermaid
 flowchart LR
     S1["Step 1 (#563)<br/>Classification predicates"] -.soft.-> S2["Step 2 (#466)<br/>Resume completion channel"]
-    S3["Step 3<br/>Type the model boundary"]
+    S3["Step 3 (#611)<br/>Type the model boundary"]
 ```
 
 ### Parallel tracks
@@ -846,5 +846,6 @@ The upstream test suite is run periodically as a regression canary for the sessi
 [#600]: https://github.com/gotgenes/pi-packages/issues/600
 [#608]: https://github.com/gotgenes/pi-packages/issues/608
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
+[#611]: https://github.com/gotgenes/pi-packages/issues/611
 [ADR-0002]: ../decisions/0002-extensions-on-a-minimal-core.md
 [ADR-0004]: ../decisions/0004-reconsider-ui-direction.md
