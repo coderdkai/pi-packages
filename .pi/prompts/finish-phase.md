@@ -78,7 +78,9 @@ Do not copy a doc metric forward — recompute it:
 - When the phase findings table records a recompute command for a metric, **use that exact command** — not the `fallow:health` / `fallow:dupes` scripts.
   The scripts and the recorded commands can disagree: `pnpm fallow:health` expands to `fallow health --score --hotspots --targets`, and the `--hotspots --targets` flags **lower the score** (a package baselined at 88 A with `fallow health --score` alone reports 78 B under the script).
   Reconcile against the same command the baseline was computed with, or the "delivered" number will spuriously differ from the target.
-- Only when no recorded command exists, fall back to `pnpm fallow health --score --workspace @gotgenes/$1` and `pnpm fallow dupes --workspace @gotgenes/$1` (the two-word forms, matching the doc's recompute convention).
+- When no recompute command is recorded, reconcile by **reproducing the doc's existing baseline number**, not by defaulting to a fixed command — the bare `--score` form and the `fallow:health` script disagree, so a fixed default can spuriously report a phantom improvement.
+  Run `pnpm fallow health --score --workspace @gotgenes/$1`; if its grade/score does not reproduce the doc's current health-metrics row, the baseline was computed with the script form (`fallow health --score --hotspots --targets`, which the `--hotspots --targets` deductions drive lower — e.g. pi-subagents baselines at 78 B under the script but 88 A bare), so rerun with `--score --hotspots --targets --workspace @gotgenes/$1` and reconcile against that.
+  Reconcile duplication with `pnpm fallow dupes --workspace @gotgenes/$1`.
   The fallow subcommands are root-level and take `--workspace @gotgenes/$1`; the `--filter`/`-C package` forms used elsewhere do **not** apply to them.
 - "Total LOC" / "Source LOC" counts `src/` only (`find packages/$1/src -name '*.ts' | wc -l` for the file count; `… -exec wc -l {} +` for LOC).
   Test counts come from `pnpm --filter @gotgenes/$1 run test`.
@@ -91,6 +93,8 @@ Do not copy a doc metric forward — recompute it:
 Stale counts, files missing from the layout tree, and mid-phase labels are **expected drift** — fix them in place; that is the job of this step.
 Stop and report **only** when a documented `Outcome:` / `Landed:` claim is contradicted by the code: a symbol that should be gone still exists, a field documented as "mandatory" is still optional, a module said to be removed is still present.
 That is an outcome failure — do not paper over it in the archive.
+A **numeric threshold** named in an `Outcome:` line (a cyclomatic ≤ N, a LOC target, a clone-group count) that the delivered code misses — while the structural change the outcome describes *did* land (the mutation loop is gone, the field is dropped, the module is removed) — is a **metric miss, not a stop**: record predicted-vs-delivered in the history file's health table and continue.
+Stop only when the structural claim itself is false, not when a target number came in short (the Phase 20 precedent: `createTestSubagent` landed at 13 cyclomatic against an `Outcome:` of ≤ 8, but the mutation loops it named were genuinely gone — recorded as a miss, archived normally).
 
 ## Step 4: Bounded doc hygiene (change-scoped)
 
@@ -143,7 +147,9 @@ Do not impose a new format, and per Step 4 do **not** add a completion-summary p
    - the tracks table and findings table are present.
    - `architecture.md` no longer contains the phase's roadmap section at all — only its "Refactoring history" table row.
      Confirm nothing was left behind: `grep -nE '^## (Improvement roadmap — Phase N|Phase N \(complete\))' architecture.md` returns nothing, and no `Step`-heading for the archived phase survives outside the history file.
-     Also confirm the package skill (`.pi/skills/package-$1/SKILL.md`) — note any stale phase-scored numbers it carries (test counts, file/domain counts); flag them in the hand-off but do not necessarily fix them here.
+   - No dangling inbound anchor links: for any section heading this archive removed or renamed (the archived roadmap section, plus any Step 4 hygiene deletions), grep the package docs for links to its slug — `grep -rn '#<slug>' packages/$1/docs` (e.g. `#phase-N-complete`, `#improvement-roadmap-phase-N`) — and repoint each hit to the history file or the new anchor.
+     `rumdl` does **not** catch cross-file anchor breaks, so a sibling doc's `[label](./architecture.md#phase-N-complete)` renders fine in source but silently 404s on GitHub once the section is gone (this session broke `client-server-opportunities.md`'s `[Phase 18]` link that way).
+   - Also confirm the package skill (`.pi/skills/package-$1/SKILL.md`) — note any stale phase-scored numbers it carries (test counts, file/domain counts); flag them in the hand-off but do not necessarily fix them here.
 3. Once checks pass, commit and push automatically:
 
 ```bash
