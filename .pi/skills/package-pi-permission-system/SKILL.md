@@ -21,8 +21,6 @@ When a plan touches that roadmap, enumerate the whole phase: search dependents t
 When the implementation completes a numbered roadmap step, mark it complete in `docs/architecture/architecture.md` in the implementation doc-update commit (`/tdd-plan` step 7 / `/build-plan`), not a deferred `/ship-issue` commit — `✅` on both the step heading and its Mermaid diagram node, plus any stale health-metric/target rows in the same commit.
 Deferring the marker to ship splits it from the work and risks it falling through entirely (Refs #479, #480).
 A dated `Baseline (<date>)` column is a fixed phase-open snapshot recomputed at phase close, not a per-step value — do not edit it as work lands (Refs #573).
-Module-tree entries in `docs/architecture/architecture.md` describe **current behavior**; cite an issue only when it encodes an active constraint (a lint-guarded boundary, an ADR string boundary, a structural invariant), never as provenance — the "relocated #559, dissolved #505, renamed #510…" trail belongs in git log and `history/`.
-Without this, the per-change doc-update commits above re-inflate the tree that #601 slimmed (Refs #601).
 
 ## Implementation Priorities
 
