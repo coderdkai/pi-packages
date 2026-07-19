@@ -138,6 +138,12 @@ The `path` and `external_directory` gates are path-aware for **all** tools, not 
 The `ToolAccessExtractorRegistry` (`src/tool-access-extractor-registry.ts`) mirrors `ToolInputFormatterRegistry`: one instance created in `index.ts`, its lookup threaded into `ToolCallGatePipeline`, its registrar exposed cross-extension via `PermissionsService.registerToolAccessExtractor`.
 Extension/MCP path gating is default-on (no registration needed); per-tool path maps for extension tools (a custom extractor key that supplies the path via a registered `ToolAccessExtractor`) are a deferred follow-up.
 
+The live-authority layer is a Chain of Responsibility (ADR 0007, `docs/decisions/0007-model-judge-authorizer-chain-adr.md`): `composeAuthorizerChain(links, terminal, query)` (`src/authority/authorizer-chain.ts`) runs registered non-terminal `Authorizer` links (`allow | deny | defer`) ahead of the context-selected `TerminalAuthorizer` (which cannot defer).
+The `AuthorizerRegistry` (`src/authority/authorizer-registry.ts`) mirrors `ToolAccessExtractorRegistry`: one instance in `index.ts`, its lookup threaded into `AuthorizerSelection` and its registrar exposed cross-extension via `PermissionsService.registerAuthorizer(name, authorize)`.
+`AuthorizerSelection.escalate` resolves the `authorizerChain` config **per ask** (not at `activate`) so a link registered in a late `permissions:ready` handler is honored before the session's first ask (ADR 0007 §4); resolution is config-order, skips an unregistered name with a logged `authorizer_chain_unregistered_link` review event (fail-safe), and wraps each link in the bounded-delegation envelope (`src/authority/delegation-envelope.ts`) so an `allow` on an excluded surface (`external_directory` / `path`) is capped to `defer`.
+Each link is handed a narrow, session-scoped `PermissionQuery` (`Pick`-style projection of `PermissionsService`: `checkPermission` / `getToolPermission`) so it queries the engine at gate parity rather than reaching for the service via `Symbol.for()`.
+The secret-shaped-`path` refinement of the checkpoint and the allow-capable opaque-bash adjudicator that consumes the query are deferred to #620.
+
 ## Testing
 
 Shared test fixtures live in `test/helpers/`:
