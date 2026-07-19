@@ -47,6 +47,16 @@ Benefits:
 `describeIfPi` is a safety net: it skips when `node_modules/.bin/pi` is missing (for example, after a partial checkout without `pnpm install`).
 In normal usage every contributor runs the full suite.
 
+### Timeouts
+
+Each acceptance test spawns a real `pi` child process via `runRpcSession`, which rejects with a descriptive error (including captured stdout/stderr) if the process does not close stdin within a harness timeout.
+`test/helpers/rpc.ts` resolves that timeout with `resolveRpcTimeoutMs()`, which defaults to `30_000` ms. Set `PI_AUTOFORMAT_RPC_TIMEOUT_MS` (a positive integer, in ms) to override the default — for example, on a CI runner or local machine under heavier concurrent load than the default tolerates.
+An unset, non-numeric, non-integer, zero, or negative value falls back to the default.
+
+Each acceptance test's own Vitest per-test timeout is derived from the same source via `rpcVitestTimeoutMs()` (the resolved harness timeout plus a fixed margin), so it always exceeds the harness timeout.
+This ordering matters: it ensures the harness's descriptive timeout error surfaces on a genuine hang, rather than Vitest's generic kill message.
+Raising `PI_AUTOFORMAT_RPC_TIMEOUT_MS` raises both budgets together, preserving the invariant.
+
 ### Test fixtures
 
 `test/fixtures/` holds small companion extensions and helpers used by the acceptance suite:
