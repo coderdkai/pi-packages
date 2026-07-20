@@ -157,6 +157,23 @@ describe("convenience getters", () => {
 		});
 	});
 
+	describe("consumption getters", () => {
+		it("consumed defaults to false and consumedAt undefined (delegates to SubagentState)", () => {
+			const record = makeSubagent();
+			expect(record.consumed).toBe(false);
+			expect(record.consumedAt).toBeUndefined();
+		});
+
+		it("markConsumed delegates to SubagentState", () => {
+			const state = new SubagentState({ status: "completed" });
+			const record = new Subagent({ id: "1", type: "general-purpose", description: "test", execution: makeStubExecution(), state });
+			record.markConsumed(5000);
+			expect(record.consumed).toBe(true);
+			expect(record.consumedAt).toBe(5000);
+			expect(state.consumedAt).toBe(5000);
+		});
+	});
+
 	describe("outputFile", () => {
 		it("returns undefined when subagentSession is not set", () => {
 			const record = makeSubagent();

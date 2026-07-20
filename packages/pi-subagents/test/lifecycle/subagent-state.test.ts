@@ -276,6 +276,50 @@ describe("SubagentState — resetForResume", () => {
 		expect(state.result).toBeUndefined();
 		expect(state.error).toBeUndefined();
 	});
+
+	it("clears consumedAt so a resumed run creates a new pending outcome", () => {
+		const state = new SubagentState({ status: "completed", consumedAt: 5000 });
+		state.resetForResume(9000);
+		expect(state.consumedAt).toBeUndefined();
+		expect(state.consumed).toBe(false);
+	});
+});
+
+describe("SubagentState — consumption", () => {
+	it("defaults to not consumed", () => {
+		const state = new SubagentState();
+		expect(state.consumed).toBe(false);
+		expect(state.consumedAt).toBeUndefined();
+	});
+
+	it("markConsumed sets consumedAt and flips consumed true", () => {
+		const state = new SubagentState({ status: "completed" });
+		state.markConsumed(5000);
+		expect(state.consumed).toBe(true);
+		expect(state.consumedAt).toBe(5000);
+	});
+
+	it("markConsumed defaults consumedAt to Date.now() when not provided", () => {
+		const state = new SubagentState({ status: "completed" });
+		const before = Date.now();
+		state.markConsumed();
+		const after = Date.now();
+		expect(state.consumedAt).toBeGreaterThanOrEqual(before);
+		expect(state.consumedAt).toBeLessThanOrEqual(after);
+	});
+
+	it("markConsumed keeps the first collection time (idempotent ??=)", () => {
+		const state = new SubagentState({ status: "completed" });
+		state.markConsumed(5000);
+		state.markConsumed(9999);
+		expect(state.consumedAt).toBe(5000);
+	});
+
+	it("seeds consumedAt from the constructor", () => {
+		const state = new SubagentState({ status: "completed", consumedAt: 4200 });
+		expect(state.consumed).toBe(true);
+		expect(state.consumedAt).toBe(4200);
+	});
 });
 
 describe("SubagentState — turnCount", () => {

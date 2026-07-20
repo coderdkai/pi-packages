@@ -100,6 +100,8 @@ export class Subagent {
 	get error(): string | undefined { return this.state.error; }
 	get startedAt(): number { return this.state.startedAt; }
 	get completedAt(): number | undefined { return this.state.completedAt; }
+	get consumedAt(): number | undefined { return this.state.consumedAt; }
+	get consumed(): boolean { return this.state.consumed; }
 	get toolUses(): number { return this.state.toolUses; }
 	get lifetimeUsage(): Readonly<LifetimeUsage> { return this.state.lifetimeUsage; }
 	get compactionCount(): number { return this.state.compactionCount; }
@@ -381,6 +383,11 @@ export class Subagent {
 		this.state.markStopped(completedAt);
 	}
 
+	/** Record the parent collected this agent's outcome. Idempotent. */
+	markConsumed(at?: number): void {
+		this.state.markConsumed(at);
+	}
+
 	/**
 	 * Abort a running agent: fire AbortController and transition to stopped.
 	 * Returns false if the agent is not running.
@@ -413,7 +420,7 @@ export class Subagent {
 		this._pendingSteers = [];
 	}
 
-	/** Reset for resume: running status, new startedAt, clear completedAt/result/error/listeners. */
+	/** Reset for resume: running status, new startedAt, clear completedAt/result/error/consumedAt/listeners. */
 	resetForResume(startedAt: number): void {
 		this.state.resetForResume(startedAt);
 		this.listeners.release();

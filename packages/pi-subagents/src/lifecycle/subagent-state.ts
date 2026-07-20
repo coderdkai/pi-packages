@@ -36,6 +36,8 @@ export interface SubagentStateInit {
 	error?: string;
 	startedAt?: number;
 	completedAt?: number;
+	/** Time the parent collected the outcome; undefined = obligation still open. */
+	consumedAt?: number;
 	// Stats — seed a populated value without replaying the accumulation methods
 	toolUses?: number;
 	lifetimeUsage?: LifetimeUsage;
@@ -62,6 +64,11 @@ export class SubagentState {
 
 	private _completedAt?: number;
 	get completedAt(): number | undefined { return this._completedAt; }
+
+	// Result delivery — whether the parent has collected the outcome (orthogonal to status)
+	private _consumedAt?: number;
+	get consumedAt(): number | undefined { return this._consumedAt; }
+	get consumed(): boolean { return this._consumedAt != null; }
 
 	// Stats — accumulated via mutation methods, readable via getters
 	private _toolUses: number;
@@ -91,6 +98,7 @@ export class SubagentState {
 		this._error = init.error;
 		this._startedAt = init.startedAt ?? Date.now();
 		this._completedAt = init.completedAt;
+		this._consumedAt = init.consumedAt;
 		this._toolUses = init.toolUses ?? 0;
 		// Copy so a later addUsage() cannot mutate the caller's object.
 		this._lifetimeUsage = init.lifetimeUsage
@@ -203,18 +211,27 @@ export class SubagentState {
 		}
 	}
 
+	/**
+	 * Record the parent collected the outcome. Idempotent — keeps the first
+	 * collection time (??=), so a re-read does not advance the retention clock.
+	 */
+	markConsumed(at?: number): void {
+		this._consumedAt ??= at ?? Date.now();
+	}
+
 	/** Transition to stopped state. Always valid — no guard. */
 	markStopped(completedAt?: number): void {
 		this._status = "stopped";
 		this._completedAt = completedAt ?? Date.now();
 	}
 
-	/** Reset for resume: running status, new startedAt, clear completedAt/result/error. */
+	/** Reset for resume: running status, new startedAt, clear completedAt/result/error/consumedAt. */
 	resetForResume(startedAt: number): void {
 		this._status = "running";
 		this._startedAt = startedAt;
 		this._completedAt = undefined;
 		this._result = undefined;
 		this._error = undefined;
+		this._consumedAt = undefined;
 	}
 }
