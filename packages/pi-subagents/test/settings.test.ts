@@ -146,6 +146,23 @@ describe("settings persistence", () => {
       expect(loadSettings(globalDir, projectDir)).toEqual({});
     });
 
+    it("accepts retention windows within [1, 20160]", () => {
+      writeProject({ consumedSessionRetentionMinutes: 15, unconsumedSessionRetentionMinutes: 1440 });
+      expect(loadSettings(globalDir, projectDir)).toEqual({
+        consumedSessionRetentionMinutes: 15,
+        unconsumedSessionRetentionMinutes: 1440,
+      });
+    });
+
+    it("drops retention windows < 1, non-integer, or above the ceiling", () => {
+      writeProject({ consumedSessionRetentionMinutes: 0 });
+      expect(loadSettings(globalDir, projectDir).consumedSessionRetentionMinutes).toBeUndefined();
+      writeProject({ unconsumedSessionRetentionMinutes: 20_161 });
+      expect(loadSettings(globalDir, projectDir).unconsumedSessionRetentionMinutes).toBeUndefined();
+      writeProject({ consumedSessionRetentionMinutes: 12.5 });
+      expect(loadSettings(globalDir, projectDir).consumedSessionRetentionMinutes).toBeUndefined();
+    });
+
     it("returns {} when the JSON root is not an object (array, string, null)", () => {
       mkdirSync(join(projectDir, ".pi"), { recursive: true });
       writeFileSync(projectFile(), '["not", "an", "object"]');
@@ -260,6 +277,36 @@ describe("SettingsManager", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       expect(sm.maxConcurrent).toBe(4);
     });
+
+    it("defaults to consumedSessionRetentionMinutes: 10", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      expect(sm.consumedSessionRetentionMinutes).toBe(10);
+    });
+
+    it("defaults to unconsumedSessionRetentionMinutes: 720", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      expect(sm.unconsumedSessionRetentionMinutes).toBe(720);
+    });
+  });
+
+  describe("retention setter normalization", () => {
+    it("stores a positive consumed window as-is", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      sm.consumedSessionRetentionMinutes = 30;
+      expect(sm.consumedSessionRetentionMinutes).toBe(30);
+    });
+
+    it("clamps consumed window below 1 to 1", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      sm.consumedSessionRetentionMinutes = 0;
+      expect(sm.consumedSessionRetentionMinutes).toBe(1);
+    });
+
+    it("clamps unconsumed window above the two-week ceiling to 20160", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      sm.unconsumedSessionRetentionMinutes = 99_999;
+      expect(sm.unconsumedSessionRetentionMinutes).toBe(20_160);
+    });
   });
 
   describe("defaultMaxTurns setter normalization", () => {
@@ -371,6 +418,15 @@ describe("SettingsManager", () => {
       expect(sm.defaultMaxTurns).toBe(50);
     });
 
+    it("applies retention windows from disk", () => {
+      mkdirSync(join(projectDir, ".pi"), { recursive: true });
+      writeFileSync(join(projectDir, ".pi", "subagents.json"), JSON.stringify({ consumedSessionRetentionMinutes: 20, unconsumedSessionRetentionMinutes: 60 }));
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: globalDir });
+      sm.load();
+      expect(sm.consumedSessionRetentionMinutes).toBe(20);
+      expect(sm.unconsumedSessionRetentionMinutes).toBe(60);
+    });
+
     it("emits subagents:settings_loaded with merged settings", () => {
       mkdirSync(join(projectDir, ".pi"), { recursive: true });
       writeFileSync(join(projectDir, ".pi", "subagents.json"), JSON.stringify({ graceTurns: 7 }));
@@ -400,7 +456,7 @@ describe("SettingsManager", () => {
   describe("snapshot()", () => {
     it("returns default values before any changes", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
     });
 
     it("reflects mutations: defaultMaxTurns undefined maps to 0 in snapshot", () => {
@@ -408,13 +464,20 @@ describe("SettingsManager", () => {
       sm.defaultMaxTurns = undefined;
       sm.graceTurns = 3;
       sm.maxConcurrent = 8;
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 8, defaultMaxTurns: 0, graceTurns: 3 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 8, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
     });
 
     it("reflects a concrete defaultMaxTurns value", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       sm.defaultMaxTurns = 20;
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 20, graceTurns: 5 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 20, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
+    });
+
+    it("reflects mutated retention windows", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      sm.consumedSessionRetentionMinutes = 30;
+      sm.unconsumedSessionRetentionMinutes = 1440;
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 30, unconsumedSessionRetentionMinutes: 1440 });
     });
   });
 
@@ -436,7 +499,7 @@ describe("SettingsManager", () => {
       const toast = sm.saveAndNotify("Max concurrency set to 5");
       expect(toast).toEqual({ message: "Max concurrency set to 5", level: "info" });
       const written = JSON.parse(readFileSync(join(projectDir, ".pi", "subagents.json"), "utf-8"));
-      expect(written).toEqual({ maxConcurrent: 5, defaultMaxTurns: 0, graceTurns: 5 });
+      expect(written).toEqual({ maxConcurrent: 5, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
     });
 
     it("emits subagents:settings_changed with persisted:true on success", () => {
@@ -445,7 +508,7 @@ describe("SettingsManager", () => {
       sm.graceTurns = 3;
       sm.saveAndNotify("Grace turns set to 3");
       expect(emit).toHaveBeenCalledWith("subagents:settings_changed", {
-        settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 3 },
+        settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 },
         persisted: true,
       });
     });
@@ -473,7 +536,7 @@ describe("SettingsManager", () => {
         const sm = new SettingsManager({ emit, cwd: filePosingAsCwd, agentDir: "/nonexistent" });
         sm.saveAndNotify("something");
         expect(emit).toHaveBeenCalledWith("subagents:settings_changed", {
-          settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5 },
+          settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 },
           persisted: false,
         });
       } finally {
@@ -547,6 +610,51 @@ describe("SettingsManager", () => {
       const onChanged = vi.fn();
       const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent", onMaxConcurrentChanged: onChanged });
       sm.applyDefaultMaxTurns(5);
+      expect(onChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("applyConsumedSessionRetentionMinutes() / applyUnconsumedSessionRetentionMinutes()", () => {
+    let projectDir: string;
+
+    beforeEach(() => {
+      projectDir = mkdtempSync(join(tmpdir(), "pi-sm-apply-ret-"));
+    });
+
+    afterEach(() => {
+      rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    it("sets the consumed window, persists, and reports the post-normalization value", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      const toast = sm.applyConsumedSessionRetentionMinutes(30);
+      expect(sm.consumedSessionRetentionMinutes).toBe(30);
+      expect(toast).toEqual({ message: "Consumed-session retention set to 30 min", level: "info" });
+      const written = JSON.parse(readFileSync(join(projectDir, ".pi", "subagents.json"), "utf-8"));
+      expect(written.consumedSessionRetentionMinutes).toBe(30);
+    });
+
+    it("normalizes 0 to 1 for the consumed window and reports it", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      const toast = sm.applyConsumedSessionRetentionMinutes(0);
+      expect(sm.consumedSessionRetentionMinutes).toBe(1);
+      expect(toast.message).toBe("Consumed-session retention set to 1 min");
+    });
+
+    it("sets the unconsumed window, persists, and reports the post-normalization value", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      const toast = sm.applyUnconsumedSessionRetentionMinutes(1440);
+      expect(sm.unconsumedSessionRetentionMinutes).toBe(1440);
+      expect(toast).toEqual({ message: "Unconsumed-session retention set to 1440 min", level: "info" });
+      const written = JSON.parse(readFileSync(join(projectDir, ".pi", "subagents.json"), "utf-8"));
+      expect(written.unconsumedSessionRetentionMinutes).toBe(1440);
+    });
+
+    it("does not call onMaxConcurrentChanged", () => {
+      const onChanged = vi.fn();
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent", onMaxConcurrentChanged: onChanged });
+      sm.applyConsumedSessionRetentionMinutes(30);
+      sm.applyUnconsumedSessionRetentionMinutes(1440);
       expect(onChanged).not.toHaveBeenCalled();
     });
   });

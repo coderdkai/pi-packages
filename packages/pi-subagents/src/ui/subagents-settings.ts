@@ -5,9 +5,13 @@ export interface SubagentsSettingsManager {
   readonly maxConcurrent: number;
   readonly defaultMaxTurns: number | undefined;
   readonly graceTurns: number;
+  readonly consumedSessionRetentionMinutes: number;
+  readonly unconsumedSessionRetentionMinutes: number;
   applyMaxConcurrent(n: number): { message: string; level: "info" | "warning" };
   applyDefaultMaxTurns(n: number): { message: string; level: "info" | "warning" };
   applyGraceTurns(n: number): { message: string; level: "info" | "warning" };
+  applyConsumedSessionRetentionMinutes(n: number): { message: string; level: "info" | "warning" };
+  applyUnconsumedSessionRetentionMinutes(n: number): { message: string; level: "info" | "warning" };
 }
 
 /** Narrow UI interface — only the ctx.ui methods the settings handler calls. */
@@ -67,6 +71,24 @@ const NUMERIC_SETTINGS: readonly NumericSettingDescriptor[] = [
     minimum: 1,
     validationMessage: "Must be a positive integer.",
     apply: (settings, n) => settings.applyGraceTurns(n),
+  },
+  {
+    label: "Consumed-session retention",
+    currentDisplay: (settings) => `${settings.consumedSessionRetentionMinutes} min`,
+    inputTitle: "Minutes to retain a consumed agent's session",
+    inputDefault: (settings) => String(settings.consumedSessionRetentionMinutes),
+    minimum: 1,
+    validationMessage: "Must be a positive integer.",
+    apply: (settings, n) => settings.applyConsumedSessionRetentionMinutes(n),
+  },
+  {
+    label: "Unconsumed-session retention",
+    currentDisplay: (settings) => `${settings.unconsumedSessionRetentionMinutes} min`,
+    inputTitle: "Minutes to retain an unconsumed agent's session (safety cap)",
+    inputDefault: (settings) => String(settings.unconsumedSessionRetentionMinutes),
+    minimum: 1,
+    validationMessage: "Must be a positive integer.",
+    apply: (settings, n) => settings.applyUnconsumedSessionRetentionMinutes(n),
   },
 ];
 
