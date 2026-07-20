@@ -26,6 +26,8 @@ export interface AgentReport {
 	error: string | undefined;
 	/** Present only when verbose was requested and a conversation is available. */
 	conversation?: string;
+	/** Persisted transcript path; rendered as a pointer so the parent can read it directly. */
+	transcriptPath?: string;
 }
 
 /** Assemble the stats parts: Tool uses / tokens? / Context? / Compactions? / Duration. */
@@ -55,6 +57,9 @@ export function formatAgentReport(report: AgentReport): string {
 	output += renderReportBody(report);
 	if (report.conversation) {
 		output += `\n\n--- Agent Conversation ---\n${report.conversation}`;
+	}
+	if (report.transcriptPath) {
+		output += `\n\nFull transcript available at: ${report.transcriptPath}`;
 	}
 	return output;
 }

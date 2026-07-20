@@ -29,7 +29,7 @@ export class GetResultTool {
 	) {
 		const record = this.manager.getRecord(params.agent_id);
 		if (!record) {
-			return textResult(`Agent not found: "${params.agent_id}". It may have been cleaned up.`);
+			return textResult(`Agent not found: "${params.agent_id}". Records are cleared at session start/switch, so it may be from a previous session.`);
 		}
 
 		// Wait for completion if requested.
@@ -61,6 +61,9 @@ export class GetResultTool {
 			result: record.result,
 			error: record.error,
 			conversation: verbose ? record.getConversation() : undefined,
+			// Transcript pointer: lets the parent read the full session from disk,
+			// and covers verbose after the live session was released (no conversation).
+			transcriptPath: record.outputFile,
 		};
 	}
 

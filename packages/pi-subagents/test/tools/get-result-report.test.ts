@@ -20,6 +20,7 @@ function makeReport(overrides: Partial<AgentReport> = {}): AgentReport {
 		result: "All done.",
 		error: undefined,
 		conversation: undefined,
+		transcriptPath: undefined,
 		...overrides,
 	};
 }
@@ -117,5 +118,15 @@ describe("formatAgentReport", () => {
 	it("omits the conversation block when absent", () => {
 		const text = formatAgentReport(makeReport({ conversation: undefined }));
 		expect(text).not.toContain("--- Agent Conversation ---");
+	});
+
+	it("renders a transcript pointer line when transcriptPath is present", () => {
+		const text = formatAgentReport(makeReport({ transcriptPath: "/tasks/agent.jsonl" }));
+		expect(text).toContain("Full transcript available at: /tasks/agent.jsonl");
+	});
+
+	it("omits the transcript line when transcriptPath is absent", () => {
+		const text = formatAgentReport(makeReport({ transcriptPath: undefined }));
+		expect(text).not.toContain("Full transcript available at:");
 	});
 });

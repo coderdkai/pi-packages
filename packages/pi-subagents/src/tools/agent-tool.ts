@@ -84,10 +84,15 @@ export class AgentTool {
 			const existing = this.manager.getRecord(params.resume as string);
 			if (!existing) {
 				return textResult(
-					`Agent not found: "${params.resume as string}". It may have been cleaned up.`,
+					`Agent not found: "${params.resume as string}". Records are cleared at session start/switch, so it may be from a previous session.`,
 				);
 			}
 			if (!existing.isSessionReady()) {
+				if (existing.sessionReleased) {
+					return textResult(
+						`Agent "${params.resume as string}" had its session released after its retention window; resume is unavailable, but its result is still retrievable via get_subagent_result.`,
+					);
+				}
 				return textResult(
 					`Agent "${params.resume as string}" has no active session to resume.`,
 				);

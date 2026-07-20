@@ -6,7 +6,7 @@ import {
 } from "#src/tools/get-result-tool";
 import type { Subagent } from "#src/types";
 import { createTestSubagent, makeStubExecution } from "#test/helpers/make-subagent";
-import { createSubagentSessionStub, toSubagentSession } from "#test/helpers/mock-session";
+import { createMockSession, createSubagentSessionStub, toSubagentSession } from "#test/helpers/mock-session";
 import { STUB_CTX } from "#test/helpers/stub-ctx";
 
 const testRegistry = new AgentTypeRegistry(() => new Map());
@@ -110,5 +110,15 @@ describe("GetResultTool", () => {
 		const result = await execute(makeManager(records), { agent_id: "agent-1", verbose: true });
 		expect(result.content[0].text).toContain("--- Agent Conversation ---");
 		expect(result.content[0].text).toContain("[User]: hello");
+	});
+
+	it("points to the transcript when verbose is requested but the session was released", async () => {
+		const record = createTestSubagent();
+		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/tasks/agent.jsonl"));
+		record.releaseSession();
+		const records = new Map([["agent-1", record]]);
+		const result = await execute(makeManager(records), { agent_id: "agent-1", verbose: true });
+		expect(result.content[0].text).toContain("Full transcript available at: /tasks/agent.jsonl");
+		expect(result.content[0].text).not.toContain("--- Agent Conversation ---");
 	});
 });
