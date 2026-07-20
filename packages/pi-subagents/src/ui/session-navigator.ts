@@ -38,7 +38,6 @@ import {
   visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { AgentConfigLookup } from "#src/config/agent-types";
-import type { EvictedSubagent } from "#src/lifecycle/subagent-manager";
 import type { SessionMessage } from "#src/types";
 import { describeActivity, type Theme } from "#src/ui/display";
 import { fileSnapshotSource, listNavigableAgents, liveSource, type NavigableSubagent, type TranscriptSource } from "#src/ui/session-navigation";
@@ -69,8 +68,6 @@ export interface SessionNavigatorUI {
 export interface SessionNavigatorParams {
   ui: SessionNavigatorUI;
   agents: readonly NavigableSubagent[];
-  /** Descriptors of agents evicted by the cleanup sweep, sourced from disk when picked. */
-  evicted: readonly EvictedSubagent[];
   registry: AgentConfigLookup;
   /** Working directory for tool-call rendering (relative path display). */
   cwd: string;
@@ -96,8 +93,8 @@ export interface TranscriptOverlayOptions {
  * manager, so it stays a reactive consumer with no inbound call into the core.
  */
 export class SessionNavigatorHandler {
-  async handle({ ui, agents, evicted, registry, cwd, readFile }: SessionNavigatorParams): Promise<void> {
-    const entries = listNavigableAgents(agents, evicted, registry);
+  async handle({ ui, agents, registry, cwd, readFile }: SessionNavigatorParams): Promise<void> {
+    const entries = listNavigableAgents(agents, registry);
     if (entries.length === 0) {
       ui.notify("No subagent sessions to view.", "info");
       return;

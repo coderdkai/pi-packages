@@ -14,30 +14,26 @@ import type { CreateSubagentSessionParams } from "#src/lifecycle/create-subagent
 import type { ParentSnapshot } from "#src/lifecycle/parent-snapshot";
 import { Subagent, type SubagentLifecycleObserver } from "#src/lifecycle/subagent";
 import type { SubagentSession } from "#src/lifecycle/subagent-session";
-import { SubagentState, type SubagentStatus } from "#src/lifecycle/subagent-state";
+import { SubagentState } from "#src/lifecycle/subagent-state";
 import type { WorkspaceProvider } from "#src/lifecycle/workspace";
 
 import type { RunConfig } from "#src/runtime";
 import type { AgentInvocation, CompactionInfo, ParentSessionInfo, SubagentType, ThinkingLevel } from "#src/types";
 
 /**
- * A lightweight snapshot of a subagent evicted by the 10-minute cleanup sweep.
- *
- * The sweep frees the heavy in-memory session (its message history included);
- * this descriptor retains only the fields the session navigator needs to label
- * the agent in the picker, plus the persisted `outputFile` to source its
- * transcript from disk. Carries no messages, so memory stays bounded.
+ * Session-retention windows (minutes). `SettingsManager` satisfies this
+ * structurally; a live getter (`getRetentionPolicy`) lets the sweep read the
+ * current values without a construction-time settings dependency.
  */
-export interface EvictedSubagent {
-  readonly id: string;
-  readonly type: SubagentType;
-  readonly description: string;
-  readonly status: SubagentStatus;
-  readonly startedAt: number;
-  readonly completedAt: number | undefined;
-  readonly toolUses: number;
-  readonly outputFile: string;
+export interface RetentionPolicy {
+  readonly consumedSessionRetentionMinutes: number;
+  readonly unconsumedSessionRetentionMinutes: number;
 }
+
+const DEFAULT_RETENTION_POLICY: RetentionPolicy = {
+  consumedSessionRetentionMinutes: 10,
+  unconsumedSessionRetentionMinutes: 720,
+};
 
 /** Observer interface for agent lifecycle notifications. */
 export interface SubagentManagerObserver {
@@ -56,6 +52,8 @@ export interface SubagentManagerOptions {
   /** Base working directory handed to a workspace provider (the parent cwd). */
   baseCwd: string;
   getRunConfig?: () => RunConfig;
+  /** Live accessor for the session-retention windows; defaults applied when absent. */
+  getRetentionPolicy?: () => RetentionPolicy;
   observer?: SubagentManagerObserver;
 }
 
@@ -84,14 +82,13 @@ export interface AgentSpawnConfig {
 
 export class SubagentManager {
   private agents = new Map<string, Subagent>();
-  /** Descriptors of agents removed by the cleanup sweep, keyed by id — navigable from disk. */
-  private readonly evicted = new Map<string, EvictedSubagent>();
-  private cleanupInterval: ReturnType<typeof setInterval>;
+  private sweepInterval: ReturnType<typeof setInterval>;
   private readonly observer?: SubagentManagerObserver;
   private readonly createSubagentSession: (params: CreateSubagentSessionParams) => Promise<SubagentSession>;
   private readonly limiter: ConcurrencyLimiter;
   private readonly baseCwd: string;
   private getRunConfig?: () => RunConfig;
+  private getRetentionPolicy?: () => RetentionPolicy;
   private _workspaceProvider?: WorkspaceProvider;
 
   /** The registered workspace provider, or undefined when none is registered. */
@@ -105,9 +102,12 @@ export class SubagentManager {
     this.baseCwd = options.baseCwd;
     this.observer = options.observer;
     this.getRunConfig = options.getRunConfig;
-    // Cleanup completed agents after 10 minutes (but keep sessions for resume)
-    this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
-    this.cleanupInterval.unref();
+    this.getRetentionPolicy = options.getRetentionPolicy;
+    // Periodically release the heavy session of terminal agents past their
+    // retention window. The lightweight record (with its result) is kept for the
+    // session lifetime, so get_subagent_result never misses in-session.
+    this.sweepInterval = setInterval(() => this.sweep(), 60_000);
+    this.sweepInterval.unref();
   }
 
   /**
@@ -241,11 +241,6 @@ export class SubagentManager {
     );
   }
 
-  /** Descriptors of agents evicted by the cleanup sweep, most recent first. */
-  listEvicted(): EvictedSubagent[] {
-    return [...this.evicted.values()].sort((a, b) => b.startedAt - a.startedAt);
-  }
-
   abort(id: string): boolean {
     const record = this.agents.get(id);
     if (!record) return false;
@@ -266,15 +261,26 @@ export class SubagentManager {
     this.agents.delete(id);
   }
 
-  private cleanup() {
-    const cutoff = Date.now() - 10 * 60_000;
-    for (const [id, record] of this.agents) {
+  /**
+   * Release the heavy session of any terminal agent past its retention window.
+   * The record (with its result) is retained for the session lifetime; only the
+   * live `AgentSession` is freed. A consumed agent releases on the short window,
+   * measured from the later of completion or consumption (so a late read still
+   * gets a full resume window); an unconsumed agent holds until the long cap.
+   */
+  private sweep() {
+    const policy = this.getRetentionPolicy?.() ?? DEFAULT_RETENTION_POLICY;
+    const now = Date.now();
+    for (const record of this.agents.values()) {
       if (record.status === "running" || record.status === "queued") continue;
-      if ((record.completedAt ?? 0) >= cutoff) continue;
-      // Retain a navigable descriptor before freeing the heavy session. Only an
-      // agent with a persisted file can be sourced from disk after eviction.
-      if (record.outputFile) this.evicted.set(id, toEvictedSubagent(record, record.outputFile));
-      this.removeRecord(id, record);
+      if (!record.isSessionReady()) continue; // already released, or never had a session
+      const referenceAt = record.consumed
+        ? Math.max(record.completedAt ?? 0, record.consumedAt ?? 0)
+        : record.completedAt ?? 0;
+      const windowMinutes = record.consumed
+        ? policy.consumedSessionRetentionMinutes
+        : policy.unconsumedSessionRetentionMinutes;
+      if (now - referenceAt >= windowMinutes * 60_000) record.releaseSession();
     }
   }
 
@@ -287,8 +293,6 @@ export class SubagentManager {
       if (record.status === "running" || record.status === "queued") continue;
       this.removeRecord(id, record);
     }
-    // Evicted descriptors belong to the session that swept them — a new session starts empty.
-    this.evicted.clear();
   }
 
   /** Whether any agents are still running or queued. */
@@ -338,27 +342,12 @@ export class SubagentManager {
   }
 
   dispose() {
-    clearInterval(this.cleanupInterval);
+    clearInterval(this.sweepInterval);
     // Drop pending thunks
     this.limiter.clear();
     for (const record of this.agents.values()) {
       record.disposeSession();
     }
     this.agents.clear();
-    this.evicted.clear();
   }
-}
-
-/** Capture an evicted agent's navigable fields from its record. */
-function toEvictedSubagent(record: Subagent, outputFile: string): EvictedSubagent {
-  return {
-    id: record.id,
-    type: record.type,
-    description: record.description,
-    status: record.status,
-    startedAt: record.startedAt,
-    completedAt: record.completedAt,
-    toolUses: record.toolUses,
-    outputFile,
-  };
 }

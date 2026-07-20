@@ -114,6 +114,7 @@ export default function (pi: ExtensionAPI) {
     observer,
     limiter,
     getRunConfig: () => settings,
+    getRetentionPolicy: () => settings,
   });
 
   // Typed service published via Symbol.for() for cross-extension access.
@@ -178,7 +179,6 @@ export default function (pi: ExtensionAPI) {
       await sessionNavigator.handle({
         ui: ctx.ui,
         agents: manager.listAgents(),
-        evicted: manager.listEvicted(),
         registry,
         cwd: ctx.cwd,
         readFile: (path) => readFileSync(path, "utf8"),
