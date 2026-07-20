@@ -126,6 +126,22 @@ describe("AgentTool — resume path", () => {
 		});
 		expect(result.content[0].text).toContain("Resumed output.");
 	});
+
+	it("marks the resumed record consumed (resume-return delivery edge)", async () => {
+		const deps = createToolDeps();
+		const resumeRecord = createTestSubagent();
+		resumeRecord.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession()));
+		deps.manager.getRecord = vi.fn().mockReturnValue(resumeRecord);
+		const resumed = createTestSubagent({ result: "Resumed output." });
+		deps.manager.resume = vi.fn().mockResolvedValue(resumed);
+		await execute(deps, {
+			prompt: "continue",
+			description: "resume",
+			subagent_type: "general-purpose",
+			resume: "agent-1",
+		});
+		expect(resumed.consumed).toBe(true);
+	});
 });
 
 describe("AgentTool — model resolution error", () => {

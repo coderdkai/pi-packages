@@ -109,6 +109,10 @@ export async function runForeground(
 
   clearInterval(spinnerInterval);
 
+  // Foreground-return delivery edge: the result is handed back in this tool
+  // result, so the outcome is collected. Mark it consumed.
+  record.markConsumed();
+
   const tokenText = formatLifetimeTokens(record);
   const details = buildDetails(presentation.detailBase, record, { tokens: tokenText });
 

@@ -100,6 +100,8 @@ export class AgentTool {
 			if (!record) {
 				return textResult(`Failed to resume agent "${params.resume as string}".`);
 			}
+			// Resume-return delivery edge: the resumed outcome is returned directly.
+			record.markConsumed();
 			return textResult(
 				record.result?.trim() ?? record.error?.trim() ?? "No output.",
 				buildDetails(config.presentation.detailBase, record),
