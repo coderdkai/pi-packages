@@ -4,6 +4,7 @@
     "../packages/pi-github-tools",
     "../packages/pi-autoformat",
     "../packages/pi-permission-system",
+    "../packages/pi-permission-model-judge",
     "../packages/pi-subagents",
     "../packages/pi-subagents-worktrees",
     "../packages/pi-session-tools",
@@ -18,6 +19,11 @@
     { "source": "npm:@gotgenes/pi-autoformat", "extensions": [], "skills": [] },
     {
       "source": "npm:@gotgenes/pi-permission-system",
+      "extensions": [],
+      "skills": []
+    },
+    {
+      "source": "npm:@gotgenes/pi-permission-model-judge",
       "extensions": [],
       "skills": []
     },
