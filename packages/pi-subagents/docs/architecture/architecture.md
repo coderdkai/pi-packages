@@ -300,12 +300,12 @@ src/
 │   └── session-dir.ts              session directory derivation
 │
 ├── lifecycle/                      agent execution and state tracking
-│   ├── subagent-manager.ts         collection manager + observer wiring
+│   ├── subagent-manager.ts         collection manager + observer wiring + consumption-aware session-retention sweep
 │   ├── create-subagent-session.ts  assembly factory: session creation, binding, tool filtering
 │   ├── subagent-session.ts         born-complete child session: turn loop, steer, dispose
 │   ├── turn-limits.ts              normalizeMaxTurns (turn-count policy)
 │   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer)
-│   ├── subagent-state.ts           lifecycle status + metrics value object (transitions, accumulators)
+│   ├── subagent-state.ts           lifecycle status + metrics + result-consumption value object (transitions, accumulators)
 │   ├── run-listeners.ts            per-run observer-unsub and signal-detach handles
 │   ├── workspace-bracket.ts        child workspace prepare/dispose lifecycle
 │   ├── concurrency-limiter.ts       background admission gate: schedules run thunks FIFO against the limit
@@ -316,7 +316,7 @@ src/
 │
 ├── observation/                    progress tracking and notification
 │   ├── record-observer.ts          session-event stats observer
-│   ├── notification.ts             completion nudges + per-agent consumed-result tracking
+│   ├── notification.ts             completion nudges (announce-only; consumption is domain state on the record)
 │   ├── renderer.ts                 notification TUI component
 │   ├── composite-subagent-observer.ts fans manager notifications out to multiple observers
 │   └── subagent-events-observer.ts manager lifecycle observer (event emission + persistence + notification)
@@ -578,7 +578,7 @@ Pulling each apart by asking "who changes this, how often, and who needs to know
 3. **The hook surface** — the points where an extension alters or augments the child before and around its run.
    This is the child session's own extension binding (see below), not data on the subagent.
 4. **Result delivery** — whether the parent has consumed the result, when to nudge, how the result reaches the caller.
-   The homeless `notification.resultConsumed` field belongs to this domain, not to execution.
+   This domain now has a home: `consumedAt` is a first-class field on `SubagentState`, marked only at the parent-initiated return edges (`get_subagent_result`, foreground return, resume return); the notification layer reads it to suppress a nudge but never owns it, and the retention sweep reads it to time session release (#617).
 
 The ~20 optional constructor fields and the runtime `run()` throws are the pressure these four domains exert on one class.
 Separating them is what makes the Phase 17 steps fall out rather than fight back.

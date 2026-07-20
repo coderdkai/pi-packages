@@ -18,7 +18,7 @@ Run them in foreground or background, steer them mid-run, resume completed sessi
 - **In-process & native** — agents run inside the same pi runtime (no spawned subprocesses), sharing tool names, calling conventions, and UI patterns (`subagent`, `get_subagent_result`, `steer_subagent`) — feels native
 - **Parallel background agents** — spawn multiple agents that run concurrently with automatic queuing (configurable concurrency limit, default 4) and individual completion notifications
 - **Live widget UI** — persistent above-editor widget with animated spinners, live tool activity, token counts, and colored status icons
-- **Session transcripts** — open any subagent's full session transcript (running or evicted) in pi's native read-only viewer via `/subagents:sessions`
+- **Session transcripts** — open any subagent's full session transcript (running or with its session released) in pi's native read-only viewer via `/subagents:sessions`
 - **Custom agent types** — define agents in `.pi/agents/<name>.md` with YAML frontmatter: custom system prompts, model selection, thinking levels, tool restrictions
 - **Mid-run steering** — inject messages into running agents to redirect their work without restarting
 - **Session resume** — pick up where an agent left off, preserving full conversation context
@@ -235,7 +235,7 @@ Changes persist across pi restarts (see [Persistent Settings](#persistent-settin
 
 ### `/subagents:sessions`
 
-Pick any subagent — running or already evicted — and read its full session transcript in pi's native per-entry viewer.
+Pick any subagent — running, or completed with its live session already released — and read its full session transcript in pi's native per-entry viewer.
 Read-only: no steering, no session takeover (steering lives in the `steer_subagent` tool and the background widget).
 
 Creating and editing agent definitions is not a command — write an agent `.md` file in your editor, or ask a pi session to generate one (see [Custom Agents](#custom-agents)).
@@ -265,7 +265,8 @@ Foreground agents bypass the queue — they block the parent anyway.
 
 ## Persistent Settings
 
-Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns) persist across pi restarts.
+Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns, and the two session-retention windows) persist across pi restarts.
+A completed subagent's record is kept for the whole parent session (so `get_subagent_result` never misses); only its heavy in-memory session is released — after `consumedSessionRetentionMinutes` once the result has been collected, or after the `unconsumedSessionRetentionMinutes` safety cap if it never was.
 Two files, merged on load:
 
 - **Global:** `~/.pi/agent/subagents.json` — your machine-wide defaults.
@@ -274,7 +275,7 @@ Two files, merged on load:
   Written by `/subagents:settings`.
 
 **Precedence:** project overrides global on any field present in both.
-Missing fields fall back to the hardcoded defaults (max concurrency `4`, default max turns unlimited, grace turns `5`).
+Missing fields fall back to the hardcoded defaults (max concurrency `4`, default max turns unlimited, grace turns `5`, consumed-session retention `10` minutes, unconsumed-session retention `720` minutes).
 
 **Example — global defaults for a beefy machine:**
 
@@ -283,7 +284,8 @@ mkdir -p ~/.pi/agent
 cat > ~/.pi/agent/subagents.json <<'EOF'
 {
   "maxConcurrent": 16,
-  "graceTurns": 10
+  "graceTurns": 10,
+  "unconsumedSessionRetentionMinutes": 1440
 }
 EOF
 ```
