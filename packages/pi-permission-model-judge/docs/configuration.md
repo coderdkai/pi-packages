@@ -59,6 +59,15 @@ Only a path that matches at least one pattern is sent to the model — this is t
 An invalid regular expression is skipped with a warning.
 An empty list (the default) matches nothing, so the reviewer defers everything.
 
+The canonical typo is a **doubled package segment** — a package name repeated around `packages/`, e.g. `pi-permission-system/packages/pi-permission-system/…`.
+A backreference matches this for *any* package name in one pattern:
+
+```json
+"typoPatterns": ["([^/]+)/packages/\\1(/|$)"]
+```
+
+The `\1` backreference requires the segment before and after `packages/` to be identical, so it catches `<name>/packages/<name>` for every `<name>` while leaving a correct `packages/<name>/…` path untouched. (In JSON the backslash is doubled — `\\1` — so the parsed string is the regex `\1`.)
+
 ### `timeoutMs`
 
 The model call is aborted after this many milliseconds, and an aborted call defers.

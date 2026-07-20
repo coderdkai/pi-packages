@@ -49,8 +49,9 @@ Two independent config files are involved — the safety policy lives in pi-perm
    {
      "provider": "anthropic",
      "model": "claude-haiku-4-5",
-     "instructions": "Deny a path that repeats a directory segment…",
-     "typoPatterns": ["pi-permission-system/packages/pi-permission-system"]
+     "instructions": "Deny a path that repeats a package name around `packages/`…",
+     // Catches a doubled package segment (`<name>/packages/<name>/…`) for any package.
+     "typoPatterns": ["([^/]+)/packages/\\1(/|$)"]
    }
    ```
 
