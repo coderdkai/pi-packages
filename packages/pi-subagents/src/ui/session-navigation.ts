@@ -50,7 +50,7 @@ export type NavigationEntry =
   | { readonly kind: "live"; readonly label: string; readonly record: NavigableSubagent }
   | { readonly kind: "snapshot"; readonly label: string; readonly outputFile: string };
 
-/** The fields `buildLabel` reads — shared by a live record and an evicted descriptor. */
+/** The fields `buildLabel` reads — shared by the live and snapshot (released-session) label paths. */
 interface LabelFields {
   readonly type: SubagentType;
   readonly description: string;

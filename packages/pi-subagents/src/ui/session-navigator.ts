@@ -11,8 +11,8 @@
  * because the components require a `TUI`, `cwd`, and markdown theme.
  *
  * The overlay is strictly read-only — steering stays in the `steer_subagent` tool
- * and the widget. It consumes a `TranscriptSource`, so the evicted-agent-source
- * follow-up swaps the source without touching the renderer or the overlay.
+ * and the widget. It consumes a `TranscriptSource`, so a released agent's disk
+ * snapshot (`fileSnapshotSource`) swaps in without touching the renderer or the overlay.
  */
 
 import {
