@@ -450,6 +450,57 @@ describe("Subagent — disposeSession", () => {
 	});
 });
 
+describe("Subagent — releaseSession", () => {
+	it("disposes the wrapped session and clears it (isSessionReady false)", () => {
+		const record = makeSubagent();
+		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
+		record.subagentSession = toSubagentSession(stub);
+		record.releaseSession();
+		expect(stub.dispose).toHaveBeenCalledOnce();
+		expect(record.isSessionReady()).toBe(false);
+	});
+
+	it("captures outputFile so the getter still resolves it after release", () => {
+		const record = makeSubagent();
+		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl"));
+		record.releaseSession();
+		expect(record.outputFile).toBe("/path/to/session.jsonl");
+	});
+
+	it("sets sessionReleased (default false)", () => {
+		const record = makeSubagent();
+		expect(record.sessionReleased).toBe(false);
+		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl"));
+		record.releaseSession();
+		expect(record.sessionReleased).toBe(true);
+	});
+
+	it("is a no-op on a second release — does not re-dispose, keeps the captured outputFile", () => {
+		const record = makeSubagent();
+		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
+		record.subagentSession = toSubagentSession(stub);
+		record.releaseSession();
+		record.releaseSession();
+		expect(stub.dispose).toHaveBeenCalledOnce();
+		expect(record.outputFile).toBe("/path/to/session.jsonl");
+	});
+
+	it("disposeSession after release is a no-op (session already cleared)", () => {
+		const record = makeSubagent();
+		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
+		record.subagentSession = toSubagentSession(stub);
+		record.releaseSession();
+		record.disposeSession();
+		expect(stub.dispose).toHaveBeenCalledOnce();
+	});
+
+	it("is a no-op when no session was created (sessionReleased stays false)", () => {
+		const record = makeSubagent();
+		expect(() => record.releaseSession()).not.toThrow();
+		expect(record.sessionReleased).toBe(false);
+	});
+});
+
 // ── Agent.run() ──────────────────────────────────────────────────────────────
 
 /** Create a complete Agent ready for run(). */

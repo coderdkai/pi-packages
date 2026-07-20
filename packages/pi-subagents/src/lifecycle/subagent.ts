@@ -120,14 +120,25 @@ export class Subagent {
 
 	subagentSession?: SubagentSession;
 
+	// Retained after releaseSession() disposes the heavy session, so outputFile
+	// (transcript pointer) survives and the resume path can tell "released" from
+	// "never had a session."
+	private _releasedOutputFile?: string;
+	private _sessionReleased = false;
+	/** True once releaseSession() has freed a live session (distinct from never having had one). */
+	get sessionReleased(): boolean { return this._sessionReleased; }
+
 	// Steer buffer — messages queued before the session is ready
 	private _pendingSteers: string[] = [];
 	/** Number of steer messages waiting to be delivered. */
 	get pendingSteerCount(): number { return this._pendingSteers.length; }
 
-	/** Path to the agent's session JSONL file, or undefined if not yet available. */
+	/**
+	 * Path to the agent's session JSONL file, or undefined if not yet available.
+	 * Falls back to the path captured at releaseSession() once the live session is gone.
+	 */
 	get outputFile(): string | undefined {
-		return this.subagentSession?.outputFile;
+		return this.subagentSession?.outputFile ?? this._releasedOutputFile;
 	}
 
 	/** The tool call ID that spawned this background agent, if any. */
@@ -449,6 +460,20 @@ export class Subagent {
 	/** Dispose the wrapped session, firing the `disposed` lifecycle event. */
 	disposeSession(): void {
 		this.subagentSession?.dispose();
+	}
+
+	/**
+	 * Release the heavy session while keeping the record: capture the transcript
+	 * pointer, dispose the session (firing `disposed`), clear it, and mark released.
+	 * A no-op once the session is gone — the retention sweep may call it repeatedly.
+	 */
+	releaseSession(): void {
+		const session = this.subagentSession;
+		if (!session) return;
+		this._releasedOutputFile = session.outputFile;
+		session.dispose();
+		this.subagentSession = undefined;
+		this._sessionReleased = true;
 	}
 
 	/** Fail a run: mark error, release listeners, best-effort workspace dispose, notify observer. */
