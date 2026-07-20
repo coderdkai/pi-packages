@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AgentTypeRegistry } from "#src/config/agent-types";
 import {
 	GetResultTool,
