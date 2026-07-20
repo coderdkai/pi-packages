@@ -88,3 +88,48 @@ The operator repeatedly pushed on the design — first on the *why* of cleanup, 
   Appropriate for a planning session — the tidy-first and pre-completion subagents belong to the later `/tdd-plan` stage.
 - **Feedback-loop gap analysis** — `rumdl check` ran before each of the two markdown commits (plan, retro), the correct incremental verification for a docs-only session; no gap.
 - **Escalation-delay / unused-tool** — no rabbit-holes or repeated-error sequences; nothing to flag.
+
+## Stage: Final Retrospective — Ship (2026-07-20T15:20:56Z)
+
+### Session summary
+
+Shipped #617 through a live GitHub Actions outage.
+The `check` job (typecheck/lint/test/fallow — all code validation) passed, but the `release-please` job failed twice on GitHub-side `503`s; I diagnosed it as infrastructure (`githubstatus.com` reported "Minor Service Outage"), held the ship safety gate (no close/merge on a `failure` conclusion), surfaced the edge case where `release-please` had actually opened PR #622 before a trailing `503`, and completed the ship cleanly on the third rerun once Actions recovered — releasing `pi-subagents@18.1.0` and closing #617.
+
+### Observations
+
+#### What went well
+
+- **Distinguished an infrastructure failure from a code failure under a red CI conclusion.**
+  The run's overall `failure` came solely from the `release-please` job; the `check` job was green.
+  Reading the job log surfaced the decisive signal — `✔ Successfully opened pull request: 622` immediately followed by `##[error] ... No server is currently available` — proving the substance succeeded and only a trailing API write `503`'d.
+  That let me verify PR #622 was well-formed and the sole open release PR, and hold the gate with confidence rather than guessing.
+- **Held the ship safety gate under a "try again" nudge.**
+  On the first rerun the run still concluded `failure`, so I stopped and reported rather than closing/merging — then presented the edge case (release PR already open, only a wrapper call failed) with explicit options instead of unilaterally overriding the `stop-on-failure` rule.
+  The operator's subsequent "GitHub reports it has restored Actions" was the external signal that made the final rerun safe.
+
+#### What caused friction (agent side)
+
+- `rabbit-hole` (mild) — on the first wave of `503`s I retried `ci_find` / `ci_watch` / `gh run view --log` roughly five times before running the `githubstatus.com` check that would have told me GitHub itself was degraded.
+  Impact: a handful of wasted retry cycles during the outage; no rework, no wrong conclusion.
+  Lesson: on repeated `503`/transient `gh` errors, check `githubstatus.com` early rather than after several retries.
+
+#### What caused friction (user side)
+
+- None.
+  The "try again" prompts were appropriate nudges during an external outage, and the "Actions restored" signal was exactly the input needed to unblock — a clean example of the operator supplying external-state context the agent cannot observe.
+
+### Diagnostic details
+
+- **Escalation-delay tracking** — the single rabbit-hole was ~5 consecutive failed CI/`gh` calls on `503` before the status-page check; under the 5-call dispatch threshold but close.
+  The fix is a cheap early `githubstatus.com` check, not a subagent dispatch — the blocker was external infrastructure, so no Explore/Plan agent or `colgrep` would have helped.
+- **Model-performance correlation** — no subagents dispatched; a ship/verification flow is mechanical.
+  Appropriate.
+- **Feedback-loop gap analysis** — pre-push `pnpm run lint` and `pnpm fallow dead-code` ran before the push (correct); CI was watched immediately after.
+  No gap.
+- **Unused-tool detection** — none applicable; the blocker was a GitHub-side outage, not a knowledge gap.
+
+### Changes made
+
+1. Appended this ship-stage Final Retrospective entry to `packages/pi-subagents/docs/retro/0617-consumption-aware-session-retention.md`.
+2. Proposed a one-sentence `AGENTS.md` note (distinguishing a `release-please`-job infra failure from a code failure; check `githubstatus.com` on repeated `503`s) — operator declined; the `stop-on-failure` ship gate already handled the outage correctly, so no doc change was warranted.
