@@ -58,3 +58,54 @@ Other notes:
 [#565]: https://github.com/gotgenes/pi-packages/issues/565
 [#599]: https://github.com/gotgenes/pi-packages/issues/599
 [#620]: https://github.com/gotgenes/pi-packages/issues/620
+
+## Stage: Final Retrospective (2026-07-20T21:00:00Z)
+
+### Session summary
+
+Shipped #600 (push → CI → close → release-please PR #623 → `pi-permission-model-judge-v1.0.0`), then handled the brand-new-package first-publish bootstrap: the CI `publish` job 404'd because npm Trusted Publishing cannot create a package that does not exist yet, so the first version was published manually.
+Afterward, set up the operator's local dogfood config (global `authorizerChain` + a model-judge `config.json`, with typo patterns refined iteratively), improved the package's config-example docs, cross-linked the package from the root `README.md` and pi-permission-system, and cut a second release (`v1.0.1` + `pi-permission-system-v20.9.1`) that published cleanly via trusted publishing.
+
+### Observations
+
+#### What went well
+
+- Novel win: the `external_directory` guard caught the agent's **own** typo path mid-session — an `Edit` to `.../pi/pi-permission-model-judge/docs/configuration.md` (dropping `pi-packages/packages/`) was denied by the guard, with the operator as terminal authorizer.
+  A live, unplanned end-to-end validation of the exact feature just built; recovered by switching to a relative path.
+- Novel win: trusted publishing worked on the **second** release (`v1.0.1`) after the manual `v1.0.0` bootstrap — confirming the first-publish-manual, then-automatic lifecycle for a new package.
+- The backreference regex `([^/]+)/packages/\1(/|$)` generically catches any doubled package segment, and a negative-lookahead pattern `development/pi/(?!pi-packages/)pi-[^/]+/` catches the dropped-prefix typo while exempting both the real repo and the sibling Pi monorepo at `~/development/pi/pi` — both verified against real paths (typo → match, correct → defer) before landing.
+- Incremental verification throughout: every local config edit was validated against the package's own zod schema (via `node --experimental-strip-types` importing `modelJudgeConfigSchema`) before use; TDD ran per-file then full suite + lint + fallow.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the brand-new-package first-publish bootstrap was unknown to both the plan and `AGENTS.md`.
+   The CI `publish` job failed on the `v1.0.0` release commit (`ERR_PNPM_AUTH_TOKEN_EXCHANGE` OIDC 404, then `PUT .../@gotgenes/pi-permission-model-judge → 404 Not Found`) because npm Trusted Publishing cannot create a package that does not exist yet.
+   The operator had to prompt "We need to manually release the first release."
+   Impact: one failed CI run plus a user-prompted manual-publish detour.
+   `AGENTS.md`'s "Publishing is automatic" claim is incomplete for a package's first release.
+2. `instruction-violation` (self-identified, but rooted in an `AGENTS.md` gap) — the `.pi/settings.json` `npm:@gotgenes/pi-permission-model-judge` disable entry, added during wiring per the plan and `AGENTS.md` step 3, broke the `pre-completion-reviewer` subagent dispatch **twice** (the launcher tried to `npm install` the unpublished package).
+   Diagnosed and reverted (commit `dfa8c4ec`).
+   Impact: two failed subagent dispatches plus one revert commit.
+   `AGENTS.md`'s "once it is in global settings" qualifier was too subtle to prevent adding the entry at package-creation time.
+3. `other` (self-recovered, no rework) — an `Edit` used a hand-typed absolute path that dropped `pi-packages/packages/`; the guard denied it and the retry used a relative path.
+   The same `Edit` also carried empty `oldText2`/`newText2` keys (an `AGENTS.md`-documented no-op), dropped on retry.
+   Impact: one retried `Edit`.
+
+#### What caused friction (user side)
+
+- The typo-pattern set was refined across four turns (missing-`/pi/` → doubled-package → drop missing-`/pi/` → add dropped-prefix).
+  Normal for personal-config tuning and dogfooding discovery; a couple of concrete real typo paths stated up front would have converged in one pass.
+  Not systemically actionable.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the `pre-completion-reviewer` subagent's first two launches failed on `npm install` (infrastructure, the disable-entry bug), not model behavior; it succeeded on the third after the entry was removed and returned PASS.
+  `tidy-first-assessor` was correctly skipped (new package, no pre-existing code).
+  No reasoning-strength mismatch.
+- **Escalation-delay tracking** — no rabbit-hole exceeded five tool calls on one error; the disable-entry failure and the publish OTP requirement were each diagnosed in one or two calls.
+- **Feedback-loop gap analysis** — verification ran incrementally (per-cycle `pnpm run check` / `vitest`, config-vs-zod validation on each edit, full suite + lint + fallow at the end); no end-only-verification gap.
+
+### Changes made
+
+1. `AGENTS.md` (Monorepo Structure, new-package wiring step 3) — the `npm:@gotgenes/<pkg>` disable entry is now added **only after the first npm publish**, with the failure mode named (Pi and the subagent launcher `npm install` a nonexistent package and fail).
+2. `AGENTS.md` (Monorepo Structure, after "Publishing is automatic") — added the brand-new-package first-publish exception: the CI `publish` job 404s on `v1.0.0` (Trusted Publishing cannot create a nonexistent package), so the first version is published manually (no `--provenance`) and the Trusted Publisher is configured before the next release.
