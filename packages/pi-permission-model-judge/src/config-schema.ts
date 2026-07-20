@@ -12,6 +12,10 @@ import { z } from "zod";
 /** Extension id — the `extensions/<id>/config.json` path segment. */
 export const MODEL_JUDGE_EXTENSION_ID = "pi-permission-model-judge";
 
+/** Canonical URL of the published config JSON Schema (the root `$id`). */
+export const MODEL_JUDGE_SCHEMA_URL =
+  "https://raw.githubusercontent.com/gotgenes/pi-packages/main/packages/pi-permission-model-judge/schemas/model-judge.schema.json";
+
 /** Default per-review model-call budget, in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 5000;
 
@@ -31,3 +35,18 @@ export const modelJudgeConfigSchema = z.object({
 });
 
 export type ModelJudgeConfig = z.infer<typeof modelJudgeConfigSchema>;
+
+/**
+ * Derive the published JSON Schema (Draft 2020-12) from the zod source, so an
+ * editor can validate `config.json` against `$schema`. Regenerate the committed
+ * file via `pnpm run gen:schema`; a parity test fails on drift.
+ */
+export function buildModelJudgeJsonSchema(): Record<string, unknown> {
+  // `io: "input"` treats defaulted fields (`typoPatterns`, `timeoutMs`) as
+  // optional — the config file is the input, and zod fills omitted defaults.
+  const { $schema, ...rest } = z.toJSONSchema(modelJudgeConfigSchema, {
+    target: "draft-2020-12",
+    io: "input",
+  });
+  return { $schema, $id: MODEL_JUDGE_SCHEMA_URL, ...rest };
+}

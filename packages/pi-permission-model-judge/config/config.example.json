@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/gotgenes/pi-packages/main/packages/pi-permission-model-judge/schemas/model-judge.schema.json",
+  "provider": "anthropic",
+  "model": "claude-haiku-4-5",
+  "instructions": "You review a filesystem path a tool is about to access outside the working directory. A typo path repeats a directory segment that should appear once — for example a path containing `pi-permission-system/packages/pi-permission-system`, where the first segment should be `pi-packages`. Deny only a clear typo, and in the reason state the wrong segment and the correct location so the caller can self-correct. When unsure, defer.",
+  "typoPatterns": [
+    "pi-permission-system/packages/pi-permission-system",
+    "pi-packages/packages/[^/]+/packages/"
+  ],
+  "timeoutMs": 5000
+}
