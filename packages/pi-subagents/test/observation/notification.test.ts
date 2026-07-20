@@ -195,20 +195,30 @@ describe("NotificationManager", () => {
     expect(args.sendMessage).toHaveBeenCalledOnce();
   });
 
-  it("sendCompletion skips nudge when the record was already consumed", () => {
+  it("every nudge carries the retrieval instruction", () => {
     const args = makeArgs();
     const system = makeManager(args);
-    system.consume(baseRecord.id);
     system.sendCompletion(baseRecord);
+    vi.advanceTimersByTime(300);
+    const content = (args.sendMessage.mock.calls[0][0] as { content: string }).content;
+    expect(content).toContain("get_subagent_result");
+  });
+
+  it("sendCompletion skips the nudge when the record is already consumed (schedule-time guard)", () => {
+    const args = makeArgs();
+    const system = makeManager(args);
+    const consumedRecord = createTestSubagent({ id: "consumed-1", consumedAt: 5000 });
+    system.sendCompletion(consumedRecord);
     vi.advanceTimersByTime(300);
     expect(args.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("consume cancels an already-scheduled nudge", () => {
+  it("suppresses a scheduled nudge when the record becomes consumed before it fires (fire-time re-check)", () => {
     const args = makeArgs();
     const system = makeManager(args);
-    system.sendCompletion(baseRecord);
-    system.consume(baseRecord.id);
+    const record = createTestSubagent({ id: "race-1" });
+    system.sendCompletion(record);
+    record.markConsumed(); // parent pulled during the hold window
     vi.advanceTimersByTime(300);
     expect(args.sendMessage).not.toHaveBeenCalled();
   });
@@ -220,17 +230,5 @@ describe("NotificationManager", () => {
     system.dispose();
     vi.advanceTimersByTime(300);
     expect(args.sendMessage).not.toHaveBeenCalled();
-  });
-
-  it("dispose clears consumed state", () => {
-    const args = makeArgs();
-    const system = makeManager(args);
-    system.consume(baseRecord.id);
-    system.dispose();
-    // After dispose, a fresh sendCompletion for the same id is no longer
-    // suppressed — consumed state does not leak across sessions.
-    system.sendCompletion(baseRecord);
-    vi.advanceTimersByTime(300);
-    expect(args.sendMessage).toHaveBeenCalledOnce();
   });
 });

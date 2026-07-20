@@ -151,7 +151,7 @@ export default function (pi: ExtensionAPI) {
 
   // ---- get_subagent_result tool ----
 
-  pi.registerTool(new GetResultTool(manager, notifications, registry).toToolDefinition());
+  pi.registerTool(new GetResultTool(manager, registry).toToolDefinition());
 
   // ---- steer_subagent tool ----
 

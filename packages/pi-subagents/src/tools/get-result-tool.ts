@@ -12,16 +12,11 @@ export interface GetResultToolManager {
 	getRecord(id: string): Subagent | undefined;
 }
 
-export interface GetResultToolNotifications {
-	consume(id: string): void;
-}
-
 // ---- Class ----
 
 export class GetResultTool {
 	constructor(
 		private readonly manager: GetResultToolManager,
-		private readonly notifications: GetResultToolNotifications,
 		private readonly registry: AgentConfigLookup,
 	) {}
 
@@ -38,17 +33,15 @@ export class GetResultTool {
 		}
 
 		// Wait for completion if requested.
-		// Consume BEFORE awaiting: onComplete fires inside .then() (attached
-		// earlier at spawn time) and always runs before this await resumes.
-		// Consuming here prevents a redundant follow-up notification.
 		if (params.wait && record.status === "running" && record.promise) {
-			this.notifications.consume(params.agent_id);
 			await record.promise;
 		}
 
-		// Consume the settled result — suppresses the completion notification.
+		// Pull-delivery edge: the parent is collecting the settled outcome here, so
+		// mark it consumed. The completion nudge scheduled by onSubagentCompleted
+		// re-reads record.consumed at fire time and suppresses itself.
 		if (record.status !== "running" && record.status !== "queued") {
-			this.notifications.consume(params.agent_id);
+			record.markConsumed();
 		}
 
 		return textResult(formatAgentReport(this.buildReport(record, params.verbose)));

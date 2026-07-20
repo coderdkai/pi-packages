@@ -64,7 +64,8 @@ export class SubagentEventsObserver implements SubagentManagerObserver {
 			completedAt: record.completedAt,
 		});
 
-		// The manager decides whether to nudge (it owns the consumed-result state).
+		// Announce completion. The nudge suppresses itself if the record is already
+		// consumed — consumption is domain state on the record, not owned here.
 		this.notifications.sendCompletion(record);
 	}
 

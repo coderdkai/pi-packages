@@ -35,6 +35,8 @@ export interface TestSubagentOptions {
 	error?: string;
 	startedAt?: number;
 	completedAt?: number;
+	/** Seed the consumed-outcome timestamp (undefined = obligation open). */
+	consumedAt?: number;
 	/** Seed toolUses. */
 	toolUses?: number;
 	/** Seed lifetimeUsage. */

@@ -86,8 +86,8 @@ function arrangeQueuedPair() {
  * Arrange a manager whose onSubagentCompleted observer forwards to a real
  * NotificationManager (mirroring SubagentEventsObserver's unconditional
  * sendCompletion delegation), with one background agent spawned via a tool
- * call. The act (when consume() is called relative to awaiting) stays in
- * each test.
+ * call. The act (when the record is marked consumed relative to awaiting)
+ * stays in each test.
  */
 function seedNotificationScenario() {
   const sendMessage = vi.fn();
@@ -112,31 +112,31 @@ describe("SubagentManager — Bug 1 race condition (consumed state vs onComplete
     vi.useRealTimers();
   });
 
-  it("consume() called after awaiting still suppresses the nudge — the atomic consume() operation", async () => {
+  it("marking consumed after awaiting still suppresses the nudge (fire-time re-check)", async () => {
     const seeded = seedNotificationScenario();
     manager = seeded.manager;
-    const { record, notifications, sendMessage } = seeded;
+    const { record, sendMessage } = seeded;
 
     // onSubagentCompleted already scheduled the nudge by the time this await
     // resumes (it fires synchronously inside record.promise's resolution
-    // chain, as the original Bug 1 comment noted). consume() still cancels
-    // it because it always cancels the pending timer as part of one atomic
-    // tell — unlike the old markConsumed()-only flag, which needed a
-    // separately paired cancelNudge() call to actually kill the timer.
+    // chain). The parent pulls the result (markConsumed) during the nudge's
+    // hold window; the notification manager re-reads record.consumed at fire
+    // time and skips the nudge — no separate cancel call needed.
     await record.promise;
-    notifications.consume(record.id);
+    record.markConsumed();
 
     await vi.advanceTimersByTimeAsync(300);
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it("fix: nudge is suppressed when consume() is called before await", async () => {
+  it("marking consumed before await suppresses the nudge (schedule-time guard)", async () => {
     const seeded = seedNotificationScenario();
     manager = seeded.manager;
-    const { record, notifications, sendMessage } = seeded;
+    const { record, sendMessage } = seeded;
 
-    // The fix: consume BEFORE awaiting
-    notifications.consume(record.id);
+    // The parent already holds the result: sendCompletion sees record.consumed
+    // at schedule time and never arms the timer.
+    record.markConsumed();
     await record.promise;
 
     await vi.advanceTimersByTimeAsync(300);
