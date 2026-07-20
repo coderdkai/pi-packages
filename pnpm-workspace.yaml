@@ -42,3 +42,4 @@ minimumReleaseAgeExclude:
   - '@fallow-cli/win32-x64-msvc@3.2.0'
   - fallow@3.2.0
   - '@gotgenes/pi-subagents@16.4.0'
+  - '@gotgenes/pi-permission-system@20.9.0'
