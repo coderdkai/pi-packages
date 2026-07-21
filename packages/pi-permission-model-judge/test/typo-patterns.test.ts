@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { compileTypoPatterns, matchesAnyTypoPattern } from "#src/typo-patterns";
+import {
+  compileTypoPatterns,
+  matchesAnyTypoPattern,
+  matchTypoPattern,
+} from "#src/typo-patterns";
 
 describe("compileTypoPatterns", () => {
   it("compiles valid patterns and reports none invalid", () => {
@@ -52,5 +56,35 @@ describe("matchesAnyTypoPattern", () => {
     const path = "/a/segment/b";
     expect(matchesAnyTypoPattern(path, compiled)).toBe(true);
     expect(matchesAnyTypoPattern(path, compiled)).toBe(true);
+  });
+});
+
+describe("matchTypoPattern", () => {
+  it("returns the source of the matching pattern", () => {
+    const compiled = compileTypoPatterns([
+      "pi-permission-system/packages/pi-permission-system",
+    ]);
+    const path =
+      "/home/x/pi-permission-system/packages/pi-permission-system/src/a.ts";
+    expect(matchTypoPattern(path, compiled)).toBe(
+      "pi-permission-system/packages/pi-permission-system",
+    );
+  });
+
+  it("returns the first matching pattern's source when several match", () => {
+    const compiled = compileTypoPatterns(["first", "second"]);
+    expect(matchTypoPattern("/a/first/second/b", compiled)).toBe("first");
+  });
+
+  it("returns undefined when no pattern matches", () => {
+    const compiled = compileTypoPatterns(["doubled/doubled"]);
+    expect(
+      matchTypoPattern("/home/x/pi-packages/src/a.ts", compiled),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when there are no patterns", () => {
+    const compiled = compileTypoPatterns([]);
+    expect(matchTypoPattern("/anything", compiled)).toBeUndefined();
   });
 });

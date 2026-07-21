@@ -7,9 +7,16 @@
  * without a model call.
  */
 
-/** Result of compiling a pattern list: usable regexes plus any that failed. */
+/**
+ * Result of compiling a pattern list: usable regexes (with their original
+ * source strings, parallel to `regexes`) plus any that failed to compile.
+ * `patterns[i]` is the operator's literal config string for `regexes[i]`, kept
+ * so the decision trail records the pattern as written, not the slash-escaped
+ * `RegExp.source`.
+ */
 export interface CompiledTypoPatterns {
   regexes: RegExp[];
+  patterns: string[];
   invalidPatterns: string[];
 }
 
@@ -22,15 +29,30 @@ export function compileTypoPatterns(
   patterns: readonly string[],
 ): CompiledTypoPatterns {
   const regexes: RegExp[] = [];
+  const sources: string[] = [];
   const invalidPatterns: string[] = [];
   for (const pattern of patterns) {
     try {
       regexes.push(new RegExp(pattern));
+      sources.push(pattern);
     } catch {
       invalidPatterns.push(pattern);
     }
   }
-  return { regexes, invalidPatterns };
+  return { regexes, patterns: sources, invalidPatterns };
+}
+
+/**
+ * The source string of the first compiled pattern that matches `path`, or
+ * `undefined` if none do. The source (not the boolean) so the decision trail
+ * can record *which* pattern matched.
+ */
+export function matchTypoPattern(
+  path: string,
+  compiled: CompiledTypoPatterns,
+): string | undefined {
+  const index = compiled.regexes.findIndex((regex) => regex.test(path));
+  return index === -1 ? undefined : compiled.patterns[index];
 }
 
 /** Whether any compiled pattern matches `path`. */
@@ -38,5 +60,5 @@ export function matchesAnyTypoPattern(
   path: string,
   compiled: CompiledTypoPatterns,
 ): boolean {
-  return compiled.regexes.some((regex) => regex.test(path));
+  return matchTypoPattern(path, compiled) !== undefined;
 }
