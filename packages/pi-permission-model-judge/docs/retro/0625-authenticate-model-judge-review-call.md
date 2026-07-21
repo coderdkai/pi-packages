@@ -46,3 +46,29 @@ Test count went from 37 to 40 (+3) in the package; full suite, `check`, `lint`, 
 - Pre-completion reviewer: PASS — all deterministic checks green, no design/doc/test-artifact concerns.
 - Not yet done (manual verification the operator requested): a live OAuth dogfood confirming a real typo path now reaches a `deny` before the human.
   Deterministic unit coverage is complete; the manual note is confirmation, not the gate.
+
+## Stage: Dogfood verification — blocked on #626 (2026-07-21T01:05:00Z)
+
+### Session summary
+
+Attempted the live-OAuth dogfood after restarting the Pi session (which reloads the extension from `./src/index.ts` — no `dist/`, so the fixed source is active).
+The attempt was **inconclusive**: a candidate path that matches a `typoPattern` still deferred to the human, and the judge records nothing, so we cannot tell whether the auth fix works, the model returned `defer`, or the 401 persists.
+Decision (operator): **hold #625 unshipped on `main`**, plan+build **#626** (model-judge observability) first, then use its decision trail to verify #625 before shipping either.
+
+### Observations
+
+- **Bash asks cannot trigger the judge.**
+  The `pi-permission-system` review log shows `bash` requests arrive with `"path":null` — the external path lives only in `command`/`accessIntent.matchValues`, but the judge's `pathOf(details)` reads `details.path ?? details.value`.
+  So a `cat <typo-path>` defers before pattern-matching ever runs.
+  Only file tools (`read`/`edit`/`write`) populate `details.path`; use those to trigger the judge.
+- **A matching file `read` still deferred.**
+  The doubled-package path `/Users/chris/development/pi/pi-permission-system/packages/pi-permission-system/src/handlers/gates/bash-command.ts` (matches pattern 1) went straight to `permission_request.waiting` → human-approved, with no judge `denied` event.
+  It should have reached the model.
+- **Why it deferred is unknowable from outside** — this is exactly #626's thesis.
+  A 401 is swallowed silently by `reviewPath`'s `try/catch` → `defer`; auth-success-model-said-defer and auth-fail-401-throw are indistinguishable.
+  `console.warn` (the package's only sink) is not persisted — zero model-judge entries in any `~/.pi/agent/**/logs/*.jsonl`.
+- **Operator config drift:** the live global `pi-permission-model-judge/config.json` still carries the OLD buggy dropped-prefix pattern `development/pi/(?!pi-packages/)pi-[^/]+/` (bare trailing `/`), not the corrected `(/|$)` shipped in this issue's example config.
+  Update the operator config (and reload) before dogfooding the dropped-prefix case.
+- **#626 design fork to settle in its `/plan-issue`:** (1) route through the `pi-permission-system` review log via a new cross-extension logging seam injected into `Authorizer`s (single audit trail, **cross-package**), vs (2) the judge writes its own JSONL under its config dir (self-contained, **single-package**).
+  Operator leans (1); issue flags it as "worth deciding as part of this."
+- **Verification recipe for when #626 lands:** trigger via a file tool on a doubled-package path, read the new decision trail, and confirm the entry shows model-called → `deny` (not a defer-reason of `auth-failed`/`model-unresolved`).
