@@ -72,3 +72,25 @@ Decision (operator): **hold #625 unshipped on `main`**, plan+build **#626** (mod
 - **#626 design fork to settle in its `/plan-issue`:** (1) route through the `pi-permission-system` review log via a new cross-extension logging seam injected into `Authorizer`s (single audit trail, **cross-package**), vs (2) the judge writes its own JSONL under its config dir (self-contained, **single-package**).
   Operator leans (1); issue flags it as "worth deciding as part of this."
 - **Verification recipe for when #626 lands:** trigger via a file tool on a doubled-package path, read the new decision trail, and confirm the entry shows model-called → `deny` (not a defer-reason of `auth-failed`/`model-unresolved`).
+
+## Stage: Dogfood verification — CONFIRMED via #626 trail (2026-07-21T23:25:00Z)
+
+### Session summary
+
+Ran the verification after #626 landed and the Pi session was restarted (twice — the running session must reload to pick up new `./src/index.ts` code).
+Triggered the judge via a `read` on a doubled-package typo path; the new `model_judge.decision` review entry recorded `modelCalled: true`, `latencyMs: 1426`, no `auth-failed`.
+**#625's auth fix is confirmed working end to end** — the model is now reached authenticated under OAuth, closing the silent-100%-defer bug.
+
+### Observations
+
+- Decision-trail entry (ground truth):
+  `{"event":"model_judge.decision","path":".../pi-permission-system/packages/pi-permission-system/src/handlers/gates/bash-command.ts","matchedPattern":"([^/]+)/packages/\\1(/|$)","modelCalled":true,"modelId":"anthropic/claude-haiku-4-5","latencyMs":1426,"verdict":"defer","deferReason":"parse-failed"}`.
+- A **separate** defect surfaced immediately: `deferReason: "parse-failed"`.
+  The model replied but `reviewPath`'s `JSON.parse` threw — the reply was not strict JSON (likely a Markdown code fence or prose preamble around the object; debug log was off so the literal bytes were not captured).
+  Distinct root cause from #625 (reply-format robustness, not auth).
+- Filed as **#628** — "reaches the model but defers on `parse-failed` — force a structured tool call."
+  Operator's chosen fix direction: force a single verdict tool via `toolChoice: "any"` and read `ToolCall.arguments` directly, rather than parse free text.
+  SDK feasibility confirmed: Anthropic provider honors `toolChoice`; `convertTools` reads only `parameters.properties`/`required` (plain JSON-Schema, no `typebox`); `toolChoice: "any"` avoids the OAuth `toClaudeCodeName` name-rewrite mismatch.
+- This is also a clean validation of #626: the auth fix's success **and** the next defect both showed up in one log line, instead of an SDK spelunk.
+- Ship decision: **#625 ships now, batched with #626 in this release** (both committed on `main`, unpushed).
+  #628 is future work for a later release.
