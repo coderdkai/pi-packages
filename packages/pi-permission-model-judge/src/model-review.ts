@@ -28,12 +28,26 @@ export const GENERIC_TEACHING_REASON =
 export type CompleteFn = (
   model: Model<any>,
   context: Context,
-  options?: { signal?: AbortSignal },
+  options?: {
+    signal?: AbortSignal;
+    apiKey?: string;
+    headers?: Record<string, string>;
+  },
 ) => Promise<AssistantMessage>;
+
+/**
+ * The auth resolved for a model call — structurally the `ResolvedRequestAuth`
+ * of the core `ModelRegistry`, redeclared here because that type is not
+ * re-exported from `@earendil-works/pi-coding-agent`.
+ */
+export type ResolvedRequestAuth =
+  | { ok: true; apiKey?: string; headers?: Record<string, string> }
+  | { ok: false; error: string };
 
 /** The narrow model-registry projection the reviewer needs (ISP). */
 export interface ModelRegistryLike {
   find(provider: string, modelId: string): Model<any> | undefined;
+  getApiKeyAndHeaders(model: Model<any>): Promise<ResolvedRequestAuth>;
 }
 
 /** Inputs for a single path review. */
@@ -42,6 +56,8 @@ export interface ReviewPathInputs {
   config: ModelJudgeConfig;
   model: Model<any>;
   complete: CompleteFn;
+  apiKey?: string;
+  headers?: Record<string, string>;
 }
 
 /**
@@ -70,6 +86,8 @@ export async function reviewPath(
     };
     const reply = await inputs.complete(inputs.model, context, {
       signal: controller.signal,
+      apiKey: inputs.apiKey,
+      headers: inputs.headers,
     });
     return parseVerdict(reply);
   } catch {

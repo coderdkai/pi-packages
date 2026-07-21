@@ -54,7 +54,14 @@ function makeDetails(
 }
 
 function makeRegistry(model: Model<any> | undefined): ModelRegistryLike {
-  return { find: vi.fn(() => model) };
+  return {
+    find: vi.fn(() => model),
+    getApiKeyAndHeaders: vi.fn(async () => ({
+      ok: true as const,
+      apiKey: "sk-test",
+      headers: {},
+    })),
+  };
 }
 
 function denyingComplete(): CompleteFn {

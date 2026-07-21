@@ -142,6 +142,32 @@ describe("reviewPath", () => {
     expect(firstMessage.content).toContain("/x/doubled/doubled/a.ts");
   });
 
+  it("forwards the resolved apiKey and headers into the completion", async () => {
+    const complete = completeReturning(JSON.stringify({ verdict: "defer" }));
+    await reviewPath({
+      path: "/x/a.ts",
+      config: CONFIG,
+      model: MODEL,
+      complete,
+      apiKey: "sk-test-123",
+      headers: { "x-custom": "1" },
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    const [, , options] = (complete as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [
+      unknown,
+      unknown,
+      {
+        signal?: AbortSignal;
+        apiKey?: string;
+        headers?: Record<string, string>;
+      },
+    ];
+    expect(options.apiKey).toBe("sk-test-123");
+    expect(options.headers).toEqual({ "x-custom": "1" });
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("aborts the model call after timeoutMs and defers", async () => {
     vi.useFakeTimers();
     const complete: CompleteFn = vi.fn(
