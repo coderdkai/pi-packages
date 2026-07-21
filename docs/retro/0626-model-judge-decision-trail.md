@@ -76,3 +76,26 @@ The judge now consumes the injected `AuthorizerLog`: `reviewPath` returns a stru
 - Pre-completion reviewer: **PASS** (Phase 2 scope).
   One non-blocking note: `deferWith` and the final `log.review` share ~9 fields; a `recordDecision` helper could DRY them — left as-is to keep scope tight (a future tidy).
 - **Not yet done (ship blockers):** (1) **hold the CI push until 20.10.0 ages out** (~2026-07-22T13:15Z UTC) so CI's frozen install does not hit the release-age gate; (2) drop the uncommitted `minimumReleaseAge: 0` override before/at push; (3) run the [#625] dogfood verification recipe against the new trail, then ship #625 and close #626 together.
+  (Blockers 1–2 were resolved later in the same session — see the Release-age gate stage below.)
+
+## Stage: Release-age gate resolution (2026-07-21T18:20:00Z)
+
+### Session summary
+
+Replaced the fragile `minimumReleaseAge: 0` local override with a committed, correct fix so CI and local hooks install the same-day-published `@gotgenes/pi-permission-system@20.10.0` without waiting ~24h.
+Committed `trustLockfile: true` to `pnpm-workspace.yaml` and removed the ineffective version-specific `@gotgenes/*` `minimumReleaseAgeExclude` entries.
+The "hold the push until age-out" and "drop the override" blockers above are now moot; only the [#625] dogfood verification remains before shipping.
+
+### Observations
+
+- **Root cause pinned to the lockfile verification pass.**
+  The `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` comes from pnpm's supply-chain *verification* pass (the `trustLockfile` pass), which re-applies `minimumReleaseAge` to every **pinned lockfile entry** — distinct from dependency *resolution*.
+- **`minimumReleaseAgeExclude` does not cover that pass.**
+  Verified empirically: `@gotgenes/pi-permission-system@20.10.0` was in the exclude list (valid version-specific format per the pnpm docs) yet still flagged.
+  So the repo's version-specific `@gotgenes/*` excludes were no-ops for the CI/hook failure they appeared to target — removed them.
+- **`trustLockfile: true` is the correct lever** (operator-approved).
+  It trusts the committed, PR-reviewed lockfile and skips re-verifying pinned entries, while keeping the age delay for fresh `pnpm add`/`update`.
+  Confirmed it fixes both CI's `--frozen-lockfile` install and the local `pnpm exec` hook path; the follow-up commit ran **with hooks enabled** (no `--no-verify`), validating the fix end-to-end.
+- **Earlier Phase 2 commits keep their `--no-verify`** (they predate this fix); every commit from `4b06f8cd` onward can use the normal hook path.
+- **Push is no longer time-gated** — `/ship-issue` can push immediately; CI will install 20.10.0 cleanly.
+- Consider reporting the `minimumReleaseAgeExclude`-not-honored-by-verification-pass gap upstream to pnpm (a version-specific exclude that resolution honors but the lockfile verification pass ignores is surprising).
