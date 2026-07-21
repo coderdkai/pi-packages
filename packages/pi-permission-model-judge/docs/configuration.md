@@ -59,14 +59,23 @@ Only a path that matches at least one pattern is sent to the model — this is t
 An invalid regular expression is skipped with a warning.
 An empty list (the default) matches nothing, so the reviewer defers everything.
 
-The canonical typo is a **doubled package segment** — a package name repeated around `packages/`, e.g. `pi-permission-system/packages/pi-permission-system/…`.
-A backreference matches this for *any* package name in one pattern:
+Two typo shapes are worth featuring, each as its own pattern:
 
 ```json
-"typoPatterns": ["([^/]+)/packages/\\1(/|$)"]
+"typoPatterns": [
+  "([^/]+)/packages/\\1(/|$)",
+  "development/pi/(?!pi-packages/)pi-[^/]+(/|$)"
+]
 ```
 
+The first catches a **doubled package segment** — a package name repeated around `packages/`, e.g. `pi-permission-system/packages/pi-permission-system/…`.
 The `\1` backreference requires the segment before and after `packages/` to be identical, so it catches `<name>/packages/<name>` for every `<name>` while leaving a correct `packages/<name>/…` path untouched. (In JSON the backslash is doubled — `\\1` — so the parsed string is the regex `\1`.)
+
+The second catches a **dropped repository prefix** — a path that jumps straight to a package directory (`development/pi/pi-permission-system/…`) instead of routing through the repo's `pi-packages/packages/` directory.
+The negative lookahead `(?!pi-packages/)` exempts the correct `pi-packages` path, and `pi-[^/]+` requires a package segment after `pi-` so the sibling monorepo at `~/development/pi/pi` is left alone.
+
+Both patterns anchor the segment with `(/|$)`, not a bare trailing `/`, so a path that *ends* at the offending segment (`…/pi-permission-system`) still matches.
+Adjust the `development/pi/…` prefix to wherever your checkouts live.
 
 ### `timeoutMs`
 

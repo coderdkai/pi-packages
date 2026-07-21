@@ -73,7 +73,7 @@ Afterward, set up the operator's local dogfood config (global `authorizerChain` 
 - Novel win: the `external_directory` guard caught the agent's **own** typo path mid-session — an `Edit` to `.../pi/pi-permission-model-judge/docs/configuration.md` (dropping `pi-packages/packages/`) was denied by the guard, with the operator as terminal authorizer.
   A live, unplanned end-to-end validation of the exact feature just built; recovered by switching to a relative path.
 - Novel win: trusted publishing worked on the **second** release (`v1.0.1`) after the manual `v1.0.0` bootstrap — confirming the first-publish-manual, then-automatic lifecycle for a new package.
-- The backreference regex `([^/]+)/packages/\1(/|$)` generically catches any doubled package segment, and a negative-lookahead pattern `development/pi/(?!pi-packages/)pi-[^/]+/` catches the dropped-prefix typo while exempting both the real repo and the sibling Pi monorepo at `~/development/pi/pi` — both verified against real paths (typo → match, correct → defer) before landing.
+- The backreference regex `([^/]+)/packages/\1(/|$)` generically catches any doubled package segment, and a negative-lookahead pattern `development/pi/(?!pi-packages/)pi-[^/]+(/|$)` catches the dropped-prefix typo while exempting both the real repo and the sibling Pi monorepo at `~/development/pi/pi` — both verified against real paths (typo → match, correct → defer) before landing.
 - Incremental verification throughout: every local config edit was validated against the package's own zod schema (via `node --experimental-strip-types` importing `modelJudgeConfigSchema`) before use; TDD ran per-file then full suite + lint + fallow.
 
 #### What caused friction (agent side)

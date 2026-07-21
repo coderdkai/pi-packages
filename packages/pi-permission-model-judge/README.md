@@ -49,9 +49,12 @@ Two independent config files are involved — the safety policy lives in pi-perm
    {
      "provider": "anthropic",
      "model": "claude-haiku-4-5",
-     "instructions": "Deny a path that repeats a package name around `packages/`…",
-     // Catches a doubled package segment (`<name>/packages/<name>/…`) for any package.
-     "typoPatterns": ["([^/]+)/packages/\\1(/|$)"]
+     "instructions": "Deny a path that repeats a package name around `packages/`, or drops the repo's `pi-packages/packages/` prefix…",
+     // Catches a doubled package segment and a dropped repository prefix.
+     "typoPatterns": [
+       "([^/]+)/packages/\\1(/|$)",
+       "development/pi/(?!pi-packages/)pi-[^/]+(/|$)"
+     ]
    }
    ```
 
