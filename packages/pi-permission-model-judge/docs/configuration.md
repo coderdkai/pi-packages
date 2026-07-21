@@ -44,7 +44,7 @@ The link decides nothing until you name it in `authorizerChain` (opt-in activati
 ### `provider` and `model`
 
 The reviewer resolves `provider` / `model` against the session's model registry at review time.
-If the model does not resolve (wrong id, no credentials), the reviewer logs a warning and defers — it never blocks an ask because the judge is misconfigured.
+If the model does not resolve (wrong id, no credentials), the reviewer records a `model-unresolved` decision entry and defers — it never blocks an ask because the judge is misconfigured.
 
 ### `instructions`
 
@@ -56,7 +56,7 @@ The reviewer expects the model to answer with strict JSON — `{"verdict":"deny"
 
 Each string is compiled with `new RegExp(pattern)` (no flags) and tested against the candidate path.
 Only a path that matches at least one pattern is sent to the model — this is the cost gate that keeps the reviewer from calling the model on every ask.
-An invalid regular expression is skipped with a warning.
+An invalid regular expression is skipped and recorded in the debug log (`model_judge.invalid_patterns`).
 An empty list (the default) matches nothing, so the reviewer defers everything.
 
 Two typo shapes are worth featuring, each as its own pattern:
@@ -92,3 +92,27 @@ Every uncertain outcome defers, which sends the ask to the normal permission pro
 - an unresolved model, a timeout, an unparseable reply, or an unsure verdict.
 
 Deferring never grants access — this extension emits no `allow` verdict.
+
+## The decision trail
+
+The reviewer records what it did to pi-permission-system's shared logs, keyed by `requestId` so an entry joins to the `permission_request.*` lines for the same ask.
+This closes the observability gap that let an auth failure defer every path undetected: a silent defer is now a recorded defer with a reason.
+
+The **review** log (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`, on by default via pi-permission-system's `permissionReviewLog`) carries one `model_judge.decision` entry per **pattern-matched** ask — the case that should reach the model:
+
+| Field            | Meaning                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `requestId`      | The ask id, shared with the `permission_request.*` entries.                                                                  |
+| `surface`        | Always `external_directory` (the only reviewed surface).                                                                     |
+| `path`           | The candidate path reviewed.                                                                                                 |
+| `matchedPattern` | The `typoPatterns` entry, as written, that matched.                                                                          |
+| `modelCalled`    | `false` for a `model-unresolved` / `auth-failed` defer.                                                                      |
+| `modelId`        | `<provider>/<model>`.                                                                                                        |
+| `latencyMs`      | Model-call wall-clock in milliseconds, or `null` when no call was made.                                                      |
+| `verdict`        | `"deny"` or `"defer"`.                                                                                                       |
+| `deferReason`    | `null` on a deny, else `model-unresolved` / `auth-failed` / `parse-failed` / `non-deny-verdict` / `timeout` / `call-failed`. |
+
+The **debug** log (same directory, `pi-permission-system-debug.jsonl`, only when pi-permission-system's `debugLog` is on) carries the verbose and cheap-path detail: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer before the model stage), `model_judge.model_reply` (the model's raw reply text), and `model_judge.invalid_patterns` (skipped `typoPatterns`).
+A non-`external_directory` ask is not logged at all.
+
+To diagnose "the judge defers everything," read the review log for `model_judge.decision` entries and inspect `deferReason`: an empty result means no ask ever matched a pattern, `auth-failed` / `model-unresolved` means it is misconfigured, and `non-deny-verdict` means the model saw the path and chose not to deny.

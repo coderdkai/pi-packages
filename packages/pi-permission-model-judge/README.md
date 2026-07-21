@@ -23,6 +23,29 @@ The reviewer runs a short, cheap decision on each ask and defers at the first mi
 It is fail-safe by construction: a missing model, invalid config, model timeout, unparseable reply, or an unsure verdict all resolve to `defer`.
 Deferring means the ask falls through to the normal permission prompt — this extension only ever *removes* a hand-denial, never grants access (it emits no `allow`).
 
+## What it records
+
+Every review the link performs leaves a trail in pi-permission-system's shared review log (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`), so you can answer "did the judge run, did it reach the model, and why did it defer?"
+without guesswork.
+
+Once an ask matches a `typoPattern` — the case that *should* reach the model — the link writes one `model_judge.decision` entry recording the outcome:
+
+| Field            | Meaning                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `requestId`      | Joins to the `permission_request.*` entries for the same ask.                                                                       |
+| `path`           | The candidate path reviewed.                                                                                                        |
+| `matchedPattern` | The `typoPatterns` entry (as you wrote it) that matched.                                                                            |
+| `modelCalled`    | `false` when the model or its auth did not resolve.                                                                                 |
+| `modelId`        | `<provider>/<model>`.                                                                                                               |
+| `latencyMs`      | Model-call wall-clock in ms, or `null` when no call was made.                                                                       |
+| `verdict`        | `"deny"` or `"defer"`.                                                                                                              |
+| `deferReason`    | `null` on a deny, else one of `model-unresolved` / `auth-failed` / `parse-failed` / `non-deny-verdict` / `timeout` / `call-failed`. |
+
+Cheaper events go to pi-permission-system's **debug** log, and only when its `debugLog` toggle is on: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer) and `model_judge.model_reply` (the model's raw reply text).
+A non-`external_directory` ask is not logged — it is not this link's concern.
+
+Because every pattern-matched ask leaves a positive record, a misconfiguration that silently defers every path (an auth failure, an unresolved model) shows up as a run of `deferReason` entries rather than an empty log.
+
 ## Install
 
 ```bash
