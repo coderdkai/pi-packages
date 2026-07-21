@@ -99,3 +99,52 @@ The "hold the push until age-out" and "drop the override" blockers above are now
 - **Earlier Phase 2 commits keep their `--no-verify`** (they predate this fix); every commit from `4b06f8cd` onward can use the normal hook path.
 - **Push is no longer time-gated** — `/ship-issue` can push immediately; CI will install 20.10.0 cleanly.
 - Consider reporting the `minimumReleaseAgeExclude`-not-honored-by-verification-pass gap upstream to pnpm (a version-specific exclude that resolution honors but the lockfile verification pass ignores is surprising).
+
+## Stage: Final Retrospective (2026-07-21T19:14:48Z)
+
+### Session summary
+
+Cross-session retro spanning the whole #626 arc: Planning, TDD Phase 1 (the `AuthorizerLog` seam in pi-permission-system), TDD Phase 2 (the judge consumer), and the release-age gate deep-dive.
+The dominant theme across stages was a single external tool gate — pnpm's 24h `minimumReleaseAge` supply-chain delay on the same-day-published `@gotgenes/pi-permission-system@20.10.0` — which drove most of the Phase 2 mechanical complexity and was only correctly root-caused (to the lockfile verification pass, fixed with `trustLockfile: true`) after a user challenge prompted reading the authoritative pnpm docs.
+The core deliverable (a positive, structured decision trail closing the [#625]-class "silent defer" gap) landed cleanly across 8 commits with all gates green.
+
+### Observations
+
+#### What went well
+
+- **User challenge → doc-reading → root cause** (the standout win).
+  The operator's skepticism ("why specific versions?
+  that doesn't make sense") broke a multi-approach bypass hunt: it prompted `fetch_content` on the pnpm settings docs, which cleanly separated dependency *resolution* (honors `minimumReleaseAgeExclude`) from the lockfile *verification pass* (ignores it, governed by `trustLockfile`).
+  That distinction surfaced the correct, more-targeted lever (`trustLockfile: true`) over the blunt `minimumReleaseAge: 0`, and retired an entire fragile workaround (the staged-vs-working override dance + `--no-verify` cascade).
+- **Empirical validation before committing the fix.**
+  Each hypothesis was tested in isolation — `--config.trustLockfile=true` against both CI's `--frozen-lockfile` install and the local `pnpm exec` hook path — then the fix commit ran **with hooks enabled**, validating end-to-end rather than trusting the flag.
+- **Tidy-First fixture paid off** (Phase 1): the `makeAuthorizerLog()` extraction turned a ~16-call-site signature widening into mechanical one-line `, log` appends.
+- **`ask_user` gates were well-placed** at both consequential forks: the Planning design fork (shared log vs own JSONL) and the security-posture decision (`trustLockfile` vs `minimumReleaseAge: 0` vs CI-scoped), each surfacing the trade-off for the operator instead of a unilateral pick.
+
+#### What caused friction (agent side)
+
+- `missing-context` (cross-session, prior branch) — the release-age gate was attacked with empirical trial-and-error (`.npmrc`, env vars, `verifyDepsBeforeRun`, `minimumReleaseAgeExclude` variants) **before** consulting pnpm's own settings documentation, and reached a wrong conclusion: that the gate could only be beaten by waiting ~24h or an uncommitted override, and that a version-specific exclude entry (committed as a no-op) helped.
+  Impact: a whole `--no-verify` + staged-vs-working-override workaround was built and recorded as "ship blockers" in the Phase 2 stage notes, then dismantled once the docs revealed `trustLockfile`.
+  Net: significant avoidable mechanical complexity and one round of incorrect stage-note guidance, corrected within this session.
+- `rabbit-hole` (cross-session) — the same gate: the prior session cycled through four-plus bypass mechanisms on the same `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` error without stepping back to the source of truth.
+  Impact: the correct fix (`trustLockfile: true`) is a single committed line; reaching it took a user nudge rather than an earlier escalation to the docs.
+
+#### What caused friction (user side)
+
+- The `trustLockfile` resolution hinged entirely on the operator's mid-session challenge.
+  Framed as opportunity, not criticism: the same redirect ("have you read the tool's config docs for this gate?") is the kind of cue the agent should have generated itself after 3–4 failed bypass attempts on one error — the intervention was strategic, and it landed because the operator questioned an assumption ("the exclude list is doing something") the agent had accepted.
+
+### Diagnostic details
+
+- **Model-performance correlation** — subagent dispatches were all read-only/review tasks (`tidy-first-assessor` in Phase 1; `pre-completion-reviewer` in Phases 1 and 2) on their configured default models; no judgment-heavy work ran on a reasoning-weak model, no mismatch.
+  The one research call (`fetch_content` on the pnpm docs, Gemini-backed) was appropriately scoped to authoritative-doc extraction.
+- **Escalation-delay tracking** — the release-age rabbit-hole exceeded the 5-consecutive-calls threshold on one error **in the prior session**; in this session, once the assumption was questioned, resolution took a handful of targeted calls (`fetch_content` → `pnpm config` → two empirical tests → `ask_user`).
+  The lesson is cross-session: escalate to the tool's docs after ~3 failed bypass attempts on the same gate.
+- **Unused-tool detection** — `web_search`/`fetch_content` (and the `librarian` skill) were available throughout but not used on the pnpm gate until this session; reading `https://pnpm.io/settings` earlier would have pre-empted the entire trial-and-error arc.
+- **Feedback-loop gap analysis** — no gap: Phase 2 ran `check`/`lint`/`test`/`fallow` incrementally after each TDD step, and the release-age fix was validated (frozen install + hook path) before and at commit time.
+
+### Changes made
+
+1. `AGENTS.md` (Monorepo Structure section) — added a note documenting the same-day-sibling `minimumReleaseAge` gate, that `minimumReleaseAgeExclude` does not fix it, and that the repo relies on `trustLockfile: true` (do not remove it; do not use `minimumReleaseAge: 0`).
+   Refs #626.
+2. `docs/retro/0626-model-judge-decision-trail.md` — added this Final Retrospective stage entry.
