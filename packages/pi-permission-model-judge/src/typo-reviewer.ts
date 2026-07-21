@@ -84,7 +84,7 @@ export function createTypoReviewer(
       );
       return { kind: "defer" };
     }
-    return reviewPath({
+    const outcome = await reviewPath({
       path,
       config,
       model,
@@ -92,6 +92,7 @@ export function createTypoReviewer(
       apiKey: auth.apiKey,
       headers: auth.headers,
     });
+    return outcome.verdict;
   };
 }
 

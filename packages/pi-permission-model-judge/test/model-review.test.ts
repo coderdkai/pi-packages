@@ -50,79 +50,96 @@ describe("reviewPath", () => {
   });
 
   it("denies with the model's reason on a deny verdict", async () => {
-    const complete = completeReturning(
-      JSON.stringify({
-        verdict: "deny",
-        reason: "Wrong path; use pi-packages.",
-      }),
-    );
-    const verdict = await reviewPath({
+    const reply = JSON.stringify({
+      verdict: "deny",
+      reason: "Wrong path; use pi-packages.",
+    });
+    const complete = completeReturning(reply);
+    const outcome = await reviewPath({
       path: "/x/pi-permission-system/packages/pi-permission-system/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({
+    expect(outcome.verdict).toEqual({
       kind: "deny",
       reason: "Wrong path; use pi-packages.",
     });
+    // A deny carries no defer reason, but does record the raw reply + latency.
+    expect(outcome.deferReason).toBeUndefined();
+    expect(outcome.rawReply).toBe(reply);
+    expect(typeof outcome.latencyMs).toBe("number");
   });
 
   it("substitutes a generic reason when a deny omits its reason", async () => {
     const complete = completeReturning(JSON.stringify({ verdict: "deny" }));
-    const verdict = await reviewPath({
+    const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({ kind: "deny", reason: GENERIC_TEACHING_REASON });
+    expect(outcome.verdict).toEqual({
+      kind: "deny",
+      reason: GENERIC_TEACHING_REASON,
+    });
   });
 
-  it("defers on a defer verdict", async () => {
-    const complete = completeReturning(JSON.stringify({ verdict: "defer" }));
-    const verdict = await reviewPath({
+  it("defers with reason non-deny-verdict on a defer reply", async () => {
+    const reply = JSON.stringify({ verdict: "defer" });
+    const complete = completeReturning(reply);
+    const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({ kind: "defer" });
+    expect(outcome.verdict).toEqual({ kind: "defer" });
+    expect(outcome.deferReason).toBe("non-deny-verdict");
+    expect(outcome.rawReply).toBe(reply);
   });
 
-  it("defers when the reply is not parseable JSON", async () => {
-    const complete = completeReturning("I think this path is fine, honestly.");
-    const verdict = await reviewPath({
+  it("defers with reason parse-failed when the reply is not parseable JSON", async () => {
+    const reply = "I think this path is fine, honestly.";
+    const complete = completeReturning(reply);
+    const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({ kind: "defer" });
+    expect(outcome.verdict).toEqual({ kind: "defer" });
+    expect(outcome.deferReason).toBe("parse-failed");
+    // The raw reply is retained for debug-level inspection.
+    expect(outcome.rawReply).toBe(reply);
   });
 
-  it("defers when the verdict value is unrecognized", async () => {
+  it("defers with reason non-deny-verdict when the verdict value is unrecognized", async () => {
     const complete = completeReturning(JSON.stringify({ verdict: "maybe" }));
-    const verdict = await reviewPath({
+    const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({ kind: "defer" });
+    expect(outcome.verdict).toEqual({ kind: "defer" });
+    expect(outcome.deferReason).toBe("non-deny-verdict");
   });
 
-  it("defers when complete rejects", async () => {
+  it("defers with reason call-failed when complete rejects", async () => {
     const complete: CompleteFn = vi.fn(async () => {
       throw new Error("model unavailable");
     });
-    const verdict = await reviewPath({
+    const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
       model: MODEL,
       complete,
     });
-    expect(verdict).toEqual({ kind: "defer" });
+    expect(outcome.verdict).toEqual({ kind: "defer" });
+    expect(outcome.deferReason).toBe("call-failed");
+    // No reply arrived, so there is no raw text to record.
+    expect(outcome.rawReply).toBeUndefined();
   });
 
   it("passes the instructions as the system prompt and the path in the message", async () => {
@@ -185,6 +202,8 @@ describe("reviewPath", () => {
       complete,
     });
     await vi.advanceTimersByTimeAsync(1000);
-    await expect(promise).resolves.toEqual({ kind: "defer" });
+    const outcome = await promise;
+    expect(outcome.verdict).toEqual({ kind: "defer" });
+    expect(outcome.deferReason).toBe("timeout");
   });
 });
