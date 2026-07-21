@@ -81,9 +81,10 @@ function makeLog() {
 }
 
 describe("createTypoReviewer", () => {
-  it("defers a non-external_directory surface without a model or registry call", async () => {
+  it("defers a non-external_directory surface without logging (not our surface)", async () => {
     const complete = denyingComplete();
     const registry = makeRegistry(MODEL);
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => CONFIG,
       getRegistry: () => registry,
@@ -92,27 +93,33 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ surface: "bash", path: undefined, command: "ls" }),
       {} as never,
-      makeLog(),
+      log,
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
     expect(registry.find).not.toHaveBeenCalled();
+    expect(log.review).not.toHaveBeenCalled();
+    expect(log.debug).not.toHaveBeenCalled();
   });
 
-  it("defers when there is no config", async () => {
+  it("defers when there is no config, without logging", async () => {
     const complete = denyingComplete();
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => undefined,
       getRegistry: () => makeRegistry(MODEL),
       complete,
     });
-    const verdict = await authorize(makeDetails(), {} as never, makeLog());
+    const verdict = await authorize(makeDetails(), {} as never, log);
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
+    expect(log.review).not.toHaveBeenCalled();
+    expect(log.debug).not.toHaveBeenCalled();
   });
 
-  it("defers an external_directory ask with no path", async () => {
+  it("debug-logs a no-path short-circuit and defers", async () => {
     const complete = denyingComplete();
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => CONFIG,
       getRegistry: () => makeRegistry(MODEL),
@@ -121,15 +128,21 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ path: undefined, value: null }),
       {} as never,
-      makeLog(),
+      log,
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("model_judge.short_circuit", {
+      requestId: "req-1",
+      reason: "no-path",
+    });
+    expect(log.review).not.toHaveBeenCalled();
   });
 
-  it("defers without a model call when no pattern matches", async () => {
+  it("debug-logs a pattern-miss short-circuit and defers without a model call", async () => {
     const complete = denyingComplete();
     const registry = makeRegistry(MODEL);
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => CONFIG,
       getRegistry: () => registry,
@@ -138,26 +151,73 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ path: "/x/pi-packages/src/a.ts" }),
       {} as never,
-      makeLog(),
+      log,
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
     expect(registry.find).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("model_judge.short_circuit", {
+      requestId: "req-1",
+      path: "/x/pi-packages/src/a.ts",
+      reason: "pattern-miss",
+    });
+    expect(log.review).not.toHaveBeenCalled();
   });
 
-  it("consults the model on a matched path and returns its verdict", async () => {
+  it("consults the model on a matched path, returns its verdict, and records the decision", async () => {
     const complete = denyingComplete();
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => CONFIG,
       getRegistry: () => makeRegistry(MODEL),
       complete,
     });
-    const verdict = await authorize(makeDetails(), {} as never, makeLog());
+    const verdict = await authorize(makeDetails(), {} as never, log);
     expect(verdict).toEqual({
       kind: "deny",
       reason: "Doubled segment; use pi-packages.",
     });
     expect(complete).toHaveBeenCalledTimes(1);
+    // A deny records a positive review entry with the matched pattern.
+    expect(log.review).toHaveBeenCalledWith("model_judge.decision", {
+      requestId: "req-1",
+      surface: "external_directory",
+      path: TYPO_PATH,
+      matchedPattern: CONFIG.typoPatterns[0],
+      modelCalled: true,
+      modelId: "anthropic/claude-haiku",
+      latencyMs: expect.any(Number),
+      verdict: "deny",
+      deferReason: null,
+    });
+    // The raw reply lands at debug level.
+    expect(log.debug).toHaveBeenCalledWith("model_judge.model_reply", {
+      requestId: "req-1",
+      modelId: "anthropic/claude-haiku",
+      rawReply: expect.stringContaining("Doubled segment"),
+    });
+  });
+
+  it("records a defer with the model's defer reason", async () => {
+    const complete: CompleteFn = vi.fn(async () =>
+      assistantText(JSON.stringify({ verdict: "defer" })),
+    );
+    const log = makeLog();
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => makeRegistry(MODEL),
+      complete,
+    });
+    const verdict = await authorize(makeDetails(), {} as never, log);
+    expect(verdict).toEqual({ kind: "defer" });
+    expect(log.review).toHaveBeenCalledWith(
+      "model_judge.decision",
+      expect.objectContaining({
+        modelCalled: true,
+        verdict: "defer",
+        deferReason: "non-deny-verdict",
+      }),
+    );
   });
 
   it("resolves auth and forwards the credentials into the completion", async () => {
@@ -191,9 +251,9 @@ describe("createTypoReviewer", () => {
     expect(options.headers).toEqual({ "anthropic-beta": "oauth-2025" });
   });
 
-  it("defers with a warning when auth does not resolve, without a model call", async () => {
+  it("records an auth-failed defer without a model call", async () => {
     const complete = denyingComplete();
-    const warn = vi.fn();
+    const log = makeLog();
     const registry: ModelRegistryLike = {
       find: vi.fn(() => MODEL),
       getApiKeyAndHeaders: vi.fn(async () => ({
@@ -205,27 +265,43 @@ describe("createTypoReviewer", () => {
       getConfig: () => CONFIG,
       getRegistry: () => registry,
       complete,
-      warn,
     });
-    const verdict = await authorize(makeDetails(), {} as never, makeLog());
+    const verdict = await authorize(makeDetails(), {} as never, log);
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(log.review).toHaveBeenCalledWith("model_judge.decision", {
+      requestId: "req-1",
+      surface: "external_directory",
+      path: TYPO_PATH,
+      matchedPattern: CONFIG.typoPatterns[0],
+      modelCalled: false,
+      modelId: "anthropic/claude-haiku",
+      latencyMs: null,
+      verdict: "defer",
+      deferReason: "auth-failed",
+    });
   });
 
-  it("defers when the configured model does not resolve", async () => {
+  it("records a model-unresolved defer when the configured model does not resolve", async () => {
     const complete = denyingComplete();
-    const warn = vi.fn();
+    const log = makeLog();
     const authorize = createTypoReviewer({
       getConfig: () => CONFIG,
       getRegistry: () => makeRegistry(undefined),
       complete,
-      warn,
     });
-    const verdict = await authorize(makeDetails(), {} as never, makeLog());
+    const verdict = await authorize(makeDetails(), {} as never, log);
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(log.review).toHaveBeenCalledWith(
+      "model_judge.decision",
+      expect.objectContaining({
+        modelCalled: false,
+        latencyMs: null,
+        verdict: "defer",
+        deferReason: "model-unresolved",
+      }),
+    );
   });
 
   it("reads the surface from accessIntent when the display surface is absent", async () => {

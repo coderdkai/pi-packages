@@ -54,11 +54,3 @@ export function matchTypoPattern(
   const index = compiled.regexes.findIndex((regex) => regex.test(path));
   return index === -1 ? undefined : compiled.patterns[index];
 }
-
-/** Whether any compiled pattern matches `path`. */
-export function matchesAnyTypoPattern(
-  path: string,
-  compiled: CompiledTypoPatterns,
-): boolean {
-  return matchTypoPattern(path, compiled) !== undefined;
-}

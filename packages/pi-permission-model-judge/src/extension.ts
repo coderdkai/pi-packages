@@ -67,7 +67,6 @@ export function createModelJudgeExtension(
       getConfig: () => config,
       getRegistry: () => registry,
       complete,
-      warn,
     });
     dispose = service.registerAuthorizer(LINK_NAME, authorize);
   }

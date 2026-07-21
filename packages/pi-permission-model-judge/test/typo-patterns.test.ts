@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  compileTypoPatterns,
-  matchesAnyTypoPattern,
-  matchTypoPattern,
-} from "#src/typo-patterns";
+import { compileTypoPatterns, matchTypoPattern } from "#src/typo-patterns";
 
 describe("compileTypoPatterns", () => {
   it("compiles valid patterns and reports none invalid", () => {
@@ -26,36 +22,6 @@ describe("compileTypoPatterns", () => {
     const compiled = compileTypoPatterns([]);
     expect(compiled.regexes).toEqual([]);
     expect(compiled.invalidPatterns).toEqual([]);
-  });
-});
-
-describe("matchesAnyTypoPattern", () => {
-  it("matches when a pattern hits the path", () => {
-    const compiled = compileTypoPatterns([
-      "pi-permission-system/packages/pi-permission-system",
-    ]);
-    const path =
-      "/home/x/pi-permission-system/packages/pi-permission-system/src/a.ts";
-    expect(matchesAnyTypoPattern(path, compiled)).toBe(true);
-  });
-
-  it("does not match when no pattern hits the path", () => {
-    const compiled = compileTypoPatterns(["doubled/doubled"]);
-    expect(
-      matchesAnyTypoPattern("/home/x/pi-packages/src/a.ts", compiled),
-    ).toBe(false);
-  });
-
-  it("matches nothing when there are no patterns", () => {
-    const compiled = compileTypoPatterns([]);
-    expect(matchesAnyTypoPattern("/anything", compiled)).toBe(false);
-  });
-
-  it("is stateless across repeated calls", () => {
-    const compiled = compileTypoPatterns(["segment"]);
-    const path = "/a/segment/b";
-    expect(matchesAnyTypoPattern(path, compiled)).toBe(true);
-    expect(matchesAnyTypoPattern(path, compiled)).toBe(true);
   });
 });
 
@@ -86,5 +52,12 @@ describe("matchTypoPattern", () => {
   it("returns undefined when there are no patterns", () => {
     const compiled = compileTypoPatterns([]);
     expect(matchTypoPattern("/anything", compiled)).toBeUndefined();
+  });
+
+  it("is stateless across repeated calls", () => {
+    const compiled = compileTypoPatterns(["segment"]);
+    const path = "/a/segment/b";
+    expect(matchTypoPattern(path, compiled)).toBe("segment");
+    expect(matchTypoPattern(path, compiled)).toBe("segment");
   });
 });

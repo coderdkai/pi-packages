@@ -202,6 +202,7 @@ describe("createModelJudgeExtension", () => {
     const authorize = service.registerAuthorizer.mock.calls[0]?.[1] as (
       details: PromptPermissionDetails,
       query: unknown,
+      log: { review: () => void; debug: () => void },
     ) => Promise<unknown>;
     const verdict = await authorize(
       {
@@ -213,6 +214,7 @@ describe("createModelJudgeExtension", () => {
         path: "/x/packages/pi-permission-system/packages/pi-permission-system/a.ts",
       },
       {},
+      { review: vi.fn(), debug: vi.fn() },
     );
     expect(verdict).toEqual({
       kind: "deny",
