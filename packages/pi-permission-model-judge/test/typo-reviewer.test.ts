@@ -75,6 +75,11 @@ function denyingComplete(): CompleteFn {
   );
 }
 
+/** A fake review-log seam: `review` + `debug` as `vi.fn()` stubs. */
+function makeLog() {
+  return { review: vi.fn(), debug: vi.fn() };
+}
+
 describe("createTypoReviewer", () => {
   it("defers a non-external_directory surface without a model or registry call", async () => {
     const complete = denyingComplete();
@@ -87,6 +92,7 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ surface: "bash", path: undefined, command: "ls" }),
       {} as never,
+      makeLog(),
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
@@ -100,7 +106,7 @@ describe("createTypoReviewer", () => {
       getRegistry: () => makeRegistry(MODEL),
       complete,
     });
-    const verdict = await authorize(makeDetails(), {} as never);
+    const verdict = await authorize(makeDetails(), {} as never, makeLog());
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
   });
@@ -115,6 +121,7 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ path: undefined, value: null }),
       {} as never,
+      makeLog(),
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
@@ -131,6 +138,7 @@ describe("createTypoReviewer", () => {
     const verdict = await authorize(
       makeDetails({ path: "/x/pi-packages/src/a.ts" }),
       {} as never,
+      makeLog(),
     );
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
@@ -144,7 +152,7 @@ describe("createTypoReviewer", () => {
       getRegistry: () => makeRegistry(MODEL),
       complete,
     });
-    const verdict = await authorize(makeDetails(), {} as never);
+    const verdict = await authorize(makeDetails(), {} as never, makeLog());
     expect(verdict).toEqual({
       kind: "deny",
       reason: "Doubled segment; use pi-packages.",
@@ -167,7 +175,7 @@ describe("createTypoReviewer", () => {
       getRegistry: () => registry,
       complete,
     });
-    const verdict = await authorize(makeDetails(), {} as never);
+    const verdict = await authorize(makeDetails(), {} as never, makeLog());
     expect(verdict).toEqual({
       kind: "deny",
       reason: "Doubled segment; use pi-packages.",
@@ -199,7 +207,7 @@ describe("createTypoReviewer", () => {
       complete,
       warn,
     });
-    const verdict = await authorize(makeDetails(), {} as never);
+    const verdict = await authorize(makeDetails(), {} as never, makeLog());
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);
@@ -214,7 +222,7 @@ describe("createTypoReviewer", () => {
       complete,
       warn,
     });
-    const verdict = await authorize(makeDetails(), {} as never);
+    const verdict = await authorize(makeDetails(), {} as never, makeLog());
     expect(verdict).toEqual({ kind: "defer" });
     expect(complete).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);
@@ -237,6 +245,7 @@ describe("createTypoReviewer", () => {
         },
       }),
       {} as never,
+      makeLog(),
     );
     expect(verdict).toEqual({
       kind: "deny",
