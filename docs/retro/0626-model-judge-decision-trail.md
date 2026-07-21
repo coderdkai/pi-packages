@@ -53,3 +53,26 @@ Phase 2 (the `pi-permission-model-judge` consumer) is **not** started — it is 
 - **Ship caveat for `/ship-issue`:** shipping Phase 1 cuts a **pi-permission-system** release but must **not close #626** — the issue is only half done; Phase 2 (judge + the held [#625] verification) follows after the pi-permission-system publish.
 - Pre-completion reviewer: **PASS** (Phase 1 scope) — all deterministic checks green, ADR/architecture docs updated, invariants preserved, no design concerns.
 - Remaining work (next session, after publish): Phase 2 steps — bump the judge dep to the published pi-permission-system version, `reviewPath` structured outcome, `matchTypoPattern`, the decision-trail logging in `createTypoReviewer`, and the judge user docs; then run the [#625] verification recipe and ship both.
+
+## Stage: Implementation — TDD Phase 2 (2026-07-21T18:00:00Z)
+
+### Session summary
+
+Implemented **Phase 2** — the judge consumer — in five commits (`build` dep-bump, three `feat`, one `docs`) against the published `@gotgenes/pi-permission-system@20.10.0`.
+The judge now consumes the injected `AuthorizerLog`: `reviewPath` returns a structured `ReviewOutcome` distinguishing four model-call defer reasons, `matchTypoPattern` returns the matched pattern, and `createTypoReviewer` writes a positive `model_judge.decision` review entry per pattern-matched ask (plus debug-level short-circuits and raw reply). pi-permission-model-judge test count 40 → 42; full workspace suite, `check`, `lint`, and `fallow dead-code` all green.
+
+### Observations
+
+- **The publish-age gate was the dominant friction.**
+  pnpm 11's 24h `minimumReleaseAge` blocks the freshly-published 20.10.0, and the pre-commit hooks (`biome`/`eslint`) run `pnpm exec`, which trips the gate; `prek` stashes unstaged changes, so a working-tree-only override is invisible during hooks.
+  Resolution: the operator set a local `minimumReleaseAge: 0` in `pnpm-workspace.yaml` (kept **uncommitted** — the committed file adds only the `20.10.0` exclude line); gates were run manually and each commit used `--no-verify` (AGENTS.md's hook-can't-run exception).
+- **`minimumReleaseAge: 0` must stay out of history.**
+  The build commit staged a clean `pnpm-workspace.yaml` (via write-clean → `git add` → restore-override) so the override never entered the commit; `git status` still shows `pnpm-workspace.yaml` modified — that lingering diff is the intentional local override.
+- **Deviation 1 — removed `matchesAnyTypoPattern`** (plan said "re-express").
+  Once `typo-reviewer` migrated to `matchTypoPattern`, it was dead production code; removed it and its now-redundant tests (the plan's "or its lone caller migrates" clause anticipated this).
+- **Deviation 2 — `matchTypoPattern` returns the operator's literal pattern, not `RegExp.source`** (plan said `.source`).
+  `RegExp.source` slash-escapes (`a\/b`), so `CompiledTypoPatterns` gained a parallel `patterns: string[]` holding the pre-compile strings — a faithful "which pattern matched" log field.
+- **Log-level split holds:** `model_judge.decision` (review, on by default) for every pattern-matched ask; `model_judge.short_circuit`/`model_reply`/`invalid_patterns` (debug-gated); non-`external_directory` unlogged — exactly the [#625]-class evidence guarantee.
+- Pre-completion reviewer: **PASS** (Phase 2 scope).
+  One non-blocking note: `deferWith` and the final `log.review` share ~9 fields; a `recordDecision` helper could DRY them — left as-is to keep scope tight (a future tidy).
+- **Not yet done (ship blockers):** (1) **hold the CI push until 20.10.0 ages out** (~2026-07-22T13:15Z UTC) so CI's frozen install does not hit the release-age gate; (2) drop the uncommitted `minimumReleaseAge: 0` override before/at push; (3) run the [#625] dogfood verification recipe against the new trail, then ship #625 and close #626 together.
