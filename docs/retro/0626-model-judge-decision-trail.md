@@ -33,3 +33,23 @@ The governing principle — "absence of evidence is not evidence of absence" —
   The plan ends with the concrete verification recipe.
 - **Doc touch points identified:** ADR 0007 line 66 signature + a §3 subsection; `architecture.md` line 764 module-tree signature copy; the judge README + `configuration.md`.
 - Release: ship independently (two independent releases, publish-gated); no roadmap batch references this issue.
+
+## Stage: Implementation — TDD Phase 1 (2026-07-21T21:35:00Z)
+
+### Session summary
+
+Implemented **Phase 1 only** — the pi-permission-system review-log seam — in three commits (a tidy-first fixture, the `feat` seam, and docs).
+Added a public `AuthorizerLog` (`{ review, debug }`), widened `Authorizer.authorize` with a third `log` parameter, threaded it through `composeAuthorizerChain` and `encloseInDelegationEnvelope`, and supplied the session `DebugReviewLogger` from `AuthorizerSelection.escalate`.
+Phase 2 (the `pi-permission-model-judge` consumer) is **not** started — it is blocked on the publish gate. pi-permission-system test count 2533 → 2535 (+2 new injection/forwarding assertions; net after the migrated fixture).
+
+### Observations
+
+- **Publish gate holds — Phase 2 deferred by design.**
+  `linkWorkspacePackages: false` means the judge type-checks against the registry copy of `@gotgenes/pi-permission-system`; a 3-param `authorize` callback is not assignable to the published 2-param type, so Phase 2 cannot be built until Phase 1 ships and publishes and the judge's dep is bumped.
+  This session correctly stops at the end of Phase 1.
+- **Tidy-First (assessor dispatched):** landed one preparatory `test:` commit extracting a shared `makeAuthorizerLog()` fixture (`test/helpers/authorizer-log-fixtures.ts`) and migrating the two existing `{ review, debug }` literals in `authorizer-selection.test.ts` onto it — so the fixture is consumed immediately (no dead export, no unused import) and the feature commit's ~16 new call sites became one-line `, log` appends.
+  Rejected-as-scope-creep items (migrating `permission-prompter.test.ts` `{ review }`-only literals, extracting `makeQuery`/`makeDetails`) were correctly declined.
+- **Non-breaking confirmed:** `AuthorizerLog` is structurally identical to the existing internal `DebugReviewLogger`, so the session logger passes straight through with no new implementation; a 2-param link callback stays assignable to the widened type (`feat`, not `feat!`).
+- **Ship caveat for `/ship-issue`:** shipping Phase 1 cuts a **pi-permission-system** release but must **not close #626** — the issue is only half done; Phase 2 (judge + the held [#625] verification) follows after the pi-permission-system publish.
+- Pre-completion reviewer: **PASS** (Phase 1 scope) — all deterministic checks green, ADR/architecture docs updated, invariants preserved, no design concerns.
+- Remaining work (next session, after publish): Phase 2 steps — bump the judge dep to the published pi-permission-system version, `reviewPath` structured outcome, `matchTypoPattern`, the decision-trail logging in `createTypoReviewer`, and the judge user docs; then run the [#625] verification recipe and ship both.
