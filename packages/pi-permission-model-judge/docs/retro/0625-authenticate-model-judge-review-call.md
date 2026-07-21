@@ -25,3 +25,24 @@ The secondary fix features a corrected dropped-prefix typo pattern (`pi-[^/]+(/|
 - Featuring the dropped-prefix pattern also requires extending the example config's `instructions` so the model recognizes the dropped-`pi-packages/packages/` typo class, not just the doubled-package one.
 - Test-fixture touch points: `makeRegistry` (`typo-reviewer.test.ts`) and `ctxWithRegistry` (`extension.test.ts`) both need a `getApiKeyAndHeaders` stub, or the model-consulting tests throw at runtime and false-red the deny assertions.
 - Release: ship independently — no roadmap batch references this issue; `fix:` cuts a release on land.
+
+## Stage: Implementation — TDD (2026-07-21T00:53:18Z)
+
+### Session summary
+
+Implemented the auth fix across three TDD cycles: (1) widened `CompleteFn`/`ModelRegistryLike`/`ReviewPathInputs` and forwarded `apiKey`/`headers` in `reviewPath`; (2) resolved auth via `registry.getApiKeyAndHeaders(model)` in `createTypoReviewer` with a defer+warn fail-safe branch; (3) featured the corrected dropped-prefix typo pattern in the example config, README, docs, and corrected the stale `#600` retro pattern.
+Test count went from 37 to 40 (+3) in the package; full suite, `check`, `lint`, and `fallow dead-code` all green.
+
+### Observations
+
+- Deviation from the plan: the `makeRegistry` test-fake `getApiKeyAndHeaders` stub was folded into step 1 instead of step 2.
+  Widening `ModelRegistryLike` with a **required** `getApiKeyAndHeaders` breaks the fake at type-check time (`TS2741`), so the fixture must be satisfied in the same commit as the interface change to keep `pnpm run check` green at the step-1 boundary.
+  Noted in the step-1 commit body.
+- `extension.test.ts`'s `ctxWithRegistry` fake, by contrast, breaks only at **runtime** (its ctx is passed through an `unknown`-typed lifecycle map, so tsc does not check its shape), so its `getApiKeyAndHeaders` stub correctly landed in step 2 with the auth-resolution behavior.
+- The `if (!registry || !model)` guard narrows `registry` to defined for the `getApiKeyAndHeaders` call, so no non-null assertion was needed (avoids the Biome/ESLint assertion loop).
+- Ironic live validation: an `Edit` to `docs/configuration.md` used a dropped-prefix absolute path (`/Users/chris/development/pi/pi-permission-model-judge/...`) and the permission guard denied it — exactly the typo class this issue's secondary pattern targets.
+  Retried with the correct relative path.
+- Corrected dropped-prefix pattern `development/pi/(?!pi-packages/)pi-[^/]+(/|$)` verified against all four edge cases (bare package path → match, doubled → match, correct `pi-packages` → no match, sibling `pi` monorepo → no match) via `node -e` before landing.
+- Pre-completion reviewer: PASS — all deterministic checks green, no design/doc/test-artifact concerns.
+- Not yet done (manual verification the operator requested): a live OAuth dogfood confirming a real typo path now reaches a `deny` before the human.
+  Deterministic unit coverage is complete; the manual note is confirmation, not the gate.
