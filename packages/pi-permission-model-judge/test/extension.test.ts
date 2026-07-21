@@ -79,9 +79,18 @@ function makeService(): PermissionsService & {
 
 function ctxWithRegistry(): {
   cwd: string;
-  modelRegistry: { find: () => Model<any> };
+  modelRegistry: {
+    find: () => Model<any>;
+    getApiKeyAndHeaders: () => Promise<{ ok: true; apiKey: string }>;
+  };
 } {
-  return { cwd: "/project", modelRegistry: { find: () => MODEL } };
+  return {
+    cwd: "/project",
+    modelRegistry: {
+      find: () => MODEL,
+      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "sk-test" }),
+    },
+  };
 }
 
 let service: ReturnType<typeof makeService>;

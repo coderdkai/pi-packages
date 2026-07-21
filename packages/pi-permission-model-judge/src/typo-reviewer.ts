@@ -69,14 +69,29 @@ export function createTypoReviewer(
     if (!matchesAnyTypoPattern(path, compiledFor(config))) {
       return { kind: "defer" };
     }
-    const model = deps.getRegistry()?.find(config.provider, config.model);
-    if (!model) {
+    const registry = deps.getRegistry();
+    const model = registry?.find(config.provider, config.model);
+    if (!registry || !model) {
       deps.warn?.(
         `model "${config.provider}/${config.model}" did not resolve; deferring`,
       );
       return { kind: "defer" };
     }
-    return reviewPath({ path, config, model, complete: deps.complete });
+    const auth = await registry.getApiKeyAndHeaders(model);
+    if (!auth.ok) {
+      deps.warn?.(
+        `auth for "${config.provider}/${config.model}" did not resolve (${auth.error}); deferring`,
+      );
+      return { kind: "defer" };
+    }
+    return reviewPath({
+      path,
+      config,
+      model,
+      complete: deps.complete,
+      apiKey: auth.apiKey,
+      headers: auth.headers,
+    });
   };
 }
 

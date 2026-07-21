@@ -152,6 +152,59 @@ describe("createTypoReviewer", () => {
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  it("resolves auth and forwards the credentials into the completion", async () => {
+    const complete = denyingComplete();
+    const registry: ModelRegistryLike = {
+      find: vi.fn(() => MODEL),
+      getApiKeyAndHeaders: vi.fn(async () => ({
+        ok: true as const,
+        apiKey: "sk-resolved",
+        headers: { "anthropic-beta": "oauth-2025" },
+      })),
+    };
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => registry,
+      complete,
+    });
+    const verdict = await authorize(makeDetails(), {} as never);
+    expect(verdict).toEqual({
+      kind: "deny",
+      reason: "Doubled segment; use pi-packages.",
+    });
+    expect(registry.getApiKeyAndHeaders).toHaveBeenCalledWith(MODEL);
+    const [, , options] = (complete as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [
+      unknown,
+      unknown,
+      { apiKey?: string; headers?: Record<string, string> },
+    ];
+    expect(options.apiKey).toBe("sk-resolved");
+    expect(options.headers).toEqual({ "anthropic-beta": "oauth-2025" });
+  });
+
+  it("defers with a warning when auth does not resolve, without a model call", async () => {
+    const complete = denyingComplete();
+    const warn = vi.fn();
+    const registry: ModelRegistryLike = {
+      find: vi.fn(() => MODEL),
+      getApiKeyAndHeaders: vi.fn(async () => ({
+        ok: false as const,
+        error: "no credentials configured",
+      })),
+    };
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => registry,
+      complete,
+      warn,
+    });
+    const verdict = await authorize(makeDetails(), {} as never);
+    expect(verdict).toEqual({ kind: "defer" });
+    expect(complete).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it("defers when the configured model does not resolve", async () => {
     const complete = denyingComplete();
     const warn = vi.fn();
