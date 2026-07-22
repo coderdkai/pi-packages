@@ -52,7 +52,16 @@ export class SubagentEventsObserver implements SubagentManagerObserver {
 			this.emit("subagents:completed", eventData);
 		}
 
-		// Persist final record for cross-extension history reconstruction.
+		this.persistAndNotify(record);
+	}
+
+	/**
+	 * Persist the terminal record for cross-extension history reconstruction and
+	 * announce completion. Shared by every terminal-state handler (fresh and
+	 * resumed). The nudge suppresses itself if the record is already consumed —
+	 * consumption is domain state on the record, not owned here.
+	 */
+	private persistAndNotify(record: Subagent): void {
 		this.appendEntry("subagents:record", {
 			id: record.id,
 			type: record.type,
@@ -63,9 +72,6 @@ export class SubagentEventsObserver implements SubagentManagerObserver {
 			startedAt: record.startedAt,
 			completedAt: record.completedAt,
 		});
-
-		// Announce completion. The nudge suppresses itself if the record is already
-		// consumed — consumption is domain state on the record, not owned here.
 		this.notifications.sendCompletion(record);
 	}
 
