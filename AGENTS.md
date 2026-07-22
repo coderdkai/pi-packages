@@ -96,6 +96,7 @@ These entries accumulate across sessions and serve as the cross-session context 
 Release batching is plan-driven: `/plan-improvements` annotates each roadmap step with a grep-able `Release:` tag (and a `Release batches` subsection), `/plan-issue` derives a `Release Recommendation` from those annotations, and `/ship-issue` reads the plan's `**Release:**` marker early — asking only when it is `mid-batch — defer`, otherwise releasing now.
 A `refactor:`/`style:`/`test:`/`build:`/`ci:` commit is a `hidden: true` changelog type and does not cut a release on its own; such work lands on `main` and auto-batches into the next `feat:`/`fix:`/unhidden-`docs:` release.
 So a refactor-only plan's `Release Recommendation` rationale must not claim it will cut a release (Refs #479).
+Release is driven by the release-please PR merge over `main` commits, independent of any issue's open/closed state: holding an issue open does not defer its already-merged `fix:`/`feat:` commits from releasing at the next merge, and the only lever to defer a release is leaving the release-please PR unmerged (Refs #625).
 
 Release-please PRs merge by **rebase** (linear `chore: release main`), per `defaultMergeMethod: rebase` (`.pi/extensions/pi-github-tools/config.json`) — set in `cacc724f`.
 Prefer `release_pr_merge`; on its `UNSTABLE`-no-checks refusal, fall back to `gh pr merge <N> --rebase`, never `--merge`.
