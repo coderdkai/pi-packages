@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { SubagentState } from "#src/lifecycle/subagent-state";
+import {
+	isActiveStatus,
+	isRunningStatus,
+	isTerminalErrorStatus,
+	SubagentState,
+	type SubagentStatus,
+} from "#src/lifecycle/subagent-state";
+
+const ALL_STATUSES: SubagentStatus[] = [
+	"queued",
+	"running",
+	"completed",
+	"steered",
+	"aborted",
+	"stopped",
+	"error",
+];
 
 describe("SubagentState — constructor", () => {
 	it("defaults status to 'queued'", () => {
@@ -422,5 +438,37 @@ describe("SubagentState — responseText", () => {
 		state.resetResponseText();
 		state.appendResponseText("second message");
 		expect(state.responseText).toBe("second message");
+	});
+});
+
+describe("SubagentState — classification predicates", () => {
+	const active = new Set<SubagentStatus>(["running", "queued"]);
+	const terminalError = new Set<SubagentStatus>(["error", "stopped", "aborted"]);
+	const running = new Set<SubagentStatus>(["running"]);
+
+	describe("exported status-level functions", () => {
+		for (const status of ALL_STATUSES) {
+			it(`isActiveStatus("${status}") is ${active.has(status)}`, () => {
+				expect(isActiveStatus(status)).toBe(active.has(status));
+			});
+			it(`isTerminalErrorStatus("${status}") is ${terminalError.has(status)}`, () => {
+				expect(isTerminalErrorStatus(status)).toBe(terminalError.has(status));
+			});
+			it(`isRunningStatus("${status}") is ${running.has(status)}`, () => {
+				expect(isRunningStatus(status)).toBe(running.has(status));
+			});
+		}
+	});
+
+	describe("instance predicates delegate to the status-level functions", () => {
+		for (const status of ALL_STATUSES) {
+			it(`"${status}": isActive=${active.has(status)}, isTerminalError=${terminalError.has(status)}, isRunning=${running.has(status)}, canBeSteered=${running.has(status)}`, () => {
+				const state = new SubagentState({ status });
+				expect(state.isActive()).toBe(active.has(status));
+				expect(state.isTerminalError()).toBe(terminalError.has(status));
+				expect(state.isRunning()).toBe(running.has(status));
+				expect(state.canBeSteered()).toBe(running.has(status));
+			});
+		}
 	});
 });

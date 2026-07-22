@@ -30,6 +30,26 @@ export type SubagentStatus =
 	| "stopped"
 	| "error";
 
+// ---- Status classification predicates ----
+// The single decision point for the re-derived status groupings. Instance
+// methods on SubagentState delegate here; DTO consumers holding a bare
+// SubagentStatus (no SubagentState instance) call these directly.
+
+/** Running or queued — the agent is still live (started or awaiting a slot). */
+export function isActiveStatus(status: SubagentStatus): boolean {
+	return status === "running" || status === "queued";
+}
+
+/** Terminated by error, abort, or external stop (excludes the successful `steered`). */
+export function isTerminalErrorStatus(status: SubagentStatus): boolean {
+	return status === "error" || status === "stopped" || status === "aborted";
+}
+
+/** Actively running (excludes queued). */
+export function isRunningStatus(status: SubagentStatus): boolean {
+	return status === "running";
+}
+
 export interface SubagentStateInit {
 	status?: SubagentStatus;
 	result?: string;
@@ -110,6 +130,26 @@ export class SubagentState {
 		for (const name of init.activeTools ?? []) {
 			this.addActiveTool(name);
 		}
+	}
+
+	/** Running or queued — still live. */
+	isActive(): boolean {
+		return isActiveStatus(this._status);
+	}
+
+	/** Terminated by error, abort, or external stop (excludes `steered`). */
+	isTerminalError(): boolean {
+		return isTerminalErrorStatus(this._status);
+	}
+
+	/** Actively running (excludes queued). */
+	isRunning(): boolean {
+		return isRunningStatus(this._status);
+	}
+
+	/** Whether a steer message can be delivered — the agent must be running. */
+	canBeSteered(): boolean {
+		return isRunningStatus(this._status);
 	}
 
 	/** Increment tool use count. Called by record-observer on tool_execution_end. */

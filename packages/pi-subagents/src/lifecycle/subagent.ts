@@ -108,6 +108,10 @@ export class Subagent {
 	get turnCount(): number { return this.state.turnCount; }
 	get activeTools(): ReadonlyMap<string, string> { return this.state.activeTools; }
 	get responseText(): string { return this.state.responseText; }
+	isActive(): boolean { return this.state.isActive(); }
+	isTerminalError(): boolean { return this.state.isTerminalError(); }
+	isRunning(): boolean { return this.state.isRunning(); }
+	canBeSteered(): boolean { return this.state.canBeSteered(); }
 	get maxTurns(): number | undefined { return this.execution.maxTurns; }
 
 	readonly abortController: AbortController;
