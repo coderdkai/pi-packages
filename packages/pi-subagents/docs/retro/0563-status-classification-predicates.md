@@ -22,3 +22,23 @@ Committed the plan as `docs/plans/0563-status-classification-predicates.md`; fou
 - DTO tightening is producer-safe: both loose fields come straight from `record.status`; `AgentDetails.status`'s extra `"background"` variant never reaches them, so it is untouched.
 - The `resolveStatusPresentation("unknown")` test becomes a type error once the parameter tightens — planned for removal (out-of-domain fallback is unreachable under the tightened type).
 - Skill references to the grouping (`improvement-discovery`, `code-design`) are generic teaching exemplars, not this package's code — no skill edits needed.
+
+## Stage: Implementation — TDD (2026-07-18T23:05:00Z)
+
+### Session summary
+
+Implemented all four planned cycles: added the predicate surface (three exported `is*Status` functions + four delegating instance methods on `SubagentState`/`Subagent`), converted the record-holding consumers, tightened the two presentation DTOs and converted their groupings, and landed the architecture-doc step-mark.
+Test count went 1036 → 1063 net (+28 new table-driven predicate tests in `subagent-state.test.ts`, −1 for the removed `resolveStatusPresentation("unknown")` case).
+Full suite green, `tsc` clean, root lint clean, `fallow dead-code` clean; pre-completion reviewer returned PASS.
+
+### Observations
+
+- The Tidy-First assessor found no preparatory work warranted — every site was already a one-line boolean and `Subagent` already had a getter-delegation convention the new methods slotted into.
+- One quantitative deviation surfaced and was reconciled via `ask_user`: the plan's prose claimed "reaching 0" residual groupings, but the roadmap's authoritative metric target is `≤ 2`, and the health-metric grep lands at exactly 2.
+  Both residuals are deliberately out-of-scope per the plan's own Non-Goals — `result-renderer.ts`'s `completed || steered` presentation renderer arm and `get-result-tool.ts`'s `=== "running"` wait guard (a single-status guard the coarse grep false-matches via `&& record.promise`).
+  The plan was internally inconsistent (Non-Goals kept 2 sites while the metric claim said 0); recorded the honest value 2 rather than forcing 0 by converting excluded presentation code.
+- The three targeted groupings (is-active, terminal-error, is-running/steer) are fully eliminated outside `subagent-state.ts`.
+- DTO tightening (`NotificationDetails.status`, `WidgetAgent.status` → `SubagentStatus`) was producer-safe as predicted; `tsc` confirmed no stray non-`SubagentStatus` producer, and the `shouldShowFinished` `string` callback chain absorbed the tightened type with no change.
+- All existing consumer tests stayed green through Cycles 2–3 with no fixture edits — behavior was genuinely unchanged, confirming the refactor's safety net.
+- Pre-completion reviewer: PASS (no WARN findings). `mmdc` validated all 6 Mermaid blocks including the edited `S1` node.
+- The plan touched no `background-spawner.ts` / `agent-widget.ts` despite the roadmap's Target-files listing them — correct, since their status checks are single-status presentation (Non-Goals).
