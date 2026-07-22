@@ -323,6 +323,101 @@ describe("createTypoReviewer", () => {
     });
   });
 
+  it("matches a later alias when the first candidate misses (first-match-wins)", async () => {
+    const complete = denyingComplete();
+    const log = makeLog();
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => makeRegistry(MODEL),
+      complete,
+    });
+    const verdict = await authorize(
+      makeDetails({
+        path: undefined,
+        value: undefined,
+        accessIntent: {
+          surface: "external_directory",
+          matchValues: ["/x/pi-packages/src/a.ts", TYPO_PATH],
+          boundaryValue: TYPO_PATH,
+        },
+      }),
+      {} as never,
+      log,
+    );
+    expect(verdict).toEqual({
+      kind: "deny",
+      reason: "Doubled segment; use pi-packages.",
+    });
+    // The matched alias (the second one), not the primary candidate, is recorded.
+    expect(log.review).toHaveBeenCalledWith(
+      "model_judge.decision",
+      expect.objectContaining({ path: TYPO_PATH }),
+    );
+  });
+
+  it("logs a pattern-miss with the primary candidate when no bash alias matches", async () => {
+    const complete = denyingComplete();
+    const registry = makeRegistry(MODEL);
+    const log = makeLog();
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => registry,
+      complete,
+    });
+    const verdict = await authorize(
+      makeDetails({
+        path: undefined,
+        value: undefined,
+        accessIntent: {
+          surface: "external_directory",
+          matchValues: ["/x/pi-packages/one.ts", "/x/pi-packages/two.ts"],
+          boundaryValue: "/x/pi-packages/one.ts",
+        },
+      }),
+      {} as never,
+      log,
+    );
+    expect(verdict).toEqual({ kind: "defer" });
+    expect(complete).not.toHaveBeenCalled();
+    expect(registry.find).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("model_judge.short_circuit", {
+      requestId: "req-1",
+      path: "/x/pi-packages/one.ts",
+      reason: "pattern-miss",
+    });
+    expect(log.review).not.toHaveBeenCalled();
+  });
+
+  it("logs a no-path short-circuit when accessIntent carries no matchValues", async () => {
+    const complete = denyingComplete();
+    const log = makeLog();
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => makeRegistry(MODEL),
+      complete,
+    });
+    const verdict = await authorize(
+      makeDetails({
+        path: undefined,
+        value: undefined,
+        accessIntent: {
+          surface: "external_directory",
+          matchValues: [],
+          boundaryValue: null,
+        },
+      }),
+      {} as never,
+      log,
+    );
+    expect(verdict).toEqual({ kind: "defer" });
+    expect(complete).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("model_judge.short_circuit", {
+      requestId: "req-1",
+      reason: "no-path",
+    });
+    expect(log.review).not.toHaveBeenCalled();
+  });
+
   it("reads the surface from accessIntent when the display surface is absent", async () => {
     const complete = denyingComplete();
     const authorize = createTypoReviewer({
