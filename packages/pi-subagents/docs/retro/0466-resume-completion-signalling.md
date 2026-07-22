@@ -33,3 +33,26 @@ Plan committed at `packages/pi-subagents/docs/plans/0466-resume-completion-signa
 - **Interface widening is the main compile-time hazard.**
   Adding a required `onSubagentResumed` to `SubagentManagerObserver` breaks `CompositeSubagentObserver`, `AgentWidget`, and the full-object test mocks (`composite-subagent-observer.test.ts` `makeDelegate` + inline literals, `subagent-manager.test.ts` `createManager`); folded into the one cycle that adds the method.
 - **Step-1 (#563) invariant checked.** `completeResume`/`failResume` and the `isBackground`-gated `onResumeFinished` arm add no `status === …` groupings, so the repeated-discriminator sweep stays at 2; named as a post-cycle check.
+
+## Stage: Implementation — TDD (2026-07-18T15:15:00Z)
+
+### Session summary
+
+Executed all three plan cycles plus one preparatory `refactor:` commit; 4 commits total (`refactor` → `fix` → `fix` → `docs`).
+Test count for pi-subagents went 1069 → 1073 (+4 net: 5 new `onSubagentResumed` events-observer tests, 1 composite fan-out test, 2 `onResumeFinished` `subagent.test.ts` tests, 2 manager background/foreground gate tests — some folded into existing describe blocks).
+Full suite green, `check`/`lint`/`fallow dead-code` clean, `verify:public-types` OK; pre-completion reviewer returned PASS.
+
+### Observations
+
+- **Tidy-First landed as planned.**
+  The `tidy-first-assessor` recommended exactly the one extraction the plan had flagged (`persistAndNotify` from `onSubagentCompleted`); landed it first as `refactor:`, which made Cycle 1's green diff a one-line emit + shared-helper call.
+  The assessor's Rejected list correctly declined a shared `terminate()` helper across `completeRun`/`completeResume` (different workspace-dispose/aborted-steered semantics — the wrong-abstraction trap).
+- **Interface widening resolved in Cycle 1, not Cycle 2.**
+  Adding required `onSubagentResumed` to `SubagentManagerObserver` broke `createManager`'s observer factory in `subagent-manager.test.ts` — `tsc` caught it at Cycle 1's `check`, so the fallback was added in Cycle 1's commit rather than deferred.
+  The composite `makeDelegate` + inline literals and the widget were updated in the same Cycle 1 commit as planned.
+- **No deviations from the Module-Level Changes.**
+  Every listed file changed; `subagent-session.ts` stayed untouched exactly as the planned scope reduction intended (silent child-lifecycle → `resumeTurnLoop` needs no shape change).
+- **Invariant confirmed empirically.**
+  Post-Cycle-2 repeated-discriminator sweep shows only `this._status !== "stopped"` (×4, inside `subagent-state.ts`, the owner) and `.type === "text"` (×3, content dispatch) — neither introduced by this change; no new status grouping.
+- **Pre-completion reviewer: PASS** — ready for `/ship-issue`.
+  No WARN findings.
