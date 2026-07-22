@@ -35,6 +35,7 @@ function createManager(overrides?: {
     ? {
         onSubagentStarted: overrides.observer.onSubagentStarted ?? (() => {}),
         onSubagentCompleted: overrides.observer.onSubagentCompleted ?? (() => {}),
+        onSubagentResumed: overrides.observer.onSubagentResumed ?? (() => {}),
         onSubagentCompacted: overrides.observer.onSubagentCompacted ?? (() => {}),
         onSubagentCreated: overrides.observer.onSubagentCreated ?? (() => {}),
       }

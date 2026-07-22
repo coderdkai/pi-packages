@@ -39,6 +39,8 @@ const DEFAULT_RETENTION_POLICY: RetentionPolicy = {
 export interface SubagentManagerObserver {
   onSubagentStarted(record: Subagent): void;
   onSubagentCompleted(record: Subagent): void;
+  /** Fires when a resumed run reaches a terminal state (distinct from a fresh completion). */
+  onSubagentResumed(record: Subagent): void;
   onSubagentCompacted(record: Subagent, info: CompactionInfo): void;
   /** Fires synchronously after a background agent record is created (before run). */
   onSubagentCreated(record: Subagent): void;
