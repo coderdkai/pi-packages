@@ -295,7 +295,7 @@ describe("createTypoReviewer", () => {
       makeDetails({
         path: undefined,
         value: undefined,
-        command: "cat " + TYPO_PATH,
+        command: `cat ${TYPO_PATH}`,
         accessIntent: {
           surface: "external_directory",
           matchValues: [TYPO_PATH],
