@@ -51,3 +51,47 @@ Test count moved 42 → 43 (a new by-position read test added, the `parse-failed
 - **Invariants held.** #625 auth-forwarding, #626 decision-trail, and ADR 0007 defer-always tests all pass unchanged in intent.
 - **Pre-completion reviewer: PASS.**
   One non-blocking WARN: the `(complete as ReturnType<typeof vi.fn>).mock.calls[0]` destructuring in the request-shape tests is a pre-existing assertion-style pattern (retained to match the file's existing `apiKey`-forwarding test), not introduced by this change.
+
+## Stage: Final Retrospective (2026-07-22T01:32:02Z)
+
+### Session summary
+
+One continuous session carried #628 from plan through TDD, ship, and release: `reviewPath` now forces a single `report_verdict` tool call and reads the verdict by position, retiring the `parse-failed` defer mode.
+Shipped as `pi-permission-model-judge` v1.1.1 with the issue closed and the release-please PR merged.
+Every plan prediction held — the SDK verification done up front, the `as unknown as Tool` cast, and the cross-file fixture coupling all played out exactly as written.
+
+### Observations
+
+#### What went well
+
+- **Up-front SDK verification eliminated design risk.**
+  Planning read `providers/anthropic.js` (`convertTools`, `toolChoice` handling) and `types.d.ts` (`ToolCall`, `ProviderStreamOptions`) before committing to the approach, so the implementation hit zero SDK surprises — the by-position tool-call read and the `Record<string, unknown>` `toolChoice` passthrough were both confirmed facts, not hopes.
+  This is the payoff of the plan template's "verify against the SDK types" step on an unfamiliar API surface.
+- **Tidy-First prep genuinely shrank the change.**
+  The `tidy-first-assessor` spotted the byte-identical `assistantText` envelope duplicated across three test files; extracting it first (`b9019b8e`) turned the feature commit's cross-file fixture flip into adding `assistantToolCall` once and calling it three times.
+  A textbook "make the change easy, then make the easy change."
+- **Clean feedback loop.**
+  Verification ran incrementally: red on the rewritten `model-review.test.ts`, green per-file, `pnpm run check` after the type changes, full-suite before the feature commit — the cross-module fixture breakage surfaced exactly where the plan said it would (five `typo-reviewer`/`extension` tests), not as an end-of-session surprise.
+
+#### What caused friction (agent side)
+
+- `other` — the request-shape test first asserted `context.tools as Tool[]`, which tripped `@typescript-eslint/non-nullable-type-assertion-style` (and `!` would loop with Biome per the code-design skill's non-null section).
+  Self-identified at the pre-commit lint gate; resolved in ~2 tool calls by dropping the cast for optional-chaining assertions (`context.tools?.[0]?.name`).
+  Impact: added friction but no rework — caught inside the same green cycle, before the feature commit.
+
+#### What caused friction (user side)
+
+- None.
+  The issue was the operator's own, with a detailed and SDK-accurate proposal, so no mid-session redirection was needed and the `ask_user` design gate was correctly skipped.
+
+### Diagnostic details
+
+- **Model-performance correlation** — both read-only subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `claude-sonnet-5`; appropriate for judgment-heavy design/review work, no mismatch.
+  Main session ran on opus/sonnet.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; the lone lint issue resolved in ~2 consecutive tool calls, well under the 5-call threshold.
+- **Feedback-loop gap analysis** — verification was incremental (red per file, `check` after the shared-type change, full suite before commit), not end-loaded; the release-PR merge correctly waited for the in-progress CI check rather than falling back to `gh pr merge` while it ran.
+
+### Changes made
+
+1. `packages/pi-permission-model-judge/docs/retro/0628-force-structured-verdict-tool-call.md` — appended this Final Retrospective stage entry.
+   No `AGENTS.md` or prompt changes: the session had no rework, and the one lint friction is already covered by the `code-design` skill's non-null-assertion-loop section (confirmed with the operator via `ask_user`).
