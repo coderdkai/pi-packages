@@ -49,8 +49,8 @@ If the model does not resolve (wrong id, no credentials), the reviewer records a
 ### `instructions`
 
 This is the model's system prompt.
-Describe the typo shape you care about and instruct the model to reply with the wrong segment and the correct location, so the invoking agent can self-correct.
-The reviewer expects the model to answer with strict JSON — `{"verdict":"deny","reason":"…"}` to reject, `{"verdict":"defer"}` otherwise — and any other reply defers.
+Describe the typo shape you care about and instruct the model to give the wrong segment and the correct location, so the invoking agent can self-correct.
+The reviewer forces the model to call a single `report_verdict` tool, so the verdict is read from structured tool-call arguments rather than parsed from free text — a `deny` verdict with a `reason` rejects the path, and anything else (including no tool call) defers.
 
 ### `typoPatterns`
 
@@ -110,9 +110,9 @@ The **review** log (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permiss
 | `modelId`        | `<provider>/<model>`.                                                                                                        |
 | `latencyMs`      | Model-call wall-clock in milliseconds, or `null` when no call was made.                                                      |
 | `verdict`        | `"deny"` or `"defer"`.                                                                                                       |
-| `deferReason`    | `null` on a deny, else `model-unresolved` / `auth-failed` / `parse-failed` / `non-deny-verdict` / `timeout` / `call-failed`. |
+| `deferReason`    | `null` on a deny, else `model-unresolved` / `auth-failed` / `no-tool-call` / `non-deny-verdict` / `timeout` / `call-failed`. |
 
-The **debug** log (same directory, `pi-permission-system-debug.jsonl`, only when pi-permission-system's `debugLog` is on) carries the verbose and cheap-path detail: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer before the model stage), `model_judge.model_reply` (the model's raw reply text), and `model_judge.invalid_patterns` (skipped `typoPatterns`).
+The **debug** log (same directory, `pi-permission-system-debug.jsonl`, only when pi-permission-system's `debugLog` is on) carries the verbose and cheap-path detail: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer before the model stage), `model_judge.model_reply` (the verdict tool-call arguments as JSON, or the model's text when it emitted no tool call), and `model_judge.invalid_patterns` (skipped `typoPatterns`).
 A non-`external_directory` ask is not logged at all.
 
-To diagnose "the judge defers everything," read the review log for `model_judge.decision` entries and inspect `deferReason`: an empty result means no ask ever matched a pattern, `auth-failed` / `model-unresolved` means it is misconfigured, and `non-deny-verdict` means the model saw the path and chose not to deny.
+To diagnose "the judge defers everything," read the review log for `model_judge.decision` entries and inspect `deferReason`: an empty result means no ask ever matched a pattern, `auth-failed` / `model-unresolved` means it is misconfigured, `non-deny-verdict` means the model saw the path and chose not to deny, and `no-tool-call` means the model replied without calling the verdict tool (rare, since the tool is forced).

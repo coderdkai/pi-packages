@@ -39,9 +39,9 @@ Once an ask matches a `typoPattern` — the case that *should* reach the model �
 | `modelId`        | `<provider>/<model>`.                                                                                                               |
 | `latencyMs`      | Model-call wall-clock in ms, or `null` when no call was made.                                                                       |
 | `verdict`        | `"deny"` or `"defer"`.                                                                                                              |
-| `deferReason`    | `null` on a deny, else one of `model-unresolved` / `auth-failed` / `parse-failed` / `non-deny-verdict` / `timeout` / `call-failed`. |
+| `deferReason`    | `null` on a deny, else one of `model-unresolved` / `auth-failed` / `no-tool-call` / `non-deny-verdict` / `timeout` / `call-failed`. |
 
-Cheaper events go to pi-permission-system's **debug** log, and only when its `debugLog` toggle is on: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer) and `model_judge.model_reply` (the model's raw reply text).
+Cheaper events go to pi-permission-system's **debug** log, and only when its `debugLog` toggle is on: `model_judge.short_circuit` (a `no-path` or `pattern-miss` defer) and `model_judge.model_reply` (the verdict tool-call arguments as JSON, or the model's text when it emitted no tool call).
 A non-`external_directory` ask is not logged — it is not this link's concern.
 
 Because every pattern-matched ask leaves a positive record, a misconfiguration that silently defers every path (an auth failure, an unresolved model) shows up as a run of `deferReason` entries rather than an empty log.
