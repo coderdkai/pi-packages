@@ -283,6 +283,46 @@ describe("createTypoReviewer", () => {
     );
   });
 
+  it("reviews a bash-surfaced typo path carried only in accessIntent.matchValues", async () => {
+    const complete = denyingComplete();
+    const log = makeLog();
+    const authorize = createTypoReviewer({
+      getConfig: () => CONFIG,
+      getRegistry: () => makeRegistry(MODEL),
+      complete,
+    });
+    const verdict = await authorize(
+      makeDetails({
+        path: undefined,
+        value: undefined,
+        command: "cat " + TYPO_PATH,
+        accessIntent: {
+          surface: "external_directory",
+          matchValues: [TYPO_PATH],
+          boundaryValue: TYPO_PATH,
+        },
+      }),
+      {} as never,
+      log,
+    );
+    expect(verdict).toEqual({
+      kind: "deny",
+      reason: "Doubled segment; use pi-packages.",
+    });
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(log.review).toHaveBeenCalledWith("model_judge.decision", {
+      requestId: "req-1",
+      surface: "external_directory",
+      path: TYPO_PATH,
+      matchedPattern: CONFIG.typoPatterns[0],
+      modelCalled: true,
+      modelId: "anthropic/claude-haiku",
+      latencyMs: expect.any(Number),
+      verdict: "deny",
+      deferReason: null,
+    });
+  });
+
   it("reads the surface from accessIntent when the display surface is absent", async () => {
     const complete = denyingComplete();
     const authorize = createTypoReviewer({

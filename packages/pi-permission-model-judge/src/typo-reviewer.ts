@@ -91,20 +91,29 @@ export function createTypoReviewer(
       return { kind: "defer" };
     }
     const { requestId } = details;
-    const path = pathOf(details);
-    if (path === undefined) {
+    const candidates = candidatePathsOf(details);
+    if (candidates.length === 0) {
       log.debug(SHORT_CIRCUIT_EVENT, { requestId, reason: "no-path" });
       return { kind: "defer" };
     }
-    const matchedPattern = matchTypoPattern(path, compiledFor(config, log));
-    if (matchedPattern === undefined) {
+    const compiled = compiledFor(config, log);
+    let matched: { path: string; matchedPattern: string } | undefined;
+    for (const candidate of candidates) {
+      const pattern = matchTypoPattern(candidate, compiled);
+      if (pattern !== undefined) {
+        matched = { path: candidate, matchedPattern: pattern };
+        break;
+      }
+    }
+    if (matched === undefined) {
       log.debug(SHORT_CIRCUIT_EVENT, {
         requestId,
-        path,
+        path: candidates[0],
         reason: "pattern-miss",
       });
       return { kind: "defer" };
     }
+    const { path, matchedPattern } = matched;
 
     const modelId = `${config.provider}/${config.model}`;
     const base: DecisionBase = { requestId, path, matchedPattern, modelId };
@@ -177,9 +186,29 @@ function surfaceOf(details: PromptPermissionDetails): string | undefined {
   return details.accessIntent?.surface ?? details.surface ?? undefined;
 }
 
-/** The candidate path — `path` for a local ask, `value` for a forwarded one. */
-function pathOf(details: PromptPermissionDetails): string | undefined {
-  return details.path ?? details.value ?? undefined;
+/**
+ * Candidate paths to test against the typo patterns, most authoritative first.
+ *
+ * `accessIntent.matchValues` is the raising gate's authoritative path alias set
+ * (absolute ∪ cwd-relative ∪ canonical) — present for both file-tool and
+ * `bash` external_directory asks, and the only place a `bash`-surfaced path
+ * appears (the gate sets `command`/`accessIntent`, never `path`). `path` and
+ * `value` are fallbacks for a details bag without `accessIntent` (an older
+ * forwarded request or a hand-built local ask). `value` is last because a
+ * forwarded `bash` ask's display value is the command string, not a path.
+ */
+function candidatePathsOf(details: PromptPermissionDetails): string[] {
+  const seen = new Set<string>();
+  for (const value of details.accessIntent?.matchValues ?? []) {
+    seen.add(value);
+  }
+  if (details.path !== undefined) {
+    seen.add(details.path);
+  }
+  if (details.value != null) {
+    seen.add(details.value);
+  }
+  return [...seen];
 }
 
 /**
