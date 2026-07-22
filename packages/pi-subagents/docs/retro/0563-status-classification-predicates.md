@@ -42,3 +42,43 @@ Full suite green, `tsc` clean, root lint clean, `fallow dead-code` clean; pre-co
 - All existing consumer tests stayed green through Cycles 2–3 with no fixture edits — behavior was genuinely unchanged, confirming the refactor's safety net.
 - Pre-completion reviewer: PASS (no WARN findings). `mmdc` validated all 6 Mermaid blocks including the edited `S1` node.
 - The plan touched no `background-spawner.ts` / `agent-widget.ts` despite the roadmap's Target-files listing them — correct, since their status checks are single-status presentation (Non-Goals).
+
+## Stage: Final Retrospective (2026-07-22T18:39:54Z)
+
+### Session summary
+
+All three stages (plan, TDD, ship) executed cleanly for a pure refactor: predicates extracted to `subagent-state.ts`, all consumers converted, two presentation DTOs tightened, +27 net tests, reviewer PASS, shipped to `main` with no release (all-hidden/excluded commits auto-batch).
+The one recurring friction was a planning-time quantitative claim ("reaching 0 residual groupings") that contradicted both the roadmap's authoritative `≤ 2` target and the plan's own Non-Goals — self-caught during TDD when the metric grep returned 2.
+
+### Observations
+
+#### What went well
+
+- The `ERROR_STATUSES` trap catch at planning: recognizing it is a widget-linger presentation set (includes `steered`) with a different semantic from `isTerminalError()` (`error`/`stopped`/`aborted`) prevented a subtle behavior-changing over-unification in a "pure refactor."
+- Incremental verification cadence: `pnpm run check` after each interface-changing cycle, per-file `vitest` at every Red/Green, full suite + root lint + `fallow dead-code` only at the end — every cycle left the tree green with zero fixture churn, confirming the refactor's safety net.
+- Two well-scoped `ask_user` gates (planning forks; TDD metric reconciliation) kept the operator in the loop on the genuinely ambiguous decisions without ceremony on the mechanical ones.
+
+#### What caused friction (agent side)
+
+- `missing-context` (self-identified) — the plan claimed the DTO-tightening path "reaches 11 → 0" (in both the `ask_user` option text and the plan prose), but the roadmap's authoritative metric target was `≤ 2` and the plan's own Non-Goals explicitly kept 2 sites (`result-renderer.ts`'s `completed || steered` presentation arm; `get-result-tool.ts`'s `=== "running"` wait guard, which the coarse grep false-matches via `&& record.promise`).
+  The roadmap supplied the exact recompute grep, but it was never run at planning time to ground the predicted number — the "0" was inferred from prose.
+  Impact: one `ask_user` reconciliation round in TDD plus honest re-documentation of the metric row (`≤ 2 → 2 ✅`) and the Step-1 `Landed:` note.
+  No rework, no bad commits.
+
+#### What caused friction (user side)
+
+- None.
+  The operator's planning-stage answers were decisive and correct; the over-promised "0" originated in the agent's `ask_user` option framing ("Reaches 11 → 0"), not in any user input — nothing for the user to do differently.
+
+### Diagnostic details
+
+- **Model-performance correlation** — both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `claude-sonnet-5`, correctly matched to judgment-heavy read-only work; no reasoning-weak-on-judgment or high-cost-on-mechanical mismatch.
+  Main-session model switches across stages were operator-driven.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; no error sequence exceeded a single tool call.
+- **Unused-tool detection** — no `missing-context`/`rabbit-hole` gap a subagent or search tool would have closed; `colgrep`/`grep` were used appropriately in planning exploration.
+  The one gap (running the roadmap's recompute grep at planning) is a habit, not a missing tool.
+- **Feedback-loop gap analysis** — verification was incremental throughout, not end-loaded; no gap.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — added a rule (adjacent to the existing static-analysis-finding rule in Module-Level Changes): run the roadmap's supplied recompute command at planning time to ground a metric's predicted value, and reconcile it against the sites the plan's Non-Goals deliberately keep, rather than inferring the number from prose (Refs #563).
