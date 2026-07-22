@@ -48,3 +48,47 @@ Test count went 43 → 47 in the package (+4); full workspace suite, `check`, `l
   One non-blocking note: a Biome `info`-level `useTemplate` suggestion on the new test's `"cat " + TYPO_PATH` concatenation (line ~298); `pnpm run lint` still exits 0, so it is not a gate failure.
   Left as-is.
 - **Release:** ship independently (`fix:` cuts a release; no batch membership).
+
+## Stage: Final Retrospective (2026-07-22T02:00:45Z)
+
+### Session summary
+
+Shipped the #630 fix cleanly across all three stages (plan → TDD → ship): `pi-permission-model-judge` `v1.1.2` released (`fix(pi-permission-model-judge): review typo paths embedded in bash commands`), issue closed, release-please PR #632 merged by rebase.
+The change widened the typo reviewer's candidate extraction to consult `details.accessIntent.matchValues`, so a `bash`-embedded typo path now reaches the model instead of deferring at the `no-path` short-circuit.
+Zero deviations from the plan; no rework at any stage.
+
+### Observations
+
+#### What went well
+
+- **The planning-stage gate trace paid off end-to-end.**
+  The plan resolved the issue's one flagged design ambiguity ("review the worst path, or review each?") by tracing `describeBashExternalDirectoryGate` and finding the gate already reduces to the single worst path upstream.
+  That upfront trace meant the TDD stage had no open design question to resolve mid-implementation — the `candidatePathsOf` shape and first-match loop were fully specified before Red, and all three cycles landed exactly as written.
+- **Tight, incremental feedback loop.**
+  Verification ran at the right granularity: the affected test file per Red/Green (`vitest run test/typo-reviewer.test.ts`), `pnpm run check` before committing the type-changing Green step (catching the new `matched` local's type early), then the full `test`/`check`/`lint`/`fallow` sweep after the last step — not a single end-of-session batch.
+- **Both bracketing subagents behaved correctly at the boundary.**
+  `tidy-first-assessor` correctly reported nothing warranted (a 3-line pure helper with one caller), and its Rejected-as-scope-creep list stayed inside the change footprint — the first-live-use scope check held.
+  `pre-completion-reviewer` returned PASS with an accurate non-blocking note.
+
+#### What caused friction (agent side)
+
+- `other` — a Biome `info`-level `useTemplate` suggestion on the new test's `"cat " + TYPO_PATH` concatenation (`test/typo-reviewer.test.ts:298`) was noticed at TDD time, deliberately left (lint exits 0), then re-surfaced in the ship-stage `pnpm run lint` diff output.
+  Impact: none — non-blocking, no rework, no gate failure; a cosmetic nit that rode into the release.
+  Marginally cleaner to have written the template literal the first time, but not worth a `style:` follow-up post-release.
+
+#### What caused friction (user side)
+
+- None.
+  The operator's own issue carried a precise "Proposed change" with the likely fix (`pathOf` → consult `accessIntent`) and even flagged the one open design decision, which the plan then resolved.
+  No mid-session redirection was needed.
+
+### Diagnostic details
+
+- **Feedback-loop gap analysis** — no gap.
+  `check` ran immediately after the type-introducing Green step (not deferred to end), and the per-file test ran on every Red and Green.
+  This is the intended cadence; noted as a positive, not a finding.
+- The other three lenses (model-performance correlation, escalation-delay, unused-tool) found nothing notable: no rabbit-holes, no long same-error tool sequences, and the two subagent dispatches were both read-only judgment tasks appropriately matched to their agent models.
+
+### Changes made
+
+1. `packages/pi-permission-model-judge/test/typo-reviewer.test.ts` — changed the new test's `command: "cat " + TYPO_PATH` to a template literal `command: \`cat ${TYPO_PATH}\``, clearing the Biome `info`-level `useTemplate` suggestion noted above. `pnpm run lint` is now fully clean (no `info`); all 14 file tests still pass.
