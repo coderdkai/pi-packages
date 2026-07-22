@@ -29,7 +29,7 @@ Run them in foreground or background, steer them mid-run, resume completed sessi
 - **Context inheritance** — optionally fork the parent conversation into a sub-agent so it knows what's been discussed
 - **Styled completion notifications** — background agent results render as themed, compact notification boxes (icon, stats, result preview) instead of raw XML.
   Expandable to show full output
-- **Event bus** — lifecycle events (`subagents:created`, `started`, `completed`, `failed`, `steered`, `compacted`) emitted via `pi.events`, enabling other extensions to react to sub-agent activity
+- **Event bus** — lifecycle events (`subagents:created`, `started`, `completed`, `failed`, `resumed`, `steered`, `compacted`) emitted via `pi.events`, enabling other extensions to react to sub-agent activity
 
 ## Install
 
@@ -305,6 +305,7 @@ Agent lifecycle events are emitted via `pi.events.emit()` so other extensions ca
 | `subagents:started`          | Agent transitions to running (including queued→running) | `id`, `type`, `description`                                                                                          |
 | `subagents:completed`        | Agent finished successfully                             | `id`, `type`, `durationMs`, `tokens` (lifetime `{ input, output, total }`), `toolUses`, `result`                     |
 | `subagents:failed`           | Agent errored, stopped, or aborted                      | same as completed + `error`, `status`                                                                                |
+| `subagents:resumed`          | Resumed run reached a terminal state (completed/error)  | same as completed + `error`, `status` (`buildEventData` shape) — `status`/`error` discriminate                       |
 | `subagents:steered`          | Steering message sent                                   | `id`, `message`                                                                                                      |
 | `subagents:compacted`        | Agent's session successfully compacted                  | `id`, `type`, `description`, `reason` (`"manual"` / `"threshold"` / `"overflow"`), `tokensBefore`, `compactionCount` |
 | `subagents:settings_loaded`  | Persisted settings applied at extension init            | `settings` (merged global + project)                                                                                 |

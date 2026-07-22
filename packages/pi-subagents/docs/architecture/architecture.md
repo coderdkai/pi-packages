@@ -475,14 +475,15 @@ If Pi gains a native service registry ([earendil-works/pi#4207]), these accessor
 
 The core emits events on `pi.events` that any extension can observe:
 
-| Channel               | Payload                                                                             | When                                          |
-| --------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------- |
-| `subagents:started`   | `{ id, type, description }`                                                         | Agent begins running                          |
-| `subagents:completed` | `{ id, type, description, status, result?, error?, toolUses, durationMs, tokens? }` | Agent finishes successfully                   |
-| `subagents:failed`    | same as `completed` (`buildEventData` shape)                                        | Agent ends in `error`/`stopped`/`aborted`     |
-| `subagents:compacted` | `{ id, type, description, reason, tokensBefore, compactionCount }`                  | Child session compacts                        |
-| `subagents:created`   | `{ id, type, description, isBackground }`                                           | Background agent created (pre-admission)      |
-| `subagents:steered`   | `{ id, message }`                                                                   | Steering message delivered to a running agent |
+| Channel               | Payload                                                                             | When                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `subagents:started`   | `{ id, type, description }`                                                         | Agent begins running                                                                      |
+| `subagents:completed` | `{ id, type, description, status, result?, error?, toolUses, durationMs, tokens? }` | Agent finishes successfully                                                               |
+| `subagents:failed`    | same as `completed` (`buildEventData` shape)                                        | Agent ends in `error`/`stopped`/`aborted`                                                 |
+| `subagents:resumed`   | same as `completed` (`buildEventData` shape)                                        | Resumed run reaches a terminal state (`completed`/`error`); `status`/`error` discriminate |
+| `subagents:compacted` | `{ id, type, description, reason, tokensBefore, compactionCount }`                  | Child session compacts                                                                    |
+| `subagents:created`   | `{ id, type, description, isBackground }`                                           | Background agent created (pre-admission)                                                  |
+| `subagents:steered`   | `{ id, message }`                                                                   | Steering message delivered to a running agent                                             |
 
 These are fire-and-forget broadcast events — no request IDs, no reply channels.
 
@@ -715,7 +716,7 @@ The three targeted groupings are gone outside `subagent-state.ts`; the grep land
 
 Release: independent
 
-### Step 2 — Route resume termination through the completion channel ([#466])
+### ✅ Step 2 — Route resume termination through the completion channel ([#466])
 
 Cause: dual completion channels — `Subagent.resume()` terminates via direct `markCompleted`/`markError` and never invokes `onRunFinished`, so the manager-level observer chain (public `subagents:completed`/`failed` events, `subagents:record` persistence, completion notification) never observes a resumed completion; completion signalling is fused to the _first_ run instead of owned by run termination generally.
 This is a user-visible bug: after a resume, the persisted history shows the pre-resume result and external `SUBAGENT_EVENTS` subscribers never see the second finish.
@@ -726,6 +727,11 @@ Target files: `src/lifecycle/subagent.ts` (share the termination path with `comp
 Soft-depends on Step 1: both edit `subagent.ts`'s status guards, and Step 1's predicates make the shared termination guard cleaner.
 Outcome: direct `this.mark*` calls inside `resume()` drop 2 → 0; a resumed completion produces a notification, an updated persisted record, and a public event, each pinned by a regression test.
 Impact 4 / Risk 2 / Priority 16.
+
+Landed: the design decision resolved to a **distinct** `subagents:resumed` channel (single channel — the payload's `status`/`error` discriminate completed from error) and a **silent** child-lifecycle (no `subagents:child:*` on resume), so `subagent-session.ts` was untouched (`resumeTurnLoop` stays `Promise<string>`).
+`Subagent.resume()` now routes through new `completeResume`/`failResume` methods (the two direct `this.mark*` calls in `resume()` are gone), which fire a new optional `SubagentLifecycleObserver.onResumeFinished`; `buildObserver()` maps it, background-gated, onto a new required `SubagentManagerObserver.onSubagentResumed`.
+`SubagentEventsObserver.onSubagentResumed` emits `subagents:resumed` (via the shared `persistAndNotify` extracted from `onSubagentCompleted`) and re-appends `subagents:record`; the notification stays consumption-gated.
+Regression tests pin the emit/append/notify chain, the observer wiring, and the background-only gate.
 
 Release: independent
 
@@ -744,7 +750,7 @@ Release: independent
 
 ```mermaid
 flowchart LR
-    S1["✅ Step 1 (#563)<br/>Classification predicates"] -.soft.-> S2["Step 2 (#466)<br/>Resume completion channel"]
+    S1["✅ Step 1 (#563)<br/>Classification predicates"] -.soft.-> S2["✅ Step 2 (#466)<br/>Resume completion channel"]
     S3["Step 3 (#611)<br/>Type the model boundary"]
 ```
 
