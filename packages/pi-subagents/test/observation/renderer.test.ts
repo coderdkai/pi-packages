@@ -76,13 +76,6 @@ describe("resolveStatusPresentation", () => {
     });
   });
 
-  it("resolves an unknown status as completed", () => {
-    expect(resolveStatusPresentation("unknown")).toEqual({
-      iconGlyph: "✓",
-      iconStyle: "success",
-      statusText: "completed",
-    });
-  });
 });
 
 describe("buildStatsParts", () => {

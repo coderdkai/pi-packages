@@ -1,4 +1,5 @@
 import { debugLog } from "#src/debug";
+import type { SubagentStatus } from "#src/lifecycle/subagent-state";
 import { getLifetimeTotal } from "#src/lifecycle/usage";
 import type { Subagent } from "#src/types";
 
@@ -6,7 +7,7 @@ import type { Subagent } from "#src/types";
 export interface NotificationDetails {
   id: string;
   description: string;
-  status: string;
+  status: SubagentStatus;
   toolUses: number;
   turnCount: number;
   maxTurns?: number;

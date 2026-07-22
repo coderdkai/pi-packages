@@ -1,4 +1,8 @@
 import { Text } from "@earendil-works/pi-tui";
+import {
+  isTerminalErrorStatus,
+  type SubagentStatus,
+} from "#src/lifecycle/subagent-state";
 import type { NotificationDetails } from "#src/observation/notification";
 import { formatMs, formatTokens, formatTurns } from "#src/ui/display";
 
@@ -28,9 +32,8 @@ export interface StatusPresentation {
 }
 
 /** Decide the icon and status label for a notification's status, once. */
-export function resolveStatusPresentation(status: string): StatusPresentation {
-  const isError = status === "error" || status === "stopped" || status === "aborted";
-  if (isError) return { iconGlyph: "✗", iconStyle: "error", statusText: status };
+export function resolveStatusPresentation(status: SubagentStatus): StatusPresentation {
+  if (isTerminalErrorStatus(status)) return { iconGlyph: "✗", iconStyle: "error", statusText: status };
   const statusText = status === "steered" ? "completed (steered)" : "completed";
   return { iconGlyph: "✓", iconStyle: "success", statusText };
 }
