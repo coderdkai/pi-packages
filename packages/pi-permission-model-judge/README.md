@@ -20,6 +20,8 @@ The reviewer runs a short, cheap decision on each ask and defers at the first mi
 3. The path matches one of your `typoPatterns` (otherwise defer — no model call).
 4. The model confirms the typo and returns a teaching reason (`deny`), or is unsure (`defer`).
 
+The candidate path comes from a file tool's path argument (`read`/`edit`/`write`) or from an external path referenced inside a `bash` command — a typo path in `cat …/pi-permission-system/packages/pi-permission-system/README.md` is reviewed the same way as one passed to `read`.
+
 It is fail-safe by construction: a missing model, invalid config, model timeout, unparseable reply, or an unsure verdict all resolve to `defer`.
 Deferring means the ask falls through to the normal permission prompt — this extension only ever *removes* a hand-denial, never grants access (it emits no `allow`).
 

@@ -55,6 +55,7 @@ The reviewer forces the model to call a single `report_verdict` tool, so the ver
 ### `typoPatterns`
 
 Each string is compiled with `new RegExp(pattern)` (no flags) and tested against the candidate path.
+The candidate path is a file tool's path argument (`read`/`edit`/`write`) or an external path referenced inside a `bash` command — both surfaces are matched the same way.
 Only a path that matches at least one pattern is sent to the model — this is the cost gate that keeps the reviewer from calling the model on every ask.
 An invalid regular expression is skipped and recorded in the debug log (`model_judge.invalid_patterns`).
 An empty list (the default) matches nothing, so the reviewer defers everything.
