@@ -7,6 +7,7 @@ import {
   GENERIC_TEACHING_REASON,
   reviewPath,
 } from "#src/model-review";
+import { assistantText } from "#test/fixtures/assistant-message";
 
 const CONFIG: ModelJudgeConfig = {
   provider: "anthropic",
@@ -18,26 +19,6 @@ const CONFIG: ModelJudgeConfig = {
 
 // A minimal model stand-in — reviewPath only forwards it to `complete`.
 const MODEL = { provider: "anthropic", id: "claude-haiku" } as never;
-
-function assistantText(text: string): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [{ type: "text", text }],
-    api: "anthropic-messages",
-    provider: "anthropic",
-    model: "claude-haiku",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
-}
 
 function completeReturning(text: string): CompleteFn {
   return vi.fn(async () => assistantText(text));

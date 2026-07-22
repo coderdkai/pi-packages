@@ -1,10 +1,11 @@
-import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai";
 import type { PromptPermissionDetails } from "@gotgenes/pi-permission-system";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ModelJudgeConfig } from "#src/config-schema";
 import type { CompleteFn, ModelRegistryLike } from "#src/model-review";
 import { createTypoReviewer } from "#src/typo-reviewer";
+import { assistantText } from "#test/fixtures/assistant-message";
 
 const CONFIG: ModelJudgeConfig = {
   provider: "anthropic",
@@ -18,26 +19,6 @@ const TYPO_PATH =
   "/x/packages/pi-permission-system/packages/pi-permission-system/src/a.ts";
 
 const MODEL = { provider: "anthropic", id: "claude-haiku" } as Model<any>;
-
-function assistantText(text: string): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [{ type: "text", text }],
-    api: "anthropic-messages",
-    provider: "anthropic",
-    model: "claude-haiku",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
-}
 
 function makeDetails(
   overrides: Partial<PromptPermissionDetails> = {},

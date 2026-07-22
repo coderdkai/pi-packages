@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadConfigResult } from "#src/config-loader";
 import { createModelJudgeExtension } from "#src/extension";
 import type { CompleteFn } from "#src/model-review";
+import { assistantText } from "#test/fixtures/assistant-message";
 
 const READY_CHANNEL = "permissions:ready";
 
@@ -225,29 +226,7 @@ describe("createModelJudgeExtension", () => {
 });
 
 function denyReply(): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({
-          verdict: "deny",
-          reason: "Doubled; use pi-packages.",
-        }),
-      },
-    ],
-    api: "anthropic-messages",
-    provider: "anthropic",
-    model: "claude-haiku",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
+  return assistantText(
+    JSON.stringify({ verdict: "deny", reason: "Doubled; use pi-packages." }),
+  );
 }
