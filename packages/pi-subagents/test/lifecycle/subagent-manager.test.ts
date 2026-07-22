@@ -540,6 +540,31 @@ describe("SubagentManager — dependency injection via options bag", () => {
     expect(manager.getRecord(id)!.result).toBe("second");
   });
 
+  it("fires onSubagentResumed when a background agent is resumed", async () => {
+    const onSubagentResumed = vi.fn();
+    const { factory, stub } = createSessionFactory();
+    stub.resumeTurnLoop.mockResolvedValue("second");
+    ({ manager } = createManager({ createSubagentSession: factory, observer: { onSubagentResumed } }));
+
+    const id = spawnBg(manager);
+    await manager.getRecord(id)!.promise;
+    await manager.resume(id, "continue");
+
+    expect(onSubagentResumed).toHaveBeenCalledExactlyOnceWith(manager.getRecord(id));
+  });
+
+  it("does not fire onSubagentResumed when a foreground agent is resumed", async () => {
+    const onSubagentResumed = vi.fn();
+    const { factory, stub } = createSessionFactory();
+    stub.resumeTurnLoop.mockResolvedValue("second");
+    ({ manager } = createManager({ createSubagentSession: factory, observer: { onSubagentResumed } }));
+
+    const record = await spawnFg(manager);
+    await manager.resume(record.id, "continue");
+
+    expect(onSubagentResumed).not.toHaveBeenCalled();
+  });
+
 });
 
 describe("SubagentManager — queueing and concurrency with injected stubs", () => {

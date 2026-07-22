@@ -143,6 +143,11 @@ export class SubagentManager {
           try { this.observer?.onSubagentCompleted(agent); } catch (err) { debugLog("onSubagentCompleted observer", err); }
         }
       },
+      onResumeFinished: (agent) => {
+        if (options.isBackground) {
+          try { this.observer?.onSubagentResumed(agent); } catch (err) { debugLog("onSubagentResumed observer", err); }
+        }
+      },
       onCompacted: (agent, info) => {
         this.observer?.onSubagentCompacted(agent, info);
       },

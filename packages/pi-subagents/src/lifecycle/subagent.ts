@@ -29,6 +29,8 @@ export interface SubagentLifecycleObserver {
 	onSessionCreated?(agent: Subagent): void;
 	/** Fires once when the run completes or fails (for concurrency drain). */
 	onRunFinished?(agent: Subagent): void;
+	/** Fires once when a resumed run reaches a terminal state. */
+	onResumeFinished?(agent: Subagent): void;
 	/** Fires on compaction events during the run. */
 	onCompacted?(agent: Subagent, info: CompactionInfo): void;
 }
@@ -347,13 +349,24 @@ export class Subagent {
 		}));
 
 		try {
-			const responseText = await subagentSession.resumeTurnLoop(prompt, signal);
-			this.markCompleted(responseText);
+			this.completeResume(await subagentSession.resumeTurnLoop(prompt, signal));
 		} catch (err) {
-			this.markError(err);
-		} finally {
-			this.listeners.release();
+			this.failResume(err);
 		}
+	}
+
+	/** Terminate a resume as completed: mark, release listeners, notify observer. */
+	completeResume(result: string): void {
+		this.markCompleted(result);
+		this.listeners.release();
+		this.execution.observer?.onResumeFinished?.(this);
+	}
+
+	/** Terminate a resume as errored: mark, release listeners, notify observer. */
+	failResume(err: unknown): void {
+		this.markError(err);
+		this.listeners.release();
+		this.execution.observer?.onResumeFinished?.(this);
 	}
 
 	/** Transition to running state. Sets status and startedAt. */

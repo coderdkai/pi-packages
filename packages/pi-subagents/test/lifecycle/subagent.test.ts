@@ -834,6 +834,24 @@ describe("Subagent.resume() — observer lifecycle", () => {
 		session.emit({ type: "tool_execution_end" });
 		expect(agent.toolUses).toBe(0);
 	});
+
+	it("fires observer.onResumeFinished once the resume completes", async () => {
+		const onResumeFinished = vi.fn();
+		const { agent } = createResumableAgent({ observer: { onResumeFinished } });
+		await agent.resume("continue");
+		expect(onResumeFinished).toHaveBeenCalledExactlyOnceWith(agent);
+		expect(agent.status).toBe("completed");
+	});
+
+	it("fires observer.onResumeFinished when the resume errors", async () => {
+		const onResumeFinished = vi.fn();
+		const stub = createSubagentSessionStub();
+		stub.resumeTurnLoop.mockRejectedValue(new Error("resume exploded"));
+		const { agent } = createResumableAgent({ observer: { onResumeFinished }, stub });
+		await agent.resume("continue");
+		expect(onResumeFinished).toHaveBeenCalledExactlyOnceWith(agent);
+		expect(agent.status).toBe("error");
+	});
 });
 
 describe("Subagent.resume() — error handling", () => {
