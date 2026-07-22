@@ -27,3 +27,27 @@ Verified every SDK claim in the issue against the installed `@earendil-works/pi-
 - **Invariants at risk pinned to named tests** — #625 auth forwarding, #626 decision trail, ADR 0007 defer-always — each mapped to an existing test that survives with only a fixture-shape change.
 - No `ask_user` gate: operator's own issue, unambiguous proposal, SDK facts verified.
   No follow-ups deferred.
+
+## Stage: Implementation — TDD (2026-02-14T00:00:00Z)
+
+### Session summary
+
+Implemented the forced-verdict-tool-call fix across two TDD steps plus one preparatory Tidy-First commit.
+`reviewPath` (`src/model-review.ts`) now sends a single `report_verdict` tool with `toolChoice: "any"` and reads the first `toolCall` content part by position, replacing the free-text `JSON.parse`; the `parse-failed` defer reason became `no-tool-call`.
+Test count moved 42 → 43 (a new by-position read test added, the `parse-failed` test retargeted to `no-tool-call`); the full workspace suite (4212 tests) stays green.
+
+### Observations
+
+- **Tidy-First prep landed first.**
+  The `tidy-first-assessor` recommended extracting the byte-identical `assistantText` envelope (duplicated in two files, hand-inlined in a third) into `test/fixtures/assistant-message.ts`.
+  Landed as `test(pi-permission-model-judge): extract a shared assistant-reply fixture` before the feature, so the feature commit's cross-file fixture flip added `assistantToolCall` in exactly one place and called it three times.
+- **The `as unknown as Tool` bridge was needed as predicted.** `Tool.parameters` is `TSchema`; the plain JSON-Schema object required `as unknown as Tool` (the issue's `as Tool` would not typecheck). `pnpm run check` was the gate, exactly as the plan flagged.
+- **One lint friction: `as Tool[]` on `context.tools`.**
+  The initial test asserted the tool shape via `context.tools as Tool[]`, which tripped `@typescript-eslint/non-nullable-type-assertion-style` (and `!` would loop with Biome per the code-design skill).
+  Resolved by dropping the cast and asserting through optional chaining (`context.tools?.[0]?.name`) plus `toHaveLength`.
+- **Cross-file fixture coupling behaved as planned.**
+  After the source change, exactly the five `typo-reviewer`/`extension` tests using text-JSON fixtures failed at runtime; folding their `assistantToolCall` flips into the same feature commit restored green.
+  The `model_judge.model_reply` debug assertion (`stringContaining("Doubled segment")`) survived because `rawReply` is now the stringified tool-call args, which still contain the reason.
+- **Invariants held.** #625 auth-forwarding, #626 decision-trail, and ADR 0007 defer-always tests all pass unchanged in intent.
+- **Pre-completion reviewer: PASS.**
+  One non-blocking WARN: the `(complete as ReturnType<typeof vi.fn>).mock.calls[0]` destructuring in the request-shape tests is a pre-existing assertion-style pattern (retained to match the file's existing `apiKey`-forwarding test), not introduced by this change.
