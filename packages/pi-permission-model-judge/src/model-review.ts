@@ -12,6 +12,8 @@ import type {
   Context,
   Model,
   TextContent,
+  Tool,
+  ToolCall,
 } from "@earendil-works/pi-ai";
 import type { AuthorizerVerdict } from "@gotgenes/pi-permission-system";
 
@@ -20,6 +22,39 @@ import type { ModelJudgeConfig } from "./config-schema";
 /** The reason used for a deny when the model omits its own. */
 export const GENERIC_TEACHING_REASON =
   "This looks like a mistyped path. Verify the correct location before retrying.";
+
+/**
+ * The single tool the model is forced to call. Forcing it (`toolChoice: "any"`)
+ * removes free-text JSON parsing by construction — the verdict arrives as
+ * structured `arguments`, so a Markdown fence or a prose preamble can no longer
+ * cost a verdict.
+ *
+ * The Anthropic provider reads only `parameters.properties` / `parameters.required`,
+ * so a plain JSON-Schema object is correct at runtime; the `as unknown as Tool`
+ * bridge satisfies the `TSchema`-typed `parameters` field without a `typebox`
+ * dependency.
+ */
+const VERDICT_TOOL = {
+  name: "report_verdict",
+  description:
+    "Report whether the path is a mistyped path to reject (deny) or should be deferred to the human (defer).",
+  parameters: {
+    type: "object",
+    properties: {
+      verdict: {
+        type: "string",
+        enum: ["deny", "defer"],
+        description: "deny a mistyped path; defer anything else",
+      },
+      reason: {
+        type: "string",
+        description:
+          "Why the path is wrong and the correct location (required when denying)",
+      },
+    },
+    required: ["verdict"],
+  },
+} as unknown as Tool;
 
 /**
  * The injected model-completion seam — structurally the `complete` export of
@@ -32,6 +67,7 @@ export type CompleteFn = (
     signal?: AbortSignal;
     apiKey?: string;
     headers?: Record<string, string>;
+    toolChoice?: string;
   },
 ) => Promise<AssistantMessage>;
 
@@ -62,13 +98,14 @@ export interface ReviewPathInputs {
 
 /**
  * Why a model call defers, distinct enough to diagnose from the decision trail:
- * the reply parsed but was not JSON (`parse-failed`), was valid JSON but not a
- * `deny` (`non-deny-verdict`), the call was aborted at `timeoutMs` (`timeout`),
- * or `complete` threw for any other reason (`call-failed` — the honest superset
- * that catches, e.g., a 401 slipping past pre-call auth resolution).
+ * the reply carried no tool call to read (`no-tool-call`), the tool call named a
+ * verdict other than `deny` (`non-deny-verdict`), the call was aborted at
+ * `timeoutMs` (`timeout`), or `complete` threw for any other reason
+ * (`call-failed` — the honest superset that catches, e.g., a 401 slipping past
+ * pre-call auth resolution).
  */
 export type ModelCallDeferReason =
-  | "parse-failed"
+  | "no-tool-call"
   | "non-deny-verdict"
   | "timeout"
   | "call-failed";
@@ -76,8 +113,9 @@ export type ModelCallDeferReason =
 /**
  * The full result of a model review: the verdict plus the observability the
  * decision trail records. `deferReason` is set iff the verdict is `defer` and a
- * model call was made; `rawReply` carries the assistant text when a reply
- * arrived (absent on a timeout/throw before any reply).
+ * model call was made; `rawReply` carries the tool-call arguments as JSON when a
+ * tool call arrived, or the assistant text on a `no-tool-call` defer (absent on
+ * a timeout/throw before any reply).
  */
 export interface ReviewOutcome {
   verdict: AuthorizerVerdict;
@@ -104,6 +142,7 @@ export async function reviewPath(
   try {
     const context: Context = {
       systemPrompt: inputs.config.instructions,
+      tools: [VERDICT_TOOL],
       messages: [
         {
           role: "user",
@@ -116,8 +155,9 @@ export async function reviewPath(
       signal: controller.signal,
       apiKey: inputs.apiKey,
       headers: inputs.headers,
+      toolChoice: "any",
     });
-    return parseOutcome(extractText(reply).trim(), Date.now() - startedAt);
+    return readToolCallOutcome(reply, Date.now() - startedAt);
   } catch {
     return {
       verdict: { kind: "defer" },
@@ -129,35 +169,41 @@ export async function reviewPath(
   }
 }
 
-/** The user-turn prompt: hand the model the path and the required reply shape. */
+/** The user-turn prompt: hand the model the path and point it at the tool. */
 function renderReviewPrompt(path: string): string {
   return [
     "A tool is about to access this path outside the working directory:",
     "",
     path,
     "",
-    'Reply with strict JSON. To reject a mistyped path: {"verdict":"deny","reason":"<why it is wrong and the correct location>"}.',
-    'Otherwise: {"verdict":"defer"}.',
+    'Call report_verdict. Use verdict "deny" with a reason naming the correct location if this is a mistyped path; otherwise use verdict "defer".',
   ].join("\n");
 }
 
 /**
- * Map the assistant reply text to an outcome; anything but a clean `deny`
- * defers with the reason that distinguishes it.
+ * Map the forced tool call to an outcome; anything but a clean `deny` defers
+ * with the reason that distinguishes it. The tool call is read by position (the
+ * first one), not by name — under OAuth the provider rewrites the registered
+ * name, so the reply's tool-call name cannot be relied on.
  */
-function parseOutcome(rawReply: string, latencyMs: number): ReviewOutcome {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawReply);
-  } catch {
+function readToolCallOutcome(
+  reply: AssistantMessage,
+  latencyMs: number,
+): ReviewOutcome {
+  const call = reply.content.find(
+    (part): part is ToolCall => part.type === "toolCall",
+  );
+  if (!call) {
     return {
       verdict: { kind: "defer" },
-      deferReason: "parse-failed",
+      deferReason: "no-tool-call",
       latencyMs,
-      rawReply,
+      rawReply: extractText(reply),
     };
   }
-  if (!isRecord(parsed) || parsed.verdict !== "deny") {
+  const args = call.arguments;
+  const rawReply = JSON.stringify(args);
+  if (args.verdict !== "deny") {
     return {
       verdict: { kind: "defer" },
       deferReason: "non-deny-verdict",
@@ -166,8 +212,8 @@ function parseOutcome(rawReply: string, latencyMs: number): ReviewOutcome {
     };
   }
   const reason =
-    typeof parsed.reason === "string" && parsed.reason.length > 0
-      ? parsed.reason
+    typeof args.reason === "string" && args.reason.length > 0
+      ? args.reason
       : GENERIC_TEACHING_REASON;
   return { verdict: { kind: "deny", reason }, latencyMs, rawReply };
 }
@@ -178,8 +224,4 @@ function extractText(reply: AssistantMessage): string {
     .filter((part): part is TextContent => part.type === "text")
     .map((part) => part.text)
     .join("");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ModelJudgeConfig } from "#src/config-schema";
 import type { CompleteFn, ModelRegistryLike } from "#src/model-review";
 import { createTypoReviewer } from "#src/typo-reviewer";
-import { assistantText } from "#test/fixtures/assistant-message";
+import { assistantToolCall } from "#test/fixtures/assistant-message";
 
 const CONFIG: ModelJudgeConfig = {
   provider: "anthropic",
@@ -47,12 +47,10 @@ function makeRegistry(model: Model<any> | undefined): ModelRegistryLike {
 
 function denyingComplete(): CompleteFn {
   return vi.fn(async () =>
-    assistantText(
-      JSON.stringify({
-        verdict: "deny",
-        reason: "Doubled segment; use pi-packages.",
-      }),
-    ),
+    assistantToolCall({
+      verdict: "deny",
+      reason: "Doubled segment; use pi-packages.",
+    }),
   );
 }
 
@@ -181,7 +179,7 @@ describe("createTypoReviewer", () => {
 
   it("records a defer with the model's defer reason", async () => {
     const complete: CompleteFn = vi.fn(async () =>
-      assistantText(JSON.stringify({ verdict: "defer" })),
+      assistantToolCall({ verdict: "defer" }),
     );
     const log = makeLog();
     const authorize = createTypoReviewer({

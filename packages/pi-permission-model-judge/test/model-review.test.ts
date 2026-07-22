@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ModelJudgeConfig } from "#src/config-schema";
@@ -7,7 +7,10 @@ import {
   GENERIC_TEACHING_REASON,
   reviewPath,
 } from "#src/model-review";
-import { assistantText } from "#test/fixtures/assistant-message";
+import {
+  assistantText,
+  assistantToolCall,
+} from "#test/fixtures/assistant-message";
 
 const CONFIG: ModelJudgeConfig = {
   provider: "anthropic",
@@ -20,8 +23,9 @@ const CONFIG: ModelJudgeConfig = {
 // A minimal model stand-in — reviewPath only forwards it to `complete`.
 const MODEL = { provider: "anthropic", id: "claude-haiku" } as never;
 
-function completeReturning(text: string): CompleteFn {
-  return vi.fn(async () => assistantText(text));
+/** A `complete` seam that returns a forced tool call carrying `args`. */
+function completeReporting(args: Record<string, unknown>): CompleteFn {
+  return vi.fn(async () => assistantToolCall(args));
 }
 
 describe("reviewPath", () => {
@@ -31,11 +35,8 @@ describe("reviewPath", () => {
   });
 
   it("denies with the model's reason on a deny verdict", async () => {
-    const reply = JSON.stringify({
-      verdict: "deny",
-      reason: "Wrong path; use pi-packages.",
-    });
-    const complete = completeReturning(reply);
+    const args = { verdict: "deny", reason: "Wrong path; use pi-packages." };
+    const complete = completeReporting(args);
     const outcome = await reviewPath({
       path: "/x/pi-permission-system/packages/pi-permission-system/a.ts",
       config: CONFIG,
@@ -46,14 +47,28 @@ describe("reviewPath", () => {
       kind: "deny",
       reason: "Wrong path; use pi-packages.",
     });
-    // A deny carries no defer reason, but does record the raw reply + latency.
+    // A deny carries no defer reason, but records the tool-call args + latency.
     expect(outcome.deferReason).toBeUndefined();
-    expect(outcome.rawReply).toBe(reply);
+    expect(outcome.rawReply).toBe(JSON.stringify(args));
     expect(typeof outcome.latencyMs).toBe("number");
   });
 
+  it("reads the tool call by position, ignoring the (rewritten) tool name", async () => {
+    // The reply's tool call is named as the OAuth rewrite would name it.
+    const complete: CompleteFn = vi.fn(async () =>
+      assistantToolCall({ verdict: "deny", reason: "Doubled." }, "any_name"),
+    );
+    const outcome = await reviewPath({
+      path: "/x/a.ts",
+      config: CONFIG,
+      model: MODEL,
+      complete,
+    });
+    expect(outcome.verdict).toEqual({ kind: "deny", reason: "Doubled." });
+  });
+
   it("substitutes a generic reason when a deny omits its reason", async () => {
-    const complete = completeReturning(JSON.stringify({ verdict: "deny" }));
+    const complete = completeReporting({ verdict: "deny" });
     const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
@@ -66,9 +81,9 @@ describe("reviewPath", () => {
     });
   });
 
-  it("defers with reason non-deny-verdict on a defer reply", async () => {
-    const reply = JSON.stringify({ verdict: "defer" });
-    const complete = completeReturning(reply);
+  it("defers with reason non-deny-verdict on a defer verdict", async () => {
+    const args = { verdict: "defer" };
+    const complete = completeReporting(args);
     const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
@@ -77,12 +92,12 @@ describe("reviewPath", () => {
     });
     expect(outcome.verdict).toEqual({ kind: "defer" });
     expect(outcome.deferReason).toBe("non-deny-verdict");
-    expect(outcome.rawReply).toBe(reply);
+    expect(outcome.rawReply).toBe(JSON.stringify(args));
   });
 
-  it("defers with reason parse-failed when the reply is not parseable JSON", async () => {
-    const reply = "I think this path is fine, honestly.";
-    const complete = completeReturning(reply);
+  it("defers with reason no-tool-call when the reply carries no tool call", async () => {
+    const text = "I think this path is fine, honestly.";
+    const complete: CompleteFn = vi.fn(async () => assistantText(text));
     const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
@@ -90,13 +105,13 @@ describe("reviewPath", () => {
       complete,
     });
     expect(outcome.verdict).toEqual({ kind: "defer" });
-    expect(outcome.deferReason).toBe("parse-failed");
-    // The raw reply is retained for debug-level inspection.
-    expect(outcome.rawReply).toBe(reply);
+    expect(outcome.deferReason).toBe("no-tool-call");
+    // The model's text is retained for debug-level inspection.
+    expect(outcome.rawReply).toBe(text);
   });
 
   it("defers with reason non-deny-verdict when the verdict value is unrecognized", async () => {
-    const complete = completeReturning(JSON.stringify({ verdict: "maybe" }));
+    const complete = completeReporting({ verdict: "maybe" });
     const outcome = await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,
@@ -123,8 +138,8 @@ describe("reviewPath", () => {
     expect(outcome.rawReply).toBeUndefined();
   });
 
-  it("passes the instructions as the system prompt and the path in the message", async () => {
-    const complete = completeReturning(JSON.stringify({ verdict: "defer" }));
+  it("forces a single verdict tool and passes the instructions and path", async () => {
+    const complete = completeReporting({ verdict: "defer" });
     await reviewPath({
       path: "/x/doubled/doubled/a.ts",
       config: CONFIG,
@@ -132,16 +147,20 @@ describe("reviewPath", () => {
       complete,
     });
     expect(complete).toHaveBeenCalledTimes(1);
-    const [model, context] = (complete as ReturnType<typeof vi.fn>).mock
-      .calls[0] as [unknown, { systemPrompt?: string; messages: unknown[] }];
+    const [model, context, options] = (complete as ReturnType<typeof vi.fn>)
+      .mock.calls[0] as [unknown, Context, { toolChoice?: string } | undefined];
     expect(model).toBe(MODEL);
     expect(context.systemPrompt).toBe(CONFIG.instructions);
     const firstMessage = context.messages[0] as { content: string };
     expect(firstMessage.content).toContain("/x/doubled/doubled/a.ts");
+    // Exactly one tool, forced with toolChoice "any".
+    expect(context.tools).toHaveLength(1);
+    expect(context.tools?.[0]?.name).toBe("report_verdict");
+    expect(options?.toolChoice).toBe("any");
   });
 
   it("forwards the resolved apiKey and headers into the completion", async () => {
-    const complete = completeReturning(JSON.stringify({ verdict: "defer" }));
+    const complete = completeReporting({ verdict: "defer" });
     await reviewPath({
       path: "/x/a.ts",
       config: CONFIG,

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadConfigResult } from "#src/config-loader";
 import { createModelJudgeExtension } from "#src/extension";
 import type { CompleteFn } from "#src/model-review";
-import { assistantText } from "#test/fixtures/assistant-message";
+import { assistantToolCall } from "#test/fixtures/assistant-message";
 
 const READY_CHANNEL = "permissions:ready";
 
@@ -226,7 +226,8 @@ describe("createModelJudgeExtension", () => {
 });
 
 function denyReply(): AssistantMessage {
-  return assistantText(
-    JSON.stringify({ verdict: "deny", reason: "Doubled; use pi-packages." }),
-  );
+  return assistantToolCall({
+    verdict: "deny",
+    reason: "Doubled; use pi-packages.",
+  });
 }

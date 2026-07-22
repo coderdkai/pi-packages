@@ -31,3 +31,17 @@ export function assistantReply(
 export function assistantText(text: string): AssistantMessage {
   return assistantReply([{ type: "text", text }]);
 }
+
+/**
+ * An assistant reply carrying a single `toolCall` content part. The default
+ * name mirrors an OAuth-rewritten registration, so a test cannot rely on the
+ * reviewer reading the tool call by name.
+ */
+export function assistantToolCall(
+  args: Record<string, unknown>,
+  name = "claude_code_report_verdict",
+): AssistantMessage {
+  return assistantReply([
+    { type: "toolCall", id: "call-1", name, arguments: args },
+  ]);
+}
