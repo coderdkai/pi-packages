@@ -14,7 +14,7 @@
 
 import { buildSessionContext, parseSessionEntries, type SessionEntry, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentConfigLookup } from "#src/config/agent-types";
-import type { SubagentStatus } from "#src/lifecycle/subagent-state";
+import { isRunningStatus, type SubagentStatus } from "#src/lifecycle/subagent-state";
 import type { AgentSessionEvent, SessionMessage, SubagentType } from "#src/types";
 import { formatDuration, getDisplayName } from "#src/ui/display";
 
@@ -131,7 +131,7 @@ export function liveSource(record: NavigableSubagent): TranscriptSource {
     getMessages: () => record.agentMessages,
     subscribe: (onChange) => record.subscribeToUpdates(() => onChange()),
     streaming: () =>
-      record.status === "running"
+      isRunningStatus(record.status)
         ? { activeTools: record.activeTools, responseText: record.responseText }
         : undefined,
     getToolDefinition: (name) => record.getToolDefinition(name),

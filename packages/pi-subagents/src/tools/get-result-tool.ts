@@ -40,7 +40,7 @@ export class GetResultTool {
 		// Pull-delivery edge: the parent is collecting the settled outcome here, so
 		// mark it consumed. The completion nudge scheduled by onSubagentCompleted
 		// re-reads record.consumed at fire time and suppresses itself.
-		if (record.status !== "running" && record.status !== "queued") {
+		if (!record.isActive()) {
 			record.markConsumed();
 		}
 

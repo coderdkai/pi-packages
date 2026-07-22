@@ -44,7 +44,7 @@ export class SubagentEventsObserver implements SubagentManagerObserver {
 
 	onSubagentCompleted(record: Subagent): void {
 		// Emit lifecycle event based on terminal status.
-		const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
+		const isError = record.isTerminalError();
 		const eventData = buildEventData(record);
 		if (isError) {
 			this.emit("subagents:failed", eventData);

@@ -162,7 +162,7 @@ export class Subagent {
 	 * `delivered` outcome once the message reaches the session.
 	 */
 	async steer(message: string): Promise<SteerOutcome> {
-		if (this.status !== "running") {
+		if (!this.canBeSteered()) {
 			return { kind: "rejected", status: this.status };
 		}
 		if (!this.subagentSession) {
@@ -322,7 +322,7 @@ export class Subagent {
 	 * immediately without running.
 	 */
 	private guardedRun(): Promise<void> {
-		if (this.status !== "queued" && this.status !== "running") return Promise.resolve();
+		if (!this.isActive()) return Promise.resolve();
 		return this.run();
 	}
 
@@ -410,7 +410,7 @@ export class Subagent {
 	 * then no-ops on the queued-status guard.
 	 */
 	abort(): boolean {
-		if (this.status !== "running") return false;
+		if (!this.isRunning()) return false;
 		this.abortController.abort();
 		this.markStopped();
 		return true;

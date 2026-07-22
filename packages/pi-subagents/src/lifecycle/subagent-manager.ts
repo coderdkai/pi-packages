@@ -272,7 +272,7 @@ export class SubagentManager {
     const policy = this.getRetentionPolicy?.() ?? DEFAULT_RETENTION_POLICY;
     const now = Date.now();
     for (const record of this.agents.values()) {
-      if (record.status === "running" || record.status === "queued") continue;
+      if (record.isActive()) continue;
       if (!record.isSessionReady()) continue; // already released, or never had a session
       const referenceAt = record.consumed
         ? Math.max(record.completedAt ?? 0, record.consumedAt ?? 0)
@@ -290,7 +290,7 @@ export class SubagentManager {
    */
   clearCompleted(): void {
     for (const [id, record] of this.agents) {
-      if (record.status === "running" || record.status === "queued") continue;
+      if (record.isActive()) continue;
       this.removeRecord(id, record);
     }
   }
@@ -298,9 +298,7 @@ export class SubagentManager {
   /** Whether any agents are still running or queued. */
   // fallow-ignore-next-line unused-class-member
   hasRunning(): boolean {
-    return [...this.agents.values()].some(
-      r => r.status === "running" || r.status === "queued",
-    );
+    return [...this.agents.values()].some(r => r.isActive());
   }
 
   /** Abort all running and queued agents immediately. */
@@ -336,7 +334,7 @@ export class SubagentManager {
   /** Promises of all running/queued agents that have one. */
   private pendingPromises(): Promise<void>[] {
     return [...this.agents.values()]
-      .filter(r => r.status === "running" || r.status === "queued")
+      .filter(r => r.isActive())
       .map(r => r.promise)
       .filter((p): p is Promise<void> => p != null);
   }
