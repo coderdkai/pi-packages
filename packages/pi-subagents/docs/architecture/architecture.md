@@ -696,7 +696,7 @@ No polish step is manufactured to fill the ceiling; the scout's scattered findin
 | ----------------------------------------------------------------- | -------------- | --------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Health score                                                      | 78/100 (B)     | ≥ 78 (B)        | `pnpm fallow health --score --workspace @gotgenes/pi-subagents`                                                       |
 | Multi-status classification groupings outside `subagent-state.ts` | 11             | ≤ 2 → 2 ✅      | `grep -rEn 'status [!=]== "[a-z]+" (\|\||&&) ' packages/pi-subagents/src --include="*.ts" \| grep -vc subagent-state` |
-| `model`/`parentModel` typed `unknown` in `src/`                   | 7              | 0               | `grep -rEn "model\??: unknown\|parentModel\??: unknown" packages/pi-subagents/src --include="*.ts" \| wc -l`          |
+| `model`/`parentModel` typed `unknown` in `src/`                   | 7              | 0 ✅            | `grep -rEn "model\??: unknown\|parentModel\??: unknown" packages/pi-subagents/src --include="*.ts" \| wc -l`          |
 | Direct `this.mark*` calls inside `resume()`                       | 2              | 0               | `sed -n '/async resume(/,/^\t}/p' packages/pi-subagents/src/lifecycle/subagent.ts \| grep -c 'this\.mark'`            |
 | Dead code / production duplication                                | 0 / 0          | 0 / 0           | `pnpm fallow dead-code --workspace @gotgenes/pi-subagents` / `pnpm fallow dupes --workspace @gotgenes/pi-subagents`   |
 
@@ -735,7 +735,7 @@ Regression tests pin the emit/append/notify chain, the observer wiring, and the 
 
 Release: independent
 
-### Step 3 — Finish typing the model boundary ([#611])
+### ✅ Step 3 — Finish typing the model boundary ([#611])
 
 Cause: the SDK model boundary is half-typed — Phase 20 Step 4 typed the resolver/tools layer against `Model<any>` but explicitly deferred the snapshot/session-assembly thread, leaving `model: unknown` at 7 sites, an `as Model<any>` cast in `src/runtime.ts`, and a `ctx.modelRegistry!` assertion in `src/lifecycle/parent-snapshot.ts`.
 Feasibility probed against the real surface: `ExtensionContext.model: Model<any> \| undefined` and `ModelRegistry` are exported by `@earendil-works/pi-coding-agent` (`dist/core/extensions/types.d.ts`), and `src/session/model-resolver.ts` already imports `Model<any>` from `@earendil-works/pi-ai`.
@@ -744,6 +744,10 @@ Target files: `src/lifecycle/parent-snapshot.ts`, `src/types.ts` (`SessionContex
 Outcome: `model`/`parentModel` `unknown` sites drop 7 → 0; the `runtime.ts` cast and the `parent-snapshot.ts` non-null assertion are removed.
 Impact 3 / Risk 1 / Priority 15.
 
+Landed: `SessionContext.model` / `ParentSnapshot.model` / `AssemblerContext.parentModel` / `AssemblerOptions.model` / `SessionConfig.model` and `resolveDefaultModel`'s parameter and return are typed against `Model<any>` (imported from `@earendil-works/pi-ai`); the `modelRegistry` fields on `SessionContext`, `ParentSnapshot`, `AssemblerContext`, and `CreateSessionOptions` are typed against the shared `ModelRegistry` (from `model-resolver`), collapsing the two duplicated inline structural types.
+`SessionContext.modelRegistry` is now non-optional (matching the SDK's `ExtensionContext`), which let the `parent-snapshot.ts` `ctx.modelRegistry!` assertion and the `runtime.ts` `as Model<any>` cast both drop.
+The recompute grep lands at 0.
+
 Release: independent
 
 ### Step dependencies
@@ -751,7 +755,7 @@ Release: independent
 ```mermaid
 flowchart LR
     S1["✅ Step 1 (#563)<br/>Classification predicates"] -.soft.-> S2["✅ Step 2 (#466)<br/>Resume completion channel"]
-    S3["Step 3 (#611)<br/>Type the model boundary"]
+    S3["✅ Step 3 (#611)<br/>Type the model boundary"]
 ```
 
 ### Parallel tracks
