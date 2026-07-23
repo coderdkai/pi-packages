@@ -56,3 +56,51 @@ Full suite green, `check`/`lint`/`fallow dead-code` clean, `verify:public-types`
   Post-Cycle-2 repeated-discriminator sweep shows only `this._status !== "stopped"` (×4, inside `subagent-state.ts`, the owner) and `.type === "text"` (×3, content dispatch) — neither introduced by this change; no new status grouping.
 - **Pre-completion reviewer: PASS** — ready for `/ship-issue`.
   No WARN findings.
+
+## Stage: Final Retrospective (2026-07-23T02:30:31Z)
+
+### Session summary
+
+Single continuous session carried #466 through plan → TDD → ship: routed `Subagent.resume()` termination through the completion-observer chain, adding a distinct `subagents:resumed` public channel plus the `onResumeFinished`/`onSubagentResumed` wiring, and released `@gotgenes/pi-subagents` v18.1.1.
+Four implementation commits (`refactor` → `fix` → `fix` → `docs`) plus plan/retro breadcrumbs; +4 net tests; every gate green; pre-completion reviewer PASS; release-please PR #634 merged after its in-progress check completed.
+A notably clean run — the two design ambiguities were resolved at planning, the plan predicted the implementation's shape exactly, and no rework was needed.
+
+### Observations
+
+#### What went well
+
+1. **Tidy-First assessor earned its dispatch.**
+   It recommended exactly the one extraction the plan had pre-flagged (`persistAndNotify` from `onSubagentCompleted`), shrinking Cycle 1's green diff to a one-line emit + shared-helper call, and its Rejected list correctly declined a shared `terminate()` helper across `completeRun`/`completeResume` (different workspace-dispose and aborted/steered semantics — the wrong-abstraction trap).
+   Its scope boundary held: no proposal touched a file outside the change.
+2. **Plan accuracy — the interface-widening prediction held exactly.**
+   The plan called out that a required `onSubagentResumed` on `SubagentManagerObserver` would break `CompositeSubagentObserver`, `AgentWidget`, and the full-object test mocks in one commit; `tsc` caught `createManager`'s observer factory at Cycle 1's `check`, and the fix landed in that same commit — no reorder.
+3. **Ship handled the `UNSTABLE` release PR by the book.**
+   `release_pr_merge` refused on `UNSTABLE`; the `statusCheckRollup` showed a `check` still `IN_PROGRESS`, so the session re-polled until it went `SUCCESS` and retried `release_pr_merge` — never falling back to `gh pr merge` while a check was running, exactly as the `/ship-issue` nuance prescribes.
+4. **Verification ran incrementally, not end-only.**
+   Each TDD cycle ran its affected test file (red → green), then `check` on interface-changing cycles, then the full package suite before commit; `verify:public-types` ran in Cycle 1 for the public-surface change.
+
+#### What caused friction (agent side)
+
+1. `other` (tooling slip) — the first `Edit` call in Cycle 1 sent a malformed `edits` payload (`[{}, "newText"]`) and failed schema validation.
+   Self-caught, corrected on the immediate retry.
+   Impact: one wasted tool call, no rework.
+2. `missing-context` (ask framing) — the first planning `ask_user` framed the public-event choice as "distinct channel" vs. "discriminator" without stating that this codebase's event bus is event-per-channel-string (no multiplexed channel with a `type` field).
+   The operator paused to ask "distinct event, or distinct channel?", assuming a single channel carrying many event types; the second ask corrected the framing and the operator chose the distinct channel.
+   Impact: one extra `ask_user` round, no rework — the clarification arguably improved the shared understanding.
+
+#### What caused friction (user side)
+
+1. None.
+   The operator's mid-`ask_user` terminology question was a productive clarification, not friction — it surfaced a real gap in the option framing that the re-ask closed cleanly.
+
+### Diagnostic details
+
+- **Model-performance correlation** — both dispatched subagents (`tidy-first-assessor`, `pre-completion-reviewer`) carry `model: anthropic/claude-sonnet-5` frontmatter, an appropriate capable model for judgment-heavy read-only review; no reasoning-weak model did judgment work.
+  The parent session switched models several times across stages (opus / sonnet-5 / deepseek-v4-flash / fable-5 / haiku-4-5 / opus); without turn-level attribution no clear judgment-on-weak-model mismatch is identifiable, and the subagents' own frontmatter insulates their work from the parent's model.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; the malformed `Edit` resolved in one retry, well under the 5-call flag threshold.
+- **Unused-tool detection** — not applicable; no `missing-context` or `rabbit-hole` investigation stalled for want of a tool (`colgrep`/`grep`/`read` were used appropriately during planning exploration).
+
+### Changes made
+
+1. `packages/pi-subagents/docs/retro/0466-resume-completion-signalling.md` — appended this Final Retrospective stage entry.
+   No `AGENTS.md` or prompt changes: the session's two friction points (a self-caught malformed `Edit` payload; a one-off `ask_user` framing round) were minor, caused no rework, and are not reusable enough to codify — operator confirmed retro-file-only.
