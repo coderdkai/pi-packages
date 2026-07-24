@@ -117,6 +117,10 @@ classDiagram
         +toolCallId?: string
         +markRunning() delegates
         +markCompleted() delegates
+        +isActive(): boolean
+        +isTerminalError(): boolean
+        +isRunning(): boolean
+        +canBeSteered(): boolean
         +run()
         +resume(prompt, signal)
         +abort(): boolean
@@ -128,6 +132,8 @@ classDiagram
         +messages: readonly unknown[]
         +completeRun(result)
         +failRun(err)
+        +completeResume(result)
+        +failResume(err)
         +disposeSession()
     }
 
@@ -145,6 +151,10 @@ classDiagram
         +incrementToolUses()
         +addUsage(delta)
         +incrementCompactions()
+        +isActive(): boolean
+        +isTerminalError(): boolean
+        +isRunning(): boolean
+        +canBeSteered(): boolean
     }
 
     class SubagentExecution {
@@ -178,8 +188,8 @@ classDiagram
     class ParentSnapshot {
         +cwd: string
         +systemPrompt: string
-        +model: unknown
-        +modelRegistry: unknown
+        +model: Model~any~ | undefined
+        +modelRegistry: ModelRegistry
         +parentContext?: string
     }
 
@@ -305,7 +315,7 @@ src/
 │   ├── subagent-session.ts         born-complete child session: turn loop, steer, dispose
 │   ├── turn-limits.ts              normalizeMaxTurns (turn-count policy)
 │   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer)
-│   ├── subagent-state.ts           lifecycle status + metrics + result-consumption value object (transitions, accumulators)
+│   ├── subagent-state.ts           lifecycle status + metrics + result-consumption value object (transitions, accumulators, classification predicates)
 │   ├── run-listeners.ts            per-run observer-unsub and signal-detach handles
 │   ├── workspace-bracket.ts        child workspace prepare/dispose lifecycle
 │   ├── concurrency-limiter.ts       background admission gate: schedules run thunks FIFO against the limit
@@ -643,10 +653,10 @@ That method — testability friction as a boundary probe, with its limits — is
 
 | Metric                     | Value                                                                   |
 | -------------------------- | ----------------------------------------------------------------------- |
-| Health score               | 78/100 (B), end of Phase 20                                             |
-| Total LOC                  | 7,211 (57 files)                                                        |
+| Health score               | 78/100 (B), end of Phase 21                                             |
+| Total LOC                  | 7,432 (57 files)                                                        |
 | Dead code                  | 0 files, 0 exports                                                      |
-| Maintainability index      | 91.1 (good)                                                             |
+| Maintainability index      | 91.0 (good)                                                             |
 | Avg cyclomatic complexity  | 1.3                                                                     |
 | P90 cyclomatic complexity  | 2                                                                       |
 | Production duplication     | 0 lines                                                                 |
@@ -670,140 +680,47 @@ Files with highest commit frequency × complexity:
 
 | Score | File                          | Commits | Trend          |
 | ----- | ----------------------------- | ------- | -------------- |
-| 27.1  | `index.ts`                    | 109     | ▼ cooling      |
-| 10.1  | `tools/agent-tool.ts`         | 58      | ▼ cooling      |
-| 8.8   | `ui/agent-widget.ts`          | 23      | ▼ cooling      |
-| 8.2   | `service/service-adapter.ts`  | 17      | ▼ cooling      |
-| 7.7   | `tools/foreground-runner.ts`  | 23      | ▼ cooling      |
-| 7.5   | `lifecycle/subagent.ts`       | 17      | ▼ cooling      |
+| 29.2  | `index.ts`                    | 112     | ▼ cooling      |
+| 10.2  | `tools/agent-tool.ts`         | 60      | ▼ cooling      |
+| 9.8   | `lifecycle/subagent.ts`       | 22      | ─ stable       |
+| 9.0   | `ui/agent-widget.ts`          | 24      | ▼ cooling      |
+| 7.9   | `service/service-adapter.ts`  | 17      | ▼ cooling      |
+| 7.9   | `tools/foreground-runner.ts`  | 24      | ▼ cooling      |
 
-`index.ts` remains the top churn hotspot but has cooled after the Phase 19 terminal cut removed its four `/agents`-wiring blocks; `service-adapter.ts` cooled after Phase 20 Step 4 extracted its model-resolution branch, so no file is currently accelerating.
+`index.ts` remains the top churn hotspot but has cooled after the Phase 19 terminal cut removed its four `/agents`-wiring blocks; `lifecycle/subagent.ts` warmed from cooling to stable after Phase 21 Steps 1 and 2 both edited its status guards and resume-termination path, moving it from sixth to third; no `src/` file is currently accelerating.
 
 ### Production duplication
 
 Production duplication is 0 lines — the last clone group was eliminated in Phase 19 Step 6 ([#441]).
 
-## Improvement roadmap — Phase 21: Classification predicates, resume completion, model boundary
-
-Phase 21 is a lean, three-step phase.
-Discovery (2026-07-17: architecture-doc reading, issue sweep, fallow baseline, repeated-discriminator sweep, entry-point trace, craftsmanship scout) found the declared target architecture essentially complete: fallow reports 0 refactoring targets, 0 dead code, 0 duplication, and the craftsmanship scout refuted both fallow "giant test file" flags and found only scattered boy-scout polish.
-Three cause-level Category C findings survived — two already filed as issues, one the explicitly deferred remainder of Phase 20 Step 4 — and they are the whole phase.
-No polish step is manufactured to fill the ceiling; the scout's scattered findings (`mock.calls[N][idx]` indexing in the two lifecycle test suites, the `settings.ts` `sanitize()` range-check triplication, `createManager`'s nullish-coalescing density) are handed to the `tidy-first` boy-scout path.
-
-### Health metrics
-
-| Metric                                                            | Phase 20 (end) | Phase 21 target | Recompute                                                                                                             |
-| ----------------------------------------------------------------- | -------------- | --------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Health score                                                      | 78/100 (B)     | ≥ 78 (B)        | `pnpm fallow health --score --workspace @gotgenes/pi-subagents`                                                       |
-| Multi-status classification groupings outside `subagent-state.ts` | 11             | ≤ 2 → 2 ✅      | `grep -rEn 'status [!=]== "[a-z]+" (\|\||&&) ' packages/pi-subagents/src --include="*.ts" \| grep -vc subagent-state` |
-| `model`/`parentModel` typed `unknown` in `src/`                   | 7              | 0 ✅            | `grep -rEn "model\??: unknown\|parentModel\??: unknown" packages/pi-subagents/src --include="*.ts" \| wc -l`          |
-| Direct `this.mark*` calls inside `resume()`                       | 2              | 0               | `sed -n '/async resume(/,/^\t}/p' packages/pi-subagents/src/lifecycle/subagent.ts \| grep -c 'this\.mark'`            |
-| Dead code / production duplication                                | 0 / 0          | 0 / 0           | `pnpm fallow dead-code --workspace @gotgenes/pi-subagents` / `pnpm fallow dupes --workspace @gotgenes/pi-subagents`   |
-
-### ✅ Step 1 — Add classification predicates to `SubagentState` ([#563])
-
-Cause: the state machine owns its six status transitions (design principle 9, "state owns its mutations") but not what a status _means_ — consumers re-derive the is-active (`running \|\| queued`), terminal-error (`error \|\| stopped \|\| aborted`), and steer/run-eligibility groupings at 11 sites across 8 files, so adding a status means finding every grouping and a missed one diverges silently.
-Fallow is structurally blind to this smell (scattered one-line conditionals never form a token-run clone); the repeated-discriminator sweep is the detector, and it corroborates [#563]'s site list exactly.
-Smell: Category C (repeated discriminator / anemic classification).
-Target files: `src/lifecycle/subagent-state.ts` (instance predicates such as `isActive()` / `isTerminalError()` / `canBeSteered()`, plus exported status-level predicate functions for DTO consumers, with the instance predicates delegating so the module stays the single owner); consumers in `src/lifecycle/subagent.ts`, `src/lifecycle/subagent-manager.ts`, `src/tools/get-result-tool.ts`, `src/tools/background-spawner.ts`, `src/ui/widget-renderer.ts`, `src/ui/agent-widget.ts`, `src/ui/session-navigation.ts`, `src/observation/renderer.ts`, `src/observation/subagent-events-observer.ts`.
-The per-status renderer arms (`result-renderer.ts`, `widget-renderer.ts` status→icon maps, `resolveStatusPresentation`) are legitimate presentation dispatch and stay.
-Outcome: multi-status classification groupings outside `subagent-state.ts` drop 11 → ≤ 2 (any residual site is a single-status presentation or wait check, not a re-derived grouping).
-Impact 3 / Risk 1 / Priority 15.
-
-Landed: `isActiveStatus` / `isTerminalErrorStatus` / `isRunningStatus` are exported from `subagent-state.ts` as the single decision point; `SubagentState` (and the delegating `Subagent`) gained `isActive()` / `isTerminalError()` / `isRunning()` / `canBeSteered()`, both instance and status-level predicates delegating to the same functions.
-Record holders (`subagent-manager.ts` ×4, `get-result-tool.ts`, `subagent.ts` `guardedRun`/`steer`/`abort`, `subagent-events-observer.ts`) call the instance methods; DTO holders (`widget-renderer.ts`, `renderer.ts`, `session-navigation.ts`) call the exported functions, with `NotificationDetails.status` and `WidgetAgent.status` tightened to `SubagentStatus`.
-The three targeted groupings are gone outside `subagent-state.ts`; the grep lands at 2 (meets ≤ 2), both residuals being presentation/single-status the phase excludes — `result-renderer.ts`'s `completed \|\| steered` renderer arm and `get-result-tool.ts`'s `running` wait guard.
-
-Release: independent
-
-### ✅ Step 2 — Route resume termination through the completion channel ([#466])
-
-Cause: dual completion channels — `Subagent.resume()` terminates via direct `markCompleted`/`markError` and never invokes `onRunFinished`, so the manager-level observer chain (public `subagents:completed`/`failed` events, `subagents:record` persistence, completion notification) never observes a resumed completion; completion signalling is fused to the _first_ run instead of owned by run termination generally.
-This is a user-visible bug: after a resume, the persisted history shows the pre-resume result and external `SUBAGENT_EVENTS` subscribers never see the second finish.
-Smell: Category C (coupling/boundary flaw), plus `bug`.
-Design decision to resolve at `/plan-issue` time: a distinct resumed-completion event versus a `resumed: true` discriminator on the existing channels — the issue leans distinct-event because the once-per-session `session-created` → `disposed` child-lifecycle arc is load-bearing for pi-permission-system's registry bracket.
-Invariant: do not perturb the child-lifecycle event ordering.
-Target files: `src/lifecycle/subagent.ts` (share the termination path with `completeRun`/`failRun`), `src/lifecycle/subagent-session.ts` (`resumeTurnLoop` result shape), `src/observation/subagent-events-observer.ts`, `src/service/service.ts` (`SUBAGENT_EVENTS`, if a new channel is chosen), and this document's lifecycle-events table.
-Soft-depends on Step 1: both edit `subagent.ts`'s status guards, and Step 1's predicates make the shared termination guard cleaner.
-Outcome: direct `this.mark*` calls inside `resume()` drop 2 → 0; a resumed completion produces a notification, an updated persisted record, and a public event, each pinned by a regression test.
-Impact 4 / Risk 2 / Priority 16.
-
-Landed: the design decision resolved to a **distinct** `subagents:resumed` channel (single channel — the payload's `status`/`error` discriminate completed from error) and a **silent** child-lifecycle (no `subagents:child:*` on resume), so `subagent-session.ts` was untouched (`resumeTurnLoop` stays `Promise<string>`).
-`Subagent.resume()` now routes through new `completeResume`/`failResume` methods (the two direct `this.mark*` calls in `resume()` are gone), which fire a new optional `SubagentLifecycleObserver.onResumeFinished`; `buildObserver()` maps it, background-gated, onto a new required `SubagentManagerObserver.onSubagentResumed`.
-`SubagentEventsObserver.onSubagentResumed` emits `subagents:resumed` (via the shared `persistAndNotify` extracted from `onSubagentCompleted`) and re-appends `subagents:record`; the notification stays consumption-gated.
-Regression tests pin the emit/append/notify chain, the observer wiring, and the background-only gate.
-
-Release: independent
-
-### ✅ Step 3 — Finish typing the model boundary ([#611])
-
-Cause: the SDK model boundary is half-typed — Phase 20 Step 4 typed the resolver/tools layer against `Model<any>` but explicitly deferred the snapshot/session-assembly thread, leaving `model: unknown` at 7 sites, an `as Model<any>` cast in `src/runtime.ts`, and a `ctx.modelRegistry!` assertion in `src/lifecycle/parent-snapshot.ts`.
-Feasibility probed against the real surface: `ExtensionContext.model: Model<any> \| undefined` and `ModelRegistry` are exported by `@earendil-works/pi-coding-agent` (`dist/core/extensions/types.d.ts`), and `src/session/model-resolver.ts` already imports `Model<any>` from `@earendil-works/pi-ai`.
-Smell: Category C (platform type threading).
-Target files: `src/lifecycle/parent-snapshot.ts`, `src/types.ts` (`SessionContext.model`), `src/session/session-config.ts`, `src/lifecycle/create-subagent-session.ts`, `src/runtime.ts`.
-Outcome: `model`/`parentModel` `unknown` sites drop 7 → 0; the `runtime.ts` cast and the `parent-snapshot.ts` non-null assertion are removed.
-Impact 3 / Risk 1 / Priority 15.
-
-Landed: `SessionContext.model` / `ParentSnapshot.model` / `AssemblerContext.parentModel` / `AssemblerOptions.model` / `SessionConfig.model` and `resolveDefaultModel`'s parameter and return are typed against `Model<any>` (imported from `@earendil-works/pi-ai`); the `modelRegistry` fields on `SessionContext`, `ParentSnapshot`, `AssemblerContext`, and `CreateSessionOptions` are typed against the shared `ModelRegistry` (from `model-resolver`), collapsing the two duplicated inline structural types.
-`SessionContext.modelRegistry` is now non-optional (matching the SDK's `ExtensionContext`), which let the `parent-snapshot.ts` `ctx.modelRegistry!` assertion and the `runtime.ts` `as Model<any>` cast both drop.
-The recompute grep lands at 0.
-
-Release: independent
-
-### Step dependencies
-
-```mermaid
-flowchart LR
-    S1["✅ Step 1 (#563)<br/>Classification predicates"] -.soft.-> S2["✅ Step 2 (#466)<br/>Resume completion channel"]
-    S3["✅ Step 3 (#611)<br/>Type the model boundary"]
-```
-
-### Parallel tracks
-
-- **Track A — Tell-don't-ask:** Steps 1 → 2 (soft ordering; both edit `subagent.ts`).
-- **Track B — SDK boundary:** Step 3 (fully independent).
-
-### Release batches
-
-- No batches; every step is independently releasable.
-- Independently releasable: Steps 1, 2, 3.
-- Step 2 lands as `fix:` — the phase's unhidden release vehicle; Steps 1 and 3 land as `refactor:` (hidden changelog types) and auto-batch into the next unhidden release.
-
-### Deferred work (explicit dispositions, 2026-07-17)
-
-- [#451] (CI/lint gate validating Mermaid diagrams with `mmdc`) — deferred with rationale: repo-level CI tooling, not pi-subagents structure; it does not belong to a package structural phase.
-  Second consecutive sweep, so this is an explicit decision, not a silent re-defer.
-- [#465], [#482], [#608] (feature requests) and [#519], [#600], [#610] (cross-package pi-permission-system tracks) — deferred with rationale: feature and cross-package work that does not gate this package's structural phase.
-  Step 2 ([#466]) is a prerequisite for [#465]'s ask-back design, so landing this phase unblocks that track.
-- Craftsmanship polish (scout inventory: `mock.calls[N][idx]` → `toHaveBeenCalledWith` in `test/lifecycle/subagent.test.ts` and `test/lifecycle/subagent-manager.test.ts`, `settings.ts` `sanitize()` range-check triplication, `createManager` fixture density, two `as any` private-state reaches) — deferred to the `tidy-first` boy-scout path; all clusters scored below the phase-step bar and the scout recommends incidental pickup.
-
 ## Refactoring history
 
-The architecture above is the product of nineteen completed improvement phases; Phase 6 (UI extraction to a separate package) was folded into [ADR-0004] rather than executed.
+The architecture above is the product of twenty completed improvement phases; Phase 6 (UI extraction to a separate package) was folded into [ADR-0004] rather than executed.
 Each phase's findings, numbered plan, dependency diagram, and health metrics are preserved in a per-phase history file under [`history/`](history/).
 
-| Phase | Theme                                               | History                                                                              |
-| ----- | --------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 1     | Export SubagentsService API boundary                | [phase-1-api-boundary.md](history/phase-1-api-boundary.md)                           |
-| 2     | Remove scheduling subsystem                         | [phase-2-remove-scheduling.md](history/phase-2-remove-scheduling.md)                 |
-| 3     | Remove group-join, RPC; replace output-file         | [phase-3-remove-rpc-groupjoin.md](history/phase-3-remove-rpc-groupjoin.md)           |
-| 4     | Implement and publish SubagentsService              | [phase-4-implement-service.md](history/phase-4-implement-service.md)                 |
-| 5     | Decompose index.ts                                  | [phase-5-decompose-index.md](history/phase-5-decompose-index.md)                     |
-| 6     | Extract UI to separate package                      | Superseded by [ADR-0004]                                                             |
-| 7     | Encapsulation and dependency narrowing              | [phase-7-encapsulation.md](history/phase-7-encapsulation.md)                         |
-| 8     | Testability, display extraction, menu decomposition | [phase-8-testability.md](history/phase-8-testability.md)                             |
-| 9     | Observation consolidation, ctx elimination          | [phase-9-observation-ctx.md](history/phase-9-observation-ctx.md)                     |
-| 10    | Domain organization, bag decomposition, complexity  | [phase-10-structural-decomposition.md](history/phase-10-structural-decomposition.md) |
-| 11    | Closure factories to classes                        | [phase-11-closure-to-class.md](history/phase-11-closure-to-class.md)                 |
-| 12    | Complexity reduction and test fixture extraction    | [phase-12-complexity-test-fixtures.md](history/phase-12-complexity-test-fixtures.md) |
-| 13    | Remaining structural smells                         | [phase-13-remaining-smells.md](history/phase-13-remaining-smells.md)                 |
-| 14    | Strip policy from core                              | [phase-14-strip-policy.md](history/phase-14-strip-policy.md)                         |
-| 15    | Domain model evolution                              | [phase-15-domain-model-evolution.md](history/phase-15-domain-model-evolution.md)     |
-| 16    | Invert dependencies (extensions on a minimal core)  | [phase-16-invert-dependencies.md](history/phase-16-invert-dependencies.md)           |
-| 17    | Core consolidation                                  | [phase-17-core-consolidation.md](history/phase-17-core-consolidation.md)             |
-| 18    | Reconsider UI (first principles)                    | [phase-18-reconsider-ui.md](history/phase-18-reconsider-ui.md)                       |
-| 19    | Implement ADR-0004 UI decisions                     | [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md)     |
-| 20    | Result delivery extraction and boundary cleanup     | [phase-20-result-delivery.md](history/phase-20-result-delivery.md)                   |
+| Phase | Theme                                                        | History                                                                                        |
+| ----- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 1     | Export SubagentsService API boundary                         | [phase-1-api-boundary.md](history/phase-1-api-boundary.md)                                     |
+| 2     | Remove scheduling subsystem                                  | [phase-2-remove-scheduling.md](history/phase-2-remove-scheduling.md)                           |
+| 3     | Remove group-join, RPC; replace output-file                  | [phase-3-remove-rpc-groupjoin.md](history/phase-3-remove-rpc-groupjoin.md)                     |
+| 4     | Implement and publish SubagentsService                       | [phase-4-implement-service.md](history/phase-4-implement-service.md)                           |
+| 5     | Decompose index.ts                                           | [phase-5-decompose-index.md](history/phase-5-decompose-index.md)                               |
+| 6     | Extract UI to separate package                               | Superseded by [ADR-0004]                                                                       |
+| 7     | Encapsulation and dependency narrowing                       | [phase-7-encapsulation.md](history/phase-7-encapsulation.md)                                   |
+| 8     | Testability, display extraction, menu decomposition          | [phase-8-testability.md](history/phase-8-testability.md)                                       |
+| 9     | Observation consolidation, ctx elimination                   | [phase-9-observation-ctx.md](history/phase-9-observation-ctx.md)                               |
+| 10    | Domain organization, bag decomposition, complexity           | [phase-10-structural-decomposition.md](history/phase-10-structural-decomposition.md)           |
+| 11    | Closure factories to classes                                 | [phase-11-closure-to-class.md](history/phase-11-closure-to-class.md)                           |
+| 12    | Complexity reduction and test fixture extraction             | [phase-12-complexity-test-fixtures.md](history/phase-12-complexity-test-fixtures.md)           |
+| 13    | Remaining structural smells                                  | [phase-13-remaining-smells.md](history/phase-13-remaining-smells.md)                           |
+| 14    | Strip policy from core                                       | [phase-14-strip-policy.md](history/phase-14-strip-policy.md)                                   |
+| 15    | Domain model evolution                                       | [phase-15-domain-model-evolution.md](history/phase-15-domain-model-evolution.md)               |
+| 16    | Invert dependencies (extensions on a minimal core)           | [phase-16-invert-dependencies.md](history/phase-16-invert-dependencies.md)                     |
+| 17    | Core consolidation                                           | [phase-17-core-consolidation.md](history/phase-17-core-consolidation.md)                       |
+| 18    | Reconsider UI (first principles)                             | [phase-18-reconsider-ui.md](history/phase-18-reconsider-ui.md)                                 |
+| 19    | Implement ADR-0004 UI decisions                              | [phase-19-implement-ui-decisions.md](history/phase-19-implement-ui-decisions.md)               |
+| 20    | Result delivery extraction and boundary cleanup              | [phase-20-result-delivery.md](history/phase-20-result-delivery.md)                             |
+| 21    | Classification predicates, resume completion, model boundary | [phase-21-classification-model-boundary.md](history/phase-21-classification-model-boundary.md) |
 
 ### Structural refactoring issues
 
@@ -831,8 +748,9 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 | Phase 19             | #446, #447, #444, #445, #462, #463, #442, #441, #443       | ADR-0004 spike, settings command, background widget, native session nav slice, TUI renderer, file-snapshot source, dissolve /agents + viewer, remove definition mgmt, consolidate test clones                           |
 | Phase 19 (follow-on) | #470                                                       | README refresh for the removed /agents command surface                                                                                                                                                                  |
 | Phase 20             | #535, #536, #537, #538, #539, #540, #541, #542, #543       | Extract result delivery, decompose get-result-tool, steer outcome, type model boundary, narrow tui/theme, table-driven settings, decompose notification renderer, full-value SubagentStateInit, consolidate test clones |
+| Phase 21             | #563, #466, #611                                           | Classification predicates, resume completion channel, model boundary typing                                                                                                                                             |
 
-Issue #22 (parent-session resolution) has been closed; the open tracker items are Phase 21's scheduled issues ([#563], [#466]) plus the feature and cross-package tracks recorded under the Phase 21 roadmap's deferred-work dispositions.
+Issue #22 (parent-session resolution) has been closed; the feature and cross-package tracks recorded under Phase 21's deferred-work dispositions ([#451], [#465], [#482], [#519], [#600], [#608], [#610]) remain open but do not gate a package structural phase.
 
 ## Relationship with upstream
 
@@ -853,13 +771,10 @@ The upstream test suite is run periodically as a regression canary for the sessi
 [#442]: https://github.com/gotgenes/pi-packages/issues/442
 [#451]: https://github.com/gotgenes/pi-packages/issues/451
 [#465]: https://github.com/gotgenes/pi-packages/issues/465
-[#466]: https://github.com/gotgenes/pi-packages/issues/466
 [#482]: https://github.com/gotgenes/pi-packages/issues/482
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
-[#563]: https://github.com/gotgenes/pi-packages/issues/563
 [#600]: https://github.com/gotgenes/pi-packages/issues/600
 [#608]: https://github.com/gotgenes/pi-packages/issues/608
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
-[#611]: https://github.com/gotgenes/pi-packages/issues/611
 [ADR-0002]: ../decisions/0002-extensions-on-a-minimal-core.md
 [ADR-0004]: ../decisions/0004-reconsider-ui-direction.md
