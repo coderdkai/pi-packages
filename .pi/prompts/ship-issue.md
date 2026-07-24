@@ -118,6 +118,15 @@ Skip this step entirely if step 4b recorded a defer/batch decision — the relea
      Stop and report only when the PR is genuinely blocked (`CONFLICTING`/`DIRTY`/`BEHIND` or a failing check).
 5. Use `release_watch` to wait for the release tag to land on HEAD.
 
+## 6b. Verify the release-triggered CI run
+
+Skip this step if step 6 was skipped (deferred/batch release, or no release-please PR found) — there is nothing to verify.
+
+1. Capture the merge commit SHA: `release_pr_merge`'s `head_sha`, or `git rev-parse HEAD` after `release_watch`.
+2. Use `ci_find` with that SHA and workflow `ci`, then `ci_watch` the returned `run_id`.
+3. If the `release-please` or `publish` job failed, or `publish` was skipped when a release was expected, stop — do not proceed to step 7.
+   Resolve per the recovery runbook in `AGENTS.md` (a `release-please` job can fail after already tagging/releasing, silently skipping `publish`), then re-verify before continuing.
+
 ## 7. Final report
 
 Print:
@@ -137,4 +146,5 @@ Do **not** recommend the next issue to plan here — `/retro` surfaces the next 
 - Never force-push.
 - Never merge a release-please PR that is genuinely blocked (`CONFLICTING`/`DIRTY`/`BEHIND` or a failing check); `UNSTABLE` from no checks running is the expected `GITHUB_TOKEN` case (step 6.4).
 - If CI fails, the issue stays open.
+- If the release-triggered CI run (step 6b) fails, do not proceed to step 7 until resolved — see the `AGENTS.md` recovery runbook.
 - If multiple release-please PRs exist for the same component, stop and ask — that's a configuration issue, not a normal merge.

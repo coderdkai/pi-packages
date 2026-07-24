@@ -18,8 +18,11 @@ When adding a new package, wire it into all of:
 
 Publishing is automatic — `scripts/publish-released.sh` derives the package list from release-please's `paths_released`, so no publish-script edit is needed.
 A brand-new package's **first** release is the exception: npm Trusted Publishing cannot create a package that does not exist, so the CI `publish` job 404s on `v1.0.0`.
-Publish the first version manually (`pnpm --filter @gotgenes/<pkg> publish --access public --no-git-checks --otp <code>` — no `--provenance`), then configure the Trusted Publisher on npmjs.org (repo `gotgenes/pi-packages`, workflow `ci.yml`).
+Publish the first version manually (`pnpm login`, then `pnpm --filter @gotgenes/<pkg> publish --access public --no-git-checks` — no `--provenance`), then configure the Trusted Publisher on npmjs.org (repo `gotgenes/pi-packages`, workflow `ci.yml`).
 Every release after that publishes automatically (Refs #600).
+
+If `release-please`'s CI job fails after it has already tagged/released, GitHub skips the downstream `publish` job — and a rerun does not recover it, since release-please finds nothing new to release and reports `releases_created: false`.
+Recover with the manual-publish command above for the missing version, then advance `last-release-sha` in `release-please-config.json` to the release commit (the write-back step is skipped too) and commit `chore: advance release-please last-release-sha baseline [skip ci]` (Refs #646).
 
 A cross-package change bumping a dependent package to a **same-day-published** sibling hits pnpm's 24h `minimumReleaseAge` supply-chain gate — CI's `--frozen-lockfile` install and local `pnpm exec` hooks fail `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`.
 `minimumReleaseAgeExclude` does not fix it (honored at resolution, ignored by pnpm's lockfile verification pass); the repo sets `trustLockfile: true` in `pnpm-workspace.yaml` to trust the reviewed lockfile and skip that re-verification.
