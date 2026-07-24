@@ -178,6 +178,8 @@ This resolver-internal boundary is a deliberate, formalized seam, not transition
 - Test system-prompt sanitization (denied tool lines narrowed out of the `Available tools:` listing, allowed tools preserved).
 - Test the external-directory guard for path-bearing file tools, including extension and MCP tools (default-on path gating, #352).
 - Test config loading, validation issues, and tolerance of deprecated keys.
+- When a change reads a **new** `ExtensionContext` field/method (e.g. `ctx.isProjectTrusted()`), update `makeCtx` **and** grep every hand-built ctx literal — `grep -rln "hasUI:" test/` (18 files cast `as unknown as ExtensionContext` / `as never`).
+  These casts bypass `tsc`, so a missing field fails only at the full-suite run, not `check` or the cycle-scoped file (#644: `permission-events.test.ts` surfaced `ctx.isProjectTrusted is not a function` at runtime).
 - To test the file-based permission-forwarding round-trip (a subagent's `ask` reaching the parent), do not `await` the child's `pi.fire("tool_call", …)` directly — `ParentAuthorizer.authorize` (`src/authority/approval-escalator.ts`) polls for a response with a 10-minute timeout when forwarding to the parent.
   Instead: fire without awaiting, poll the parent's `requests/` dir (`createPermissionForwardingLocation(forwardingDir, parentSessionId)`) for the child's request file, write an approval JSON to `responses/<id>.json`, then await the fire.
   See the `subagent registry sharing` test in `test/composition-root.test.ts`.
