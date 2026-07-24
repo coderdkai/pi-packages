@@ -85,7 +85,9 @@ The `permission` object uses deep-shallow merge; scalar fields use simple replac
 - `docs/architecture/architecture.md` inline-copies the core `rule.ts` types (`Rule`, `RuleOrigin`, `Ruleset`).
   Adding or removing a field on one of these must update that listing too — a module-move check misses it, and only the pre-completion reviewer catches it otherwise.
 - Config **files** are validated strictly against `unifiedConfigSchema` (`config-schema.ts`) and rejected **fail-closed** on any invalid field (empty scope → universal `ask`), with a clear per-issue message (Refs #547).
-  Per-agent frontmatter stays tolerant — `policy-loader.ts` extracts only its `permission` block via `normalizeFlatPermissionValue`, since frontmatter carries non-config keys.
+  A rejected **non-global** scope (project / agent / project-agent) additionally floors the composed policy `allow`→`ask` (origin `fail-closed`) at composition, so a lower scope's `allow` cannot be silently inherited behind an invalid higher scope; `deny` is preserved, global is excluded, and `yoloMode` re-permits the floored `ask` (Refs #646).
+  The loader marks such a scope `ScopeConfig.invalid` (a present-but-unloadable file; an absent file stays a plain empty scope); the manager reads the flags in `resolvePermissions` and appends a fail-closed notice to `getConfigIssues`.
+  Per-agent frontmatter stays tolerant — `policy-loader.ts` extracts only its `permission` block via `normalizeFlatPermissionValue`, since frontmatter carries non-config keys; only a whole-file read/parse failure of an existing agent file marks the scope invalid, not a tolerantly-dropped per-key entry.
 - When removing a config field, drop it from `unifiedConfigSchema`; configs that still set it are then rejected.
   For a soft-deprecation window, keep the field optional in the schema and ignore its value.
 - When adding an optional field to `PermissionSystemExtensionConfig`, do not include it in `DEFAULT_EXTENSION_CONFIG` with an explicit `undefined` value — tests use `deepEqual` and it breaks equality.
