@@ -97,6 +97,16 @@ The `permission` object uses deep-shallow merge; scalar fields use simple replac
   After #356, omitting a field from `UnifiedPermissionConfig` that `normalizePermissionSystemConfig` reads is a **compile error** — `normalizePermissionSystemConfig` reads fields directly from the typed `UnifiedPermissionConfig` parameter, so `tsc` catches the gap immediately.
 - When a config example sets a policy for `write`, include the same policy for `edit` — both tools modify files and users expect them gated together.
 
+## Log writes
+
+Both JSONL logs are created owner-only (`0600`, in a `0700` directory) and key-name redacted; the permission-forwarding request/response files are mode-restricted too (but **not** redacted — the parent reads them to render the ask-prompt).
+Do not add a log write path that bypasses `writeLine` in `src/logging.ts`, and do not pass a `mode`-less `appendFileSync`/`writeFileSync`/`mkdirSync` for an artifact holding tool input.
+Redaction is **structural, never value-shape**: `isSensitiveLogKey` (`src/log-redaction.ts`) masks a value because of the key name it is bound to, and a provider-prefix/entropy list was measured against a real 6.7 MB log and declined (403 `sk-` hits, all false positives from `task-*`; zero true positives).
+The boundary to repeat verbatim in any doc or reply: a value bound to a sensitive key name is masked; a secret embedded in a bash command string is not.
+Redaction is applied at **two** points, and the second is not redundant — `getToolInputPreviewForLog` flattens tool input to a string before the writer sees it, so `serializeRedactedToolInputPreview` (`src/tool-input-preview.ts`) is the only place its keys still exist.
+Never redact `formatToolInputForPrompt`: the user must see the real input to decide.
+Governing record: `docs/decisions/0010-permission-log-secret-exposure.md` (Refs #647).
+
 ## Cross-Extension Integration
 
 ### Single-agent core
