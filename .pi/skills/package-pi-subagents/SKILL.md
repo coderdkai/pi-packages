@@ -24,6 +24,10 @@ A single post-bind call applies the `EXCLUDED_TOOL_NAMES` recursion guard after 
 
 Upstream PRs for these patches ([#71](https://github.com/tintinweb/pi-subagents/pull/71), [#72](https://github.com/tintinweb/pi-subagents/pull/72), [#73](https://github.com/tintinweb/pi-subagents/pull/73)) are open but the fork continues independently regardless.
 
+`buildAgentPrompt` also strips the inherited parent prompt's `Current working directory:` footer (whole-line match, separator-normalized) before embedding it — but only when the child's cwd differs from the parent's.
+Pi's `buildSystemPrompt` appends that footer to every prompt and appends a fresh one for the child afterwards, so leaving the inherited line in place gave a workspace-isolated child two claims in identical phrasing — and children followed the stale one back into the parent's directory (Refs #640).
+The equal-cwd case is left untouched deliberately: the inherited claim is already correct there, and editing it would shorten the byte-identical prefix the child shares with the parent (measured ~86 tokens, since the parent's trailing extension-appended blocks shift offset) for no correctness gain.
+
 ## Architecture
 
 See `docs/architecture/architecture.md` for the full architecture document with Mermaid diagrams, domain model, structural analysis, and improvement roadmap.

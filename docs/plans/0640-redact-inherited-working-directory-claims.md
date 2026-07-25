@@ -106,7 +106,12 @@ The global option was rejected on evidence.
 It rewrites `<location>…/pi-packages/.pi/npm/node_modules/…/SKILL.md` — a valid, readable path, since `.pi/npm/` is gitignored and absent from a `git worktree add` checkout — into a 404, and it collides on path prefixes: `…/pi-packages-worktrees/issue-448` becomes `…/issue-640-worktrees/issue-448`, `…/pi-packages-archive` becomes `…/issue-640-archive`.
 A boundary-guarded variant kills the collisions but not the skill-path breakage.
 
-Strip is chosen: it yields exactly one canonical footer for every child, including same-cwd children (which today receive two identical ones), and gives a crisp testable invariant.
+Strip is chosen: it yields exactly one canonical footer for a child whose directory differs from its parent's, and gives a crisp testable invariant.
+
+Amended during implementation: the strip is applied **only** when the child's cwd differs from the parent's.
+Measured against a realistic parent prompt (this repo's `AGENTS.md` plus 15 skills, ~8,599 tokens), stripping unconditionally cost 342 characters (~86 tokens, 1.0%) of the byte-identical prefix a child shares with its parent — more than the 67-character footer itself, because the parent's trailing extension-appended blocks (pi-nocd's) shift offset and prefix matching cannot resume.
+That loss buys nothing for a same-cwd child, whose inherited footer is already correct.
+Anthropic is unaffected either way (its `cache_control` breakpoint covers the whole system block, which never matched the parent's), but implicit token-prefix caching (OpenAI, Gemini, OpenRouter) is.
 
 The redaction is an exact whole-line filter, not a substring replace, so a footer naming a *different* directory that happens to share a prefix with the parent's path is left alone:
 

@@ -301,7 +301,7 @@ src/
 │
 ├── session/                        session assembly and preparation
 │   ├── session-config.ts           pure assembler (main entry)
-│   ├── prompts.ts                  system prompt building
+│   ├── prompts.ts                  system prompt building; strips the inherited parent cwd footer when the child runs elsewhere (#640)
 │   ├── content-items.ts            shared message content parsing (tool-call names, assistant content)
 │   ├── context.ts                  parent conversation extraction
 │   ├── conversation.ts             render a session's messages as formatted text
