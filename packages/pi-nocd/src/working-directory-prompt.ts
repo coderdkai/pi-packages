@@ -36,16 +36,16 @@ export function buildWorkingDirectoryPrompt(cwd: string): string {
 }
 
 /**
- * Append the working-directory block to an existing system prompt.
+ * Ensure the system prompt carries the working-directory block for `cwd`.
  *
  * Idempotent: if the block's heading is already present, the prompt is returned
  * unchanged so chained `before_agent_start` handlers do not stack duplicates.
  *
  * @param systemPrompt - The fully assembled system prompt.
  * @param cwd - The resolved current working directory.
- * @returns The system prompt with the working-directory block appended.
+ * @returns The system prompt with the working-directory block present.
  */
-export function appendWorkingDirectoryPrompt(
+export function ensureWorkingDirectoryPrompt(
   systemPrompt: string,
   cwd: string,
 ): string {

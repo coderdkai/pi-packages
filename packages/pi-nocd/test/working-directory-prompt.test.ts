@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendWorkingDirectoryPrompt,
   buildWorkingDirectoryPrompt,
+  ensureWorkingDirectoryPrompt,
   WORKING_DIRECTORY_HEADING,
 } from "#src/working-directory-prompt.js";
 
@@ -29,9 +29,9 @@ describe("buildWorkingDirectoryPrompt", () => {
   });
 });
 
-describe("appendWorkingDirectoryPrompt", () => {
+describe("ensureWorkingDirectoryPrompt", () => {
   it("appends the block to an existing system prompt", () => {
-    const result = appendWorkingDirectoryPrompt(
+    const result = ensureWorkingDirectoryPrompt(
       "You are a helpful assistant.",
       "/srv/project",
     );
@@ -41,13 +41,13 @@ describe("appendWorkingDirectoryPrompt", () => {
   });
 
   it("separates the base prompt from the block with a blank line", () => {
-    const result = appendWorkingDirectoryPrompt("Base.", "/srv/project");
+    const result = ensureWorkingDirectoryPrompt("Base.", "/srv/project");
     expect(result).toContain(`Base.\n\n${WORKING_DIRECTORY_HEADING}`);
   });
 
   it("is idempotent when the block is already present", () => {
-    const once = appendWorkingDirectoryPrompt("Base.", "/srv/project");
-    const twice = appendWorkingDirectoryPrompt(once, "/srv/project");
+    const once = ensureWorkingDirectoryPrompt("Base.", "/srv/project");
+    const twice = ensureWorkingDirectoryPrompt(once, "/srv/project");
     expect(twice).toBe(once);
   });
 });

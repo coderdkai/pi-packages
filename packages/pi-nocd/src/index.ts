@@ -9,10 +9,10 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { appendWorkingDirectoryPrompt } from "./working-directory-prompt.js";
+import { ensureWorkingDirectoryPrompt } from "./working-directory-prompt.js";
 
 export default function piNocd(pi: ExtensionAPI): void {
   pi.on("before_agent_start", (event, ctx) => ({
-    systemPrompt: appendWorkingDirectoryPrompt(event.systemPrompt, ctx.cwd),
+    systemPrompt: ensureWorkingDirectoryPrompt(event.systemPrompt, ctx.cwd),
   }));
 }
