@@ -162,6 +162,8 @@ Then an H1 title (e.g., `# <short descriptive title>`) — required by markdownl
   (3) which existing tests must stay as-is because they genuinely exercise the layer being extracted?
 - **Invariants at risk** — when the change touches a surface a prior phase step already refactored, list that step's documented invariants (the architecture roadmap's `Outcome:`/`Landed:` bullets) and name the test that pins each — add a test if the invariant lives only in prose.
   A later step must not regress an earlier step's outcome with a green suite.
+  When an invariant is quantitative (a byte-identical prefix, a token budget, a cache or latency characteristic), measure the baseline and predict the post-change value at planning time.
+  A prose argument that the change is "at the tail" or "negligible" is not evidence, and a test pinning adjacent content does not pin the number (Refs #640).
 - **TDD Order** — numbered red→green→commit cycles.
   Each item names the test surface, what's covered, and the suggested commit message (`test:`, `feat:`, `feat!:`, `fix:`, `docs:`).
   When a refactor replaces a type, interface, or function that a large test file depends on, use lift-and-shift: introduce the new thing alongside the old, migrate callers and fixtures incrementally across steps, then remove the old in a final step.

@@ -57,6 +57,7 @@ Without this discipline, the per-change doc-update commits that append provenanc
 - Preserve intentional behavior unless there is a clear reason to change it.
 - Ask before removing functionality or changing defaults.
 - To check a GitHub issue/PR's state (including upstream repos), use `gh issue view N --repo owner/repo`, not web search.
+- For Pi SDK internals (prompt assembly, caching, session lifecycle), read Pi's own source at the sibling checkout `../pi` when present, rather than the installed `dist/` bundles or their sourcemaps.
 
 ### Tool-injected messages
 
@@ -251,6 +252,8 @@ Use `scripts/issue-context.sh <N>` to gather all available context for an issue 
 This project uses **pnpm** exclusively — never `npm` or `npx`.
 Before implementing, refactoring, or reviewing code, load the `code-design` skill — it covers naming, SOLID and structural design heuristics, TypeScript conventions, pnpm/ES2024 tooling rules, Pi SDK boundaries, and Biome/ESLint conflict workarounds.
 Use `colgrep` for intent-based codebase exploration and convention discovery; use `grep` for exact symbol matching.
+Quote a glob pattern meant for a command rather than the shell — `--include='*.ts'`, `find . -name '*.ts'`.
+Unquoted, it expands against the cwd first: bash silently substitutes a matched filename, and zsh aborts with `no matches found`.
 
 ## Markdown
 
