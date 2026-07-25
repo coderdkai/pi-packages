@@ -15,6 +15,9 @@
 /** Marker used to detect and avoid double-appending the block. */
 export const WORKING_DIRECTORY_HEADING = "# Working Directory";
 
+/** Opening words of the block's sentence, ahead of the literal path. */
+const SENTENCE_PREFIX = "Shell commands already execute in";
+
 /**
  * Build the instruction block for a given resolved working directory.
  *
@@ -25,7 +28,7 @@ export function buildWorkingDirectoryPrompt(cwd: string): string {
   return [
     WORKING_DIRECTORY_HEADING,
     "",
-    `Shell commands already execute in \`${cwd}\`. ` +
+    `${SENTENCE_PREFIX} \`${cwd}\`. ` +
       "Never prefix a command with `cd` into the current working directory — " +
       `neither \`cd ${cwd} &&\` nor \`cd $(pwd) &&\`. ` +
       "Just run the command directly.",
