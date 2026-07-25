@@ -14,6 +14,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { AgentConfigLookup } from "#src/config/agent-types";
 import type { EnvInfo } from "#src/session/env";
 import type { ModelRegistry } from "#src/session/model-resolver";
+import type { InheritedPrompt } from "#src/session/prompts";
 import type { AgentPromptConfig, SubagentType, ThinkingLevel } from "#src/types";
 
 // ── Public interfaces ────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ export interface AssemblerIO {
     config: AgentPromptConfig,
     cwd: string,
     env: EnvInfo,
-    parentPrompt?: string,
+    inherited?: InheritedPrompt,
   ) => string;
 }
 
@@ -155,12 +156,10 @@ export function assembleSessionConfig(
   const toolNames = registry.getToolNamesForType(type);
 
   // Build system prompt from the resolved agent config
-  const systemPrompt = io.buildAgentPrompt(
-    agentConfig,
-    effectiveCwd,
-    env,
-    ctx.parentSystemPrompt,
-  );
+  const systemPrompt = io.buildAgentPrompt(agentConfig, effectiveCwd, env, {
+    systemPrompt: ctx.parentSystemPrompt,
+    cwd: ctx.cwd,
+  });
 
   // Model resolution: explicit option > config model string > parent model
   const model =

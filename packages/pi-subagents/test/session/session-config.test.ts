@@ -83,7 +83,7 @@ describe("assembleSessionConfig — default agent shape", () => {
 
   it("systemPrompt reflects the parentSystemPrompt passed to buildAgentPrompt", () => {
     mockBuildAgentPrompt.mockImplementationOnce(
-      (_config, _cwd, _env, parentPrompt) => `assembled:${parentPrompt}`,
+      (_config, _cwd, _env, inherited) => `assembled:${inherited?.systemPrompt}`,
     );
 
     const result = assembleSessionConfig("Explore", ctx, {}, mockEnv, mockAgentLookup, mockIO);

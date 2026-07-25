@@ -18,6 +18,9 @@ const envNoGit: EnvInfo = {
   platform: "linux",
 };
 
+/** The cwd the inherited parent prompt is taken to name, unless a test varies it. */
+const PARENT_CWD = "/parent";
+
 function getDefaultConfig(name: string): AgentConfig {
   return testRegistry.resolveAgentConfig(name);
 }
@@ -55,7 +58,10 @@ describe("buildAgentPrompt", () => {
   it("general-purpose uses append mode (parent twin)", () => {
     const config = getDefaultConfig("general-purpose");
     const parentPrompt = "You are a parent coding agent with full powers.";
-    const prompt = buildAgentPrompt(config, "/workspace", env, parentPrompt);
+    const prompt = buildAgentPrompt(config, "/workspace", env, {
+      systemPrompt: parentPrompt,
+      cwd: PARENT_CWD,
+    });
     expect(prompt).toContain("parent coding agent with full powers");
     expect(prompt).toContain("<sub_agent_context>");
     expect(prompt).not.toContain("<inherited_system_prompt>");
@@ -82,7 +88,10 @@ describe("buildAgentPrompt", () => {
       runInBackground: false,
     };
     const parentPrompt = "You are a parent coding agent with special powers.";
-    const prompt = buildAgentPrompt(config, "/workspace", env, parentPrompt);
+    const prompt = buildAgentPrompt(config, "/workspace", env, {
+      systemPrompt: parentPrompt,
+      cwd: PARENT_CWD,
+    });
     expect(prompt).toContain("/workspace");
     expect(prompt).toContain("parent coding agent with special powers");
     expect(prompt).toContain("<sub_agent_context>");
@@ -118,7 +127,10 @@ describe("buildAgentPrompt", () => {
       runInBackground: false,
     };
     const parentPrompt = "You are a parent coding agent.";
-    const prompt = buildAgentPrompt(config, "/workspace", env, parentPrompt);
+    const prompt = buildAgentPrompt(config, "/workspace", env, {
+      systemPrompt: parentPrompt,
+      cwd: PARENT_CWD,
+    });
     expect(prompt).toContain("parent coding agent");
     expect(prompt).toContain("<sub_agent_context>");
     expect(prompt).not.toContain("<inherited_system_prompt>");
@@ -156,7 +168,7 @@ describe("buildAgentPrompt", () => {
       config,
       "/workspace",
       env,
-      "PARENT parent prompt content",
+      { systemPrompt: "PARENT parent prompt content", cwd: PARENT_CWD },
     );
     expect(prompt).toContain("You are a standalone agent.");
     // Parent is now included as the cacheable base prefix.
@@ -197,7 +209,7 @@ describe("buildAgentPrompt", () => {
       config,
       "/workspace",
       env,
-      "IDENTITY parent content",
+      { systemPrompt: "IDENTITY parent content", cwd: PARENT_CWD },
     );
     const idxIdentity = prompt.indexOf("IDENTITY parent content");
     const idxTag = prompt.indexOf('<active_agent name="ordered"/>');
@@ -215,7 +227,7 @@ describe("buildAgentPrompt", () => {
       config,
       "/workspace",
       env,
-      "Parent prompt.",
+      { systemPrompt: "Parent prompt.", cwd: PARENT_CWD },
     );
     expect(prompt).toContain("Use the read tool instead of cat");
     expect(prompt).toContain("Use the edit tool instead of sed");
@@ -260,7 +272,7 @@ describe("buildAgentPrompt", () => {
         config,
         "/workspace",
         env,
-        "Parent identity prefix.",
+        { systemPrompt: "Parent identity prefix.", cwd: PARENT_CWD },
       );
       const idxIdentity = prompt.indexOf("Parent identity prefix.");
       const idxTag = prompt.indexOf('<active_agent name="Explore"/>');
@@ -282,7 +294,7 @@ describe("buildAgentPrompt", () => {
         config,
         "/workspace",
         env,
-        "Parent prompt content.",
+        { systemPrompt: "Parent prompt content.", cwd: PARENT_CWD },
       );
       const tagIdx = prompt.indexOf('<active_agent name="general-purpose"/>');
       const ctxIdx = prompt.indexOf("<sub_agent_context>");
@@ -337,7 +349,7 @@ describe("buildAgentPrompt", () => {
         appendConfig,
         "/workspace",
         env,
-        "Parent.",
+        { systemPrompt: "Parent.", cwd: PARENT_CWD },
       );
       const tagIdxB = appendPrompt.indexOf('<active_agent name="agent-b"/>');
       const envIdxB = appendPrompt.indexOf("# Environment");

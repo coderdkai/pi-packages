@@ -5,6 +5,14 @@
 import type { EnvInfo } from "#src/session/env";
 import type { AgentPromptConfig } from "#src/types";
 
+/** The parent session's contribution to a child prompt, plus the cwd that text claims. */
+export interface InheritedPrompt {
+  /** The parent agent's effective system prompt. */
+  systemPrompt: string;
+  /** The parent's working directory — the cwd its prompt footer names. */
+  cwd: string;
+}
+
 /**
  * Build the system prompt for an agent from its config.
  *
@@ -26,13 +34,13 @@ import type { AgentPromptConfig } from "#src/types";
  * per-agent policy inside the child session by parsing the system prompt.
  * The tag follows the cacheable parent prefix in both modes.
  *
- * @param parentSystemPrompt  The parent agent's effective system prompt.
+ * @param inherited  The parent agent's effective system prompt and the cwd it names.
  */
 export function buildAgentPrompt(
   config: AgentPromptConfig,
   cwd: string,
   env: EnvInfo,
-  parentSystemPrompt?: string,
+  inherited?: InheritedPrompt,
 ): string {
   const activeAgentTag = `<active_agent name="${config.name}"/>\n\n`;
 
@@ -41,7 +49,7 @@ Working directory: ${cwd}
 ${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : "Not a git repository"}
 Platform: ${env.platform}`;
 
-  const identity = parentSystemPrompt ?? genericBase;
+  const identity = inherited?.systemPrompt ?? genericBase;
 
   if (config.promptMode === "append") {
 
