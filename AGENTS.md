@@ -80,6 +80,8 @@ After a rejection, re-apply every intended edit (not just the ones you retried) 
 When an edit's `oldText` would span a decorative comment rule (a long run of `─`/`═`), anchor on adjacent unique code lines rather than the rule itself — miscounting the run fails the whole atomic batch.
 If you delete such a block by line number with `sed`, re-read the region afterward to confirm you did not remove an enclosing brace.
 A multi-line `perl -0777`/`sed` regex substitution across many similar blocks is a trap — a non-greedy `.*?` group spans block boundaries and silently corrupts a neighbor; collapse repeated multi-line literals with per-block `Edit` calls and reserve scripted substitution for single-line per-symbol renames (Refs #525).
+A replacement containing backslashes is a trap even as a single-line rename — shell, perl, and the regex engine each consume an escape level.
+Use `Edit` (Refs #653).
 When wrapping existing lines in a new enclosing block (a `describe`, function, or `try`), emit the opening and closing braces as two `edits[]` entries in one `Edit` call (or use `Write`) — a lone opening brace fails the whole file parse, and the close is too far from the open to anchor in the same `oldText`.
 
 ### Multi-session issue lifecycle
@@ -176,6 +178,8 @@ Each prompt template calls `set_session_name` (from `pi-session-tools`) to label
 Each prompt template sets the appropriate name automatically via `set_session_name`.
 
 ### Retro file format
+
+Get each stage timestamp from `date -u +"%Y-%m-%dT%H:%M:%SZ"` — never write one from memory; a model has no clock (Refs #653).
 
 Retro files use YAML frontmatter and accumulate `## Stage:` entries:
 
