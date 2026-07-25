@@ -229,8 +229,11 @@ Platform facts verified against Pi core source during #533 planning:
   On POSIX `\` is a legal filename character, so the token stays bare there.
 - The bash-token interpretation layer implementing these semantics (exact `/dev/*` devices preserved, `/c/` mounts translated, other POSIX absolutes literal-only external) shipped in #533: `PathNormalizer.forBashToken`/`interpretBashCdTarget`/`isBoundaryOutsideWorkingDirectory` branch on the shape returned by the pure `access-intent/bash/msys-bash-tokens.ts` classifier, and `BashPathResolver` routes every bash token (both the `external_directory` and `path` surfaces) through `forBashToken`.
   See `docs/decisions/0003-git-bash-posix-path-semantics.md`.
-- A win32 non-mount POSIX absolute (`/tmp/foo`) is a literal-only `AccessPath` whose `value()` (display) stays as typed but whose `matchValues()` carries a backslash alias (`\tmp\foo`) — the win32 path matcher folds a rule's separators (`/` → `\`, see `pathMatchOptions` in `rule.ts`), so a forward-slash value is otherwise unmatchable and a `/tmp/*` allow rule would never suppress the prompt.
-  When adding another literal-only path shape on win32, give it a backslash match alias or it cannot be allow-listed.
+- A win32 non-mount POSIX absolute (`/tmp/foo`) is a literal-only `AccessPath` matched and displayed exactly as typed, and a `/tmp/*` allow rule suppresses its prompt.
+  This works because the win32 path fold (`pathMatchOptions` in `rule.ts` → `PathFlavor.matchOptions`) normalizes separators on **both** the rule pattern and the matched value.
+  Folding only the pattern — the pre-#653 behavior — made every forward-slash match value unmatchable, silently voiding a rule like `path: {"/dev/null": "allow"}` on Windows.
+  Keep the fold symmetric: matching goes through `CompiledWildcardPattern.matches(value)`, which owns both halves, and the compiled pattern exposes no raw `RegExp` a caller could `.test()` with an unfolded value.
+  A win32 path shape therefore needs no hand-built backslash match alias (#533's was removed in #653).
 
 ## Notes for Agents
 
