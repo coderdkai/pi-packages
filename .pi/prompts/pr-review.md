@@ -85,13 +85,16 @@ Whichever direction is chosen, the contributor gets explicit, durable credit:
 ## Record the decision and hand off
 
 Write a triage note so the next stage has the full context.
-Path: `packages/<PKG>/docs/retro/NNNN-<slug>.md` (single-package) or `docs/retro/NNNN-<slug>.md` (cross-package), where `NNNN` matches the PR number and `<slug>` is derived from the title.
+Path: `packages/<PKG>/docs/retro/NNNN-<slug>.md` (single-package) or `docs/retro/NNNN-<slug>.md` (cross-package), with `<slug>` derived from the title.
+`NNNN` is the **issue** the PR addresses (read the PR body for `Refs #N` / `Closes #N`), not the PR number — the directory is issue-keyed and `/plan-issue` looks the retro up by issue number.
+Fall back to the PR number only when the PR references no issue.
 If the file does not exist, create it with frontmatter:
 
 ```yaml
 ---
-issue: $1
-issue_title: "<exact PR title>"
+issue: <the issue the PR addresses; $1 only if it references none>
+issue_title: "<exact issue title>"
+pr: $1
 ---
 ```
 
@@ -118,7 +121,7 @@ Append with the `Edit` tool (or `Write` for a new file), not a shell heredoc.
 
 Then hand off based on the decision:
 
-1. **Simplified design** — commit the triage note (`docs(pr-review): triage PR #$1 → adopt-with-simplified-design`), then tell the operator to run `/plan-issue #$1`.
+1. **Simplified design** — commit the triage note (`docs(pr-review): triage PR #$1 → adopt-with-simplified-design`), then tell the operator to run `/plan-issue #<issue>` — the issue number the note is keyed to, not `#$1`.
    `/plan-issue` reads this retro note as prior context: the direction is already decided here, so its Decide gate is satisfied — it should plan around the recorded decision rather than re-litigate it.
 2. **Adopt as-is** — produce a focused review checklist (correctness, convention fit, test coverage, behavior-change/breaking call-out, attribution) and either request changes on the PR or proceed to merge per the operator's call.
 3. **Decline / defer** — commit the triage note, then close the PR with a comment that credits `@<login>`, explains the reasoning, and (if the problem is real) points at a tracked follow-up.
