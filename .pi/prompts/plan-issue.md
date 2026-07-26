@@ -52,6 +52,7 @@ Before investigating the issue, load skills relevant to the change:
    If `docs/plans/archive/` exists, those files use issue numbers from a previous repository — ignore them when resolving conflicts.
 4. Read every issue the body references as a prerequisite or related (`gh issue view <n>`).
    Note whether each is implemented yet — your plan must say what it depends on vs. defers.
+   Then search for open issues the body does **not** reference but that touch the same module or symbol (`gh issue list --state open --search "<symbol>"`) — a sibling issue on the same file changes the framing, and the operator should not have to supply it (Refs #635).
 5. Open the source files most relevant to the change and skim them before writing.
 6. When the plan introduces a public API pattern (package `exports`, `Symbol.for()` accessor, service interface) or agent-facing message formatting (attribution tags, error prefixes, log labels), use colgrep or grep to search sibling packages for the established convention and follow it unless there is a documented reason to diverge.
    When a config key or public field names an SDK/domain concept (a tool-call part, event, or content type), use the SDK's own term for it — verify against the SDK types — rather than adopting a term from the issue body verbatim (Refs #580: `commandField` shipped, then needed renaming to `commandArgument` to match `ToolCall.arguments`).
@@ -96,6 +97,7 @@ If the issue is third-party (its author is not the gh CLI user, as determined in
 The ambiguity for a third-party issue is not *how* to build it but *whether* the operator wants it built, and in what form.
 Use `ask-user` to confirm the direction before planning: at minimum ask whether to (a) implement the proposal as described, (b) implement a different approach to the same underlying problem, or (c) decline/defer.
 When the issue is in an unfamiliar domain (a platform, protocol, or tool you have not verified), research the domain facts first — the direction options themselves depend on them, and an ungrounded ask gets bounced (Refs #533).
+When an option's differentiator is a behavior change, put the concrete before/after in the pre-ask message — the scenarios where behavior differs and where it does not — since an abstractly-labeled option set gets bounced (Refs #635).
 When the proposal also has design ambiguities, fold those into the same `ask-user` call.
 Let the operator's answers — not the issue body — drive the plan's Goals and Design Overview.
 

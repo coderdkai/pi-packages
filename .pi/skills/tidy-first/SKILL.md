@@ -47,10 +47,10 @@ The report is advisory — you decide what lands.
 Do not tidy code the change will not touch — that is scope creep, not Tidy First.
 If the assessor reports "no preparatory tidying warranted," proceed directly to the change.
 
-> **First-live-use checkpoint (added 2026-07-13).**
-> The `tidy-first-assessor` is new and unproven in practice.
-> On its first few dispatches, check its **Rejected as scope creep** list against its **Recommended** list: if it recommends tidying a module the change will not touch, its scope boundary is too loose — tighten "The discipline (and its boundary)" in `.pi/agents/tidy-first-assessor.md`.
-> Remove this callout once the boundary has held across a handful of issues.
+> **Model checkpoint (added 2026-07-13, narrowed 2026-07-26).**
+> The scope boundary has held across many dispatches, but the assessor's default `anthropic/claude-sonnet-5` has often reported "no preparatory tidying warranted" — which a weaker model would also report.
+> On the next dispatch over a change with real structural surface (not a few-line fix), pass `model: "anthropic/claude-opus-5"` to the `subagent` call.
+> If Opus also finds nothing, the reports are genuine — delete this callout (Refs #635).
 
 ## Step 4: Proceed
 
