@@ -119,7 +119,7 @@ Skip this step entirely if step 4b recorded a defer/batch decision — the relea
    - If `release_pr_merge` returns an error (not mergeable), stop and report — let the user decide.
    - Exception: if it fails with `merge_state: UNSTABLE`, check `gh pr view <N> --json statusCheckRollup`.
      An empty rollup means no checks ran — the `GITHUB_TOKEN` case above; merge with `gh pr merge <N> --rebase` (matches the `defaultMergeMethod: rebase` config so the release lands as a linear commit, not a merge bubble), then `git pull --ff-only`.
-     A non-empty rollup with a check still `IN_PROGRESS` is neither case — wait for it to finish (re-poll `statusCheckRollup`), then retry `release_pr_merge`; do not fall back to `gh pr merge` while a check is running.
+     A non-empty rollup with a check still `IN_PROGRESS` is neither case — wait with `gh pr checks <N> --watch --fail-fast`, then retry `release_pr_merge`; do not fall back to `gh pr merge` while a check is running.
      Stop and report only when the PR is genuinely blocked (`CONFLICTING`/`DIRTY`/`BEHIND` or a failing check).
 5. Use `release_watch` to wait for the release tag to land on HEAD.
 
@@ -136,7 +136,7 @@ Skip this step if step 6 was skipped (deferred/batch release, or no release-plea
 
 Print:
 
-- The new HEAD on `main` (`git log --oneline -1`).
+- The new HEAD on `main` (`git log --oneline -1`); confirm `git status -sb` shows no unpushed commits before naming it.
 - The released version, if a release commit just landed (`git tag --points-at HEAD` or read `package.json`).
 - Issue close confirmation.
 - Anything that was skipped and why.

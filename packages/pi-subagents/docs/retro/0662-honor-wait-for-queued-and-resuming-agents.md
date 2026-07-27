@@ -126,3 +126,65 @@ What we're accommodating: a release-please PR opened immediately after the shipp
 
 A sturdier accommodation would be a small poll loop (e.g. `gh pr checks 672 --watch` or a `statusCheckRollup`-driven loop with short backoff) instead of one fixed sleep — avoids both under-waiting (retrying too soon) and over-waiting (a flat 60s when the check finishes in 10s), and removes the manual re-poll step from the runbook prose into something scriptable.
 Worth raising at the next `/retro` for this issue as a candidate `ci_watch`-style helper for the release-please PR's own checks, parallel to the existing `ci_watch` tool for the shipped commit's CI run.
+
+## Stage: Final Retrospective (2026-07-27T15:53:02Z)
+
+### Session summary
+
+A single session carried all four stages for #662 — third-party PR review, planning, TDD implementation, and ship — landing `pi-subagents` `19.0.1` with three `fix:` commits and +8 tests.
+The work adopted an external contributor's diagnosis while re-implementing the design, moving the wait decision onto `Subagent.waitUntilSettled()` and closing an `AbortSignal` gap the PR did not address.
+Two process frictions surfaced, both in the release/ship tail rather than the engineering: a hand-rolled `sleep 60` around `release_pr_merge`, and a stranded local commit that diverged history.
+
+### Observations
+
+#### What went well
+
+- The red-first discipline caught a **false-green test**, which is the strongest signal in the session.
+  The deleted "keeps a waiter blocked until the resume finishes" test asserted the status a waiter observes — exactly the bug's symptom — and looked like a proper integration pin.
+  Run against unfixed source it *passed*, because the resume settles in the same tick the test resolves it.
+  Written Red-and-Green together it would have shipped as a no-op pin that nobody would ever question.
+- The `/review-third-party-pr` verify gate produced binary evidence instead of a judgment call.
+  Checking the PR branch out, reverting only `src/lifecycle/subagent.ts` and `src/tools/get-result-tool.ts` to `origin/main`, and re-running the two touched test files turned "is this defect real" into a watched failure.
+  A single `git log 104339af..origin/main -- <four files>` returning empty also settled "the PR base is 28 commits behind" as irrelevant — cheap and decisive.
+- "No preparatory tidying warranted" was not the same as "no value".
+  The `tidy-first-assessor` recommended zero prep commits but its reconnaissance changed two plan steps: it found the existing `describe("Subagent.scheduleVia() — eager promise capture")` block already using `Promise.withResolvers` gating (the timer-free idiom the new tests needed), and found `"throws when no session exists"` already pinning the resume precondition, making the plan's step-5 test redundant.
+- The plan's instruction *not* to add an `eslint-disable` preemptively paid off: `new Promise<void>(...)` did not trip `@typescript-eslint/no-invalid-void-type`, unlike `Promise.withResolvers<void>()` in `concurrency-limiter.ts`.
+
+#### What caused friction (agent side)
+
+- `other` (tooling gap) — `release_pr_merge` returned `UNSTABLE` because the release-please PR had its own `check` run still `IN_PROGRESS`, and the recovery was a hand-rolled `sleep 60`.
+  Root cause: `mergeReleasePR` in `packages/pi-github-tools/src/lib/release.ts` is single-shot — one `gh pr view`, then error if not `CLEAN`.
+  The sibling `watchRelease` in the same file already implements a `pollInterval = 10` loop, so the polling idiom sits ten lines away from the code that needed it.
+  Impact: one wasted `release_pr_merge` call and one arbitrary 60s sleep; the user flagged it as recurring across sessions.
+- `other` (workflow gap) — `/retro-note` commits but never pushes, and it is designed to interrupt any workflow.
+  Invoked here *after* `/ship-issue` had already pushed (step 3), its commit `fe61d301` stranded locally while CI pushed the `last-release-sha` write-back onto the same base.
+  Impact: divergent history at the next sync, `/retro`'s gate correctly refused to fast-forward, and a user-authorized `git rebase origin/main` was needed before the retrospective could start.
+- `instruction-violation` (self-identified, after the fact) — the `/ship-issue` step-7 report named `fe61d301` as "New HEAD on `main`" when that commit had never been pushed.
+  The prompt says to print `git log --oneline -1`, which is local HEAD; nothing in step 7 cross-checks it against the upstream.
+  Impact: an inaccurate final report, caught only when `/retro`'s sync gate failed; no rework beyond the rebase.
+
+#### What caused friction (user side)
+
+- Nothing that cost work — the `/retro-note` intervention was well-timed and strategic, questioning whether the `sleep` was the right accommodation rather than just accepting it.
+  The one structural observation is that "we **keep** having to sleep" is cross-session knowledge the agent cannot see: each session starts fresh and reads a single issue's retro, so a friction recurring across unrelated issues is invisible until the operator names it.
+  That makes the operator the only detector for this class, and argues for landing such observations as prompt/tooling changes rather than retro prose — prose in `0662` will not be read by the next issue's ship stage.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the `tidy-first-assessor` was explicitly overridden to `anthropic/claude-opus-5` (its frontmatter default is `anthropic/claude-sonnet-5`) to satisfy the skill's model checkpoint; appropriate for judgment-heavy design assessment, and the checkpoint was retired afterwards in `da812270`.
+  The `pre-completion-reviewer` ran on its default `anthropic/claude-sonnet-5` and returned a substantive PASS with one real WARN (the class-diagram omission), so no capability mismatch was evident on judgment-heavy review.
+  On the main thread the ship stage ran on `claude-sonnet-5` — appropriate, as it is mechanical — and this retrospective on `claude-opus-5`.
+- **Escalation-delay tracking** — no `rabbit-hole` frictions.
+  The longest same-error sequence was three consecutive calls fixing `awk` quoting while extracting Mermaid blocks for `mmdc`, well under the five-call threshold.
+- **Unused-tool detection** — nothing missed.
+  `colgrep` was never dispatched this session, which was the correct call: every search was for an exact symbol (`isActive`, `_promise`, `scheduleVia`, `forwardAbortSignal`), which the `colgrep` skill's own decision table assigns to `grep`.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check`, root `pnpm run lint`, and the full package suite ran after each of the three TDD cycles rather than only at the end, and `pnpm fallow dead-code` plus `mmdc` diagram verification ran before the pre-completion dispatch.
+
+### Changes made
+
+1. `.pi/prompts/ship-issue.md` step 6.4 — replaced the vague "re-poll `statusCheckRollup`" instruction with the concrete `gh pr checks <N> --watch --fail-fast`, the command whose absence produced the arbitrary `sleep 60`.
+2. `.pi/prompts/ship-issue.md` step 7 — the new-HEAD bullet now requires confirming `git status -sb` shows no unpushed commits before naming it, backstopping the inaccurate report this session produced.
+3. `.pi/prompts/retro-note.md` step 4 — added a push when the branch tracks an upstream and was in sync before the note, so an interrupting note cannot strand a commit behind a workflow that already pushed.
+4. `.pi/skills/testing/SKILL.md` § Timers and environment — added a line directing observation of not-yet-settled state to promise identity or `Promise.withResolvers` gating, since a `setTimeout(…, 0)` sleep false-greens when the code settles in the same tick.
+5. Filed Issue #673 (`release_pr_merge` fails on a still-running check instead of waiting for it) for the tooling fix behind change 1 — beyond retro scope, so it wants its own `/plan-issue`.

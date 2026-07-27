@@ -50,6 +50,7 @@ Load this skill when writing, debugging, or planning tests.
 
 - When testing code that uses `setInterval`, never use `vi.runAllTimersAsync()` — it loops infinitely.
   Use `vi.advanceTimersByTimeAsync(ms)` with a specific duration instead.
+- To observe not-yet-settled state, assert promise identity or gate with `Promise.withResolvers` — a `setTimeout(…, 0)` tick-count sleep silently false-greens when the code under test settles in the same tick (Refs #662).
 - Prefer reading `process.env` inside functions rather than capturing it as a module-level constant — `vi.stubEnv()` alone cannot change a constant already evaluated at import time.
   If a module-level constant is unavoidable, test it with `vi.resetModules()` + `await import(...)` inside the test body, and call `vi.unstubAllEnvs()` + `vi.resetModules()` in `afterEach`.
 
