@@ -938,3 +938,25 @@ describe("Subagent.resume() — error handling", () => {
 		await expect(agent.resume("more")).rejects.toThrow(/missing session/);
 	});
 });
+
+describe("Subagent.resume() — awaitable handle", () => {
+	it("republishes the promise getter for the in-flight resume", async () => {
+		const { agent, stub } = createResumableAgent();
+		agent.start();
+		const firstRun = agent.promise;
+		await firstRun;
+		const { promise: resuming, resolve: finishResume } = Promise.withResolvers<string>();
+		stub.resumeTurnLoop.mockReturnValue(resuming);
+
+		const returned = agent.resume("continue");
+
+		// The getter must track the live resume, not the settled first-run handle.
+		expect(agent.promise).not.toBe(firstRun);
+		expect(agent.promise).toBe(returned);
+
+		finishResume("resumed late");
+		await returned;
+		expect(agent.status).toBe("completed");
+		expect(agent.result).toBe("resumed late");
+	});
+});

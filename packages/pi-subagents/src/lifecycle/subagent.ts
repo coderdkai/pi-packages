@@ -118,6 +118,7 @@ export class Subagent {
 
 	readonly abortController: AbortController;
 	private _promise?: Promise<void>;
+	/** Handle on the agent's current run — the initial run, or the live resume that replaced it. */
 	get promise(): Promise<void> | undefined { return this._promise; }
 
 	private readonly execution: SubagentExecution;
@@ -350,16 +351,26 @@ export class Subagent {
 	 * subscription lifecycle internally (same wiring as run()).
 	 *
 	 * Requires an existing SubagentSession (set when the original run created it).
-	 * The returned promise always resolves (errors are captured internally).
+	 * The returned promise always resolves (errors are captured internally) and is
+	 * published as the `promise` getter, so waiters track the resume rather than
+	 * the settled handle of the original run.
 	 * The parent signal flows straight through to resumeTurnLoop — resume does not
 	 * route through this.abortController.
 	 */
-	async resume(prompt: string, signal?: AbortSignal): Promise<void> {
+	resume(prompt: string, signal?: AbortSignal): Promise<void> {
 		const subagentSession = this.subagentSession;
 		if (!subagentSession) {
-			throw new Error("Subagent not configured for resume — missing session");
+			// Rejection, not a throw: this method is not async, and a synchronous
+			// throw would escape a caller's `.rejects` assertion.
+			return Promise.reject(new Error("Subagent not configured for resume — missing session"));
 		}
 
+		this._promise = this.runResume(subagentSession, prompt, signal);
+		return this._promise;
+	}
+
+	/** The resume body. Always resolves — errors terminate through failResume(). */
+	private async runResume(subagentSession: SubagentSession, prompt: string, signal?: AbortSignal): Promise<void> {
 		this.resetForResume(Date.now());
 		this.listeners.attachObserver(subscribeSubagentObserver(subagentSession, this.state, {
 			onCompact: (info) => this.execution.observer?.onCompacted?.(this, info),
