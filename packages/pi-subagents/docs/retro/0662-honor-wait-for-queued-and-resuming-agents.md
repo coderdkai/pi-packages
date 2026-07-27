@@ -50,3 +50,30 @@ Reference the PR as `Refs #662` — never `Closes #662`.
 ```text
 Co-authored-by: daoguademeng <whumaple@gmail.com>
 ```
+
+## Stage: Planning (2026-07-27T14:42:30Z)
+
+### Session summary
+
+Wrote `docs/plans/0662-honor-wait-for-queued-and-resuming-agents.md`, a seven-cycle TDD plan covering the queued-agent wait, the ignored `AbortSignal`, and the stale `promise` getter across a resume.
+The PR-review stage had already run the direction gate, so this session planned around the recorded decision rather than re-litigating it.
+The plan ships independently — Issue #662 is not a step in the Phase 15–21 roadmap, so it carries no `Release: batch` tag.
+
+### Observations
+
+The central design call was where the wait decision lives.
+The PR patched the guard in place (`record.status === "running"` → `record.isActive()`), which fixes the defect but leaves `GetResultTool` asking the record three questions before acting — the Law-of-Demeter case in the `design-review` checklist.
+The plan instead adds `Subagent.waitUntilSettled(signal?)` so the record owns "am I still awaitable, and what is my handle", and the call site collapses to one tell.
+This also lands the `code-design` OCP heuristic: the discriminator sweep drops `status === "running"` from 2 production sites to 1, and the survivor (`get-result-report.ts:45`) is per-status presentation dispatch that the Non-Goals deliberately keep.
+
+Interrupt semantics were the other real decision.
+Ending the wait must **not** abort the agent — `get_subagent_result` is a query, and the agent-killing reading of ESC already lives in `InterruptHandler` (Issue #664).
+Today ESC ends a wait twice over (the signal race and `abortAll()`), so the race looks redundant; it stops being redundant the moment #664 makes abort-all opt-out, which is the argument for landing it here instead of deferring.
+The listener-cleanup channel uses an inner `AbortController` with the `{ signal }` listener option rather than the returned-closure shape of `RunListeners.wireSignal` and `forwardAbortSignal`.
+
+Two sequencing traps are pinned in the TDD order.
+Making `resume()` non-`async` would convert its precondition rejection into a synchronous throw that escapes `.rejects.toThrow()`, so the plan lands a rejection test before the conversion and specifies `Promise.reject` over `throw`.
+And the new tests must not copy the PR's `await new Promise((r) => setTimeout(r, 0))` — that would be the first `setTimeout` across the package's 64 test files; promise identity or a microtask tick is deterministic and in-convention.
+
+No follow-up issues were filed.
+Both Open Questions (signalling a cut-short wait in the report; a per-call `timeout`) are speculative and entangled with Issues #636 and #664, which already exist.
