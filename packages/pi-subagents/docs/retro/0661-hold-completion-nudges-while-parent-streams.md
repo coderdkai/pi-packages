@@ -96,3 +96,38 @@ Replacing `parentStreaming` with a direct `pi.isIdle()` query was rejected after
 That is recorded in Open Questions as the cleanup to make if Pi ever surfaces it on `ExtensionAPI`.
 
 No follow-up issues were filed — the plan names no concrete deferred work, and #636 (compact `get_subagent_result` rendering) already exists and is unrelated to delivery timing.
+
+## Stage: Implementation — TDD (2026-07-27T01:41:09Z)
+
+### Session summary
+
+Implemented the turn-boundary nudge gating in three commits: the behavior change (`8f7f387d`), the doc updates (`f514ad86`), and a lint fixup (`795b9370`).
+`NotificationManager` now withholds nudges arriving while the parent's agent run is active and flushes them on `agent_settled` with a fresh consumption re-check; the 200 ms `NUDGE_HOLD_MS` debounce, `scheduleNudge`, and `cancelNudge` are gone.
+The `pi-subagents` suite went from 1083 to 1087 tests (six new turn-boundary tests, three pre-existing timer-based tests re-arranged, one renamed).
+
+### Observations
+
+The session's defining event was a planning error caught at the type checker.
+The plan chose `agent_settled` over `agent_end` by reading the sibling Pi checkout at `../pi`, which sits at 0.82.1 — but the package pinned SDK `0.79.1`, where `agent_settled` does not exist.
+This is precisely the failure mode AGENTS.md warns about when reading the sibling checkout instead of the installed `dist/`, and the planning stage did not check the pinned version before committing to the design.
+A useful rule for future plans: when a design depends on a specific SDK event, method, or type, verify it against the **installed** `node_modules` version, not the sibling checkout, before writing it into the plan.
+
+The operator chose to raise the peer floor and take the break rather than fall back to `agent_end`.
+Establishing the correct floor turned up a second trap: `agent_settled` was added in Pi `0.80.4`, but `0.80.4` was git-tagged and **never published to npm** — the registry jumps `0.80.3` → `0.80.5`.
+A `>=0.80.4` floor would have named an uninstallable version in a `BREAKING CHANGE:` remediation, so the floor is `>=0.80.5`.
+The first attempt at the dev pin also failed: the three `@earendil-works/*` packages version independently, and `pi-ai@0.80.4` does not exist at all.
+
+The plan's split of TDD steps 1 and 2 did not survive contact.
+The `notification.ts` rework leaves `subagent-manager.test.ts`'s after-await race test red until that test arranges the streaming state, so committing step 1 alone would have left the repository red.
+Both landed in one commit with the deviation recorded in the body.
+
+The planning spike paid for itself.
+It had predicted exactly three failing tests from removing the debounce, and exactly those three failed — so the only surprise in the implementation was the SDK version, not the design.
+The plan's mutation check also proved worthwhile: reverting just the `parentRunActive` branch fails four tests including the `#661` regression, confirming the tests pin behavior rather than passing vacuously.
+
+Pre-completion reviewer: PASS.
+It independently re-verified the `0.80.4`-never-published finding and the ancestry of the introducing commit, and raised one non-blocking warning — an unused `afterEach` import left by the removed fake-timer hooks.
+On inspection `beforeEach` was dead too (the remaining `vi.useFakeTimers()` calls are inline inside an `it`), and both were removed in `795b9370`.
+Because the most recent commit was a `docs:` one, which must not absorb a fixup, it landed as a separate `style:` commit.
+
+PR #661 remains open and unmerged; every commit carries the `Co-authored-by` trailer, and the ship stage owes `@daoguademeng` a close comment crediting the diagnosis.
