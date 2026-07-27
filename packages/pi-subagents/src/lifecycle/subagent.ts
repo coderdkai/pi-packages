@@ -329,6 +329,19 @@ export class Subagent {
 	}
 
 	/**
+	 * Wait until this agent's current run settles.
+	 * Resolves immediately when the agent is no longer active or has no run
+	 * handle. A queued agent is awaitable because scheduleVia() captures the
+	 * limiter promise at spawn, so the wait spans both the queue slot and the
+	 * run that follows it.
+	 */
+	async waitUntilSettled(): Promise<void> {
+		const run = this._promise;
+		if (!run || !this.isActive()) return;
+		await run;
+	}
+
+	/**
 	 * Resume an existing session with a new prompt, managing the observer
 	 * subscription lifecycle internally (same wiring as run()).
 	 *

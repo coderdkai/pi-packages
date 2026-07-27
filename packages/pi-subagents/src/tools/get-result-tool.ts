@@ -32,9 +32,11 @@ export class GetResultTool {
 			return textResult(`Agent not found: "${params.agent_id}". Records are cleared at session start/switch, so it may be from a previous session.`);
 		}
 
-		// Wait for completion if requested.
-		if (params.wait && record.status === "running" && record.promise) {
-			await record.promise;
+		// Wait for completion if requested. The record owns the decision of whether
+		// it is still awaitable — a queued agent counts, because scheduleVia()
+		// captures its limiter promise at spawn.
+		if (params.wait) {
+			await record.waitUntilSettled();
 		}
 
 		// Pull-delivery edge: the parent is collecting the settled outcome here, so

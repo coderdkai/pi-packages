@@ -101,6 +101,32 @@ describe("GetResultTool", () => {
 		expect(record.consumed).toBe(true);
 	});
 
+	it("waits for a queued agent when wait=true", async () => {
+		const sessionStub = createSubagentSessionStub();
+		sessionStub.runTurnLoop.mockResolvedValue({ responseText: "Finished after the queue.", aborted: false, steered: false });
+		const record = createTestSubagent({
+			status: "queued",
+			completedAt: undefined,
+			execution: makeStubExecution({
+				createSubagentSession: async () => toSubagentSession(sessionStub),
+			}),
+		});
+		// The limiter admits the agent only after the parent has begun waiting.
+		const { promise: slot, resolve: openSlot } = Promise.withResolvers<void>(); // eslint-disable-line @typescript-eslint/no-invalid-void-type -- Promise.withResolvers<void> is valid; rule does not allow void in generic fn call type args
+		record.scheduleVia(async (thunk) => {
+			await slot;
+			await thunk();
+		});
+		const records = new Map([["agent-1", record]]);
+
+		const resultPromise = execute(makeManager(records), { agent_id: "agent-1", wait: true });
+		openSlot();
+
+		const result = await resultPromise;
+		expect(result.content[0].text).toContain("Finished after the queue.");
+		expect(record.consumed).toBe(true);
+	});
+
 	it("includes conversation when verbose=true", async () => {
 		const record = createTestSubagent();
 		const stub = createSubagentSessionStub();
