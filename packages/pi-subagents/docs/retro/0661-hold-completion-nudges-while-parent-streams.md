@@ -131,3 +131,77 @@ On inspection `beforeEach` was dead too (the remaining `vi.useFakeTimers()` call
 Because the most recent commit was a `docs:` one, which must not absorb a fixup, it landed as a separate `style:` commit.
 
 PR #661 remains open and unmerged; every commit carries the `Co-authored-by` trailer, and the ship stage owes `@daoguademeng` a close comment crediting the diagnosis.
+
+## Stage: Final Retrospective (2026-07-27T13:20:46Z)
+
+### Session summary
+
+One continuous session carried a third-party PR from triage through release: PR review, planning, TDD implementation, and ship, landing `@gotgenes/pi-subagents@19.0.0`.
+The capability was adopted with an independent, simpler design rather than merging the contributor's diff, and PR #661 was closed with credit rather than merged.
+The defining friction was a planning-stage design decision made against the wrong SDK version, which surfaced only at the type checker and escalated the change into a breaking peer-floor bump.
+
+### Observations
+
+#### What went well
+
+The planning spike is the pattern most worth repeating.
+Two prior docs called `NUDGE_HOLD_MS` "load-bearing", which is exactly the kind of prose that stops a change on reputation alone.
+Spiking the removal in a scratch worktree predicted precisely three failing tests, and precisely those three failed during implementation — converting an argument into a measurement and leaving the SDK version as the session's only real surprise.
+
+The verify-then-evaluate ordering in `/review-third-party-pr` earned its place.
+Reproducing the defect on `main` *before* reading the diff for design meant the whole review rested on a measurement rather than the PR's narrative, and it exposed that the contributor's own "bug repro" test failed on `main` only as a `TypeError` — a detail that directly shaped the re-implementation's test strategy.
+
+The `Explore`-on-`sonnet-5` guidance for Pi-internals traces (AGENTS.md line 62) worked as designed: 35 tool calls and 162 s of subagent budget returned exact `file:line` citations for the `followUp` queue semantics without spending this session's context.
+The `scripts/bin` `npm` shim also did its job, catching an `npm view` slip and pointing at AGENTS.md.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the plan chose the `agent_settled` event after reading the sibling checkout `../pi` (0.82.1) without checking that the package pins SDK `0.79.1`, where the event does not exist.
+   Caught only by `tsc` after the source change was already written.
+   Impact: the largest cost of the session — an `ask_user` re-decision mid-implementation, a scope escalation from a non-breaking `fix:` to a breaking `fix!:` with a peer-floor raise, plus two follow-on version traps (`0.80.4` was git-tagged but never published to npm, and `pi-ai@0.80.4` does not exist at all, since the three `@earendil-works/*` packages version independently).
+   The prior stage note misattributed this to ignoring AGENTS.md; that is wrong, and the correction matters.
+   AGENTS.md line 61 actively *directs* reading the sibling checkout over the installed `dist/`.
+   The gap is that the rule is silent on version skew — the checkout is fine for mechanism and misleading for API availability.
+
+2. `instruction-violation` (self-identified, at retro) — the `/tdd-plan` prompt's Tidy First step and the `tidy-first` skill were both skipped outright.
+   The plan modifies `src/` and `test/` files, so the skill's applicability gate plainly applied; the `testing` skill named in the same prompt was also never loaded.
+   Impact: no rework — the change was small and the design already settled — but a mandated review step was silently dropped, which is exactly the failure the bracketing subagents exist to prevent.
+
+3. `instruction-violation` (user-caught in effect — the tooling caught it) — ran `npm view` twice despite AGENTS.md's "pnpm exclusively, never `npm` or `npx`".
+   Impact: one wasted tool call; the shim redirected immediately, no rework.
+
+4. `other` — ran `gh issue close 661 --comment "test dry"` intending to probe whether the command accepts a PR number.
+   It is not a dry-run command; it closed the contributor's PR and posted a junk comment to a public, third-party-facing thread.
+   Impact: recovered within one turn by leaving the closed state (correct outcome anyway) and posting the real credit comment, but the `test dry` comment remains in the thread visible to `@daoguademeng`.
+   The underlying error is probing a state-mutating command by executing it.
+
+5. `missing-context` — locating the installed SDK types took roughly five consecutive failing calls (a zsh glob that found no matches, two `node -p` module-not-found errors, a failed `pnpm exec` resolve) before `ls` plus `find` succeeded.
+   Root cause: assuming a flat `node_modules/@scope/pkg` layout instead of pnpm's `.pnpm/` store with per-package symlinks.
+   Impact: added friction, no rework.
+
+#### What caused friction (user side)
+
+The SDK-version trap was structurally invisible to the operator too — the plan read as well-evidenced (it cited real `file:line` references), and nothing in it signalled that the citations came from a version the package does not install.
+A planning-stage habit of naming the *version* alongside an SDK citation would have made the skew reviewable rather than latent.
+
+The mid-implementation `ask_user` on the peer-floor decision worked well: it arrived with the concrete before/after table and a measured fallback already verified against the pinned version, so the operator could decide in one round trip rather than requesting analysis.
+
+### Diagnostic details
+
+- Model-performance correlation — three effective model switches (`opus-5` → `sonnet-5` → `opus-5`) across the stages.
+  Both subagents ran on `sonnet-5`: the `Explore` Pi-internals trace (explicitly per AGENTS.md guidance) and the `pre-completion-reviewer` (its frontmatter default).
+  Both were appropriate to judgment-heavy work; no mismatch to flag, and the reviewer independently re-verified the npm publication gap rather than trusting the commit message.
+- Escalation-delay tracking — the installed-SDK hunt (friction 5) ran about five consecutive failing calls on the same goal, at the flagging threshold.
+  No subagent was warranted; the fix was knowing pnpm's store layout.
+- Unused-tool detection — for friction 1, no subagent would have helped.
+  Reading `packages/pi-subagents/package.json` `devDependencies` during planning, a single cheap call, would have caught it outright.
+- Feedback-loop gap analysis — no gap.
+  A green baseline ran before any edit, `vitest` ran per-file at each red and green, and `pnpm run check` ran immediately after the source-plus-wiring change — which is precisely what surfaced the SDK gap before it reached a commit, as `/tdd-plan` prescribes for interface changes.
+  The plan's mandated mutation check (revert the gate, confirm four tests fail) added a verification most cycles skip.
+
+### Changes made
+
+1. `AGENTS.md` — added a version-skew caveat to the sibling-checkout rule: the `../pi` checkout runs ahead of the pinned dependency, so an API must be confirmed against the installed version before a design is built on it.
+2. `AGENTS.md` — added a Workflow rule against running a state-mutating command (`gh issue close`, `gh pr merge`, `git push`) to discover its behavior, directing read-only probes instead.
+3. `.pi/prompts/ship-issue.md` — added the third-party-PR close case to step 5, covering the gap where `/review-third-party-pr` hands off into `/ship-issue` with a PR number rather than an issue number.
+4. PR #661 — deleted the stray `test dry` comment (id `5086492506`), leaving only the credit comment on the contributor-facing thread.

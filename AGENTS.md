@@ -58,8 +58,12 @@ Without this discipline, the per-change doc-update commits that append provenanc
 - Preserve intentional behavior unless there is a clear reason to change it.
 - Ask before removing functionality or changing defaults.
 - To check a GitHub issue/PR's state (including upstream repos), use `gh issue view N --repo owner/repo`, not web search.
+- Never run a state-mutating command (`gh issue close`, `gh pr merge`, `git push`) to discover what it does — it executes.
+  Probe with a read-only query (`gh api .../issues/N --jq .state`) or `--help` (Refs #661).
 - For Pi SDK internals (prompt assembly, caching, session lifecycle), read Pi's own source at the sibling checkout `../pi` when present, rather than the installed `dist/` bundles or their sourcemaps.
   Dispatch an `Explore` subagent with `model: "sonnet-5"` for a multi-hop trace there (e.g. "how does `ui.custom` pass keybindings to the factory?") — a targeted read of a known file is fine inline, but a hunt costs 5–10 greps of this session's context, and `Explore`'s haiku default is too weak for the reasoning.
+  The checkout tracks Pi's `main` and runs ahead of the pinned dependency.
+  Read it for mechanism, but confirm any API you design around exists in the installed version first — `grep` the types under `node_modules/.pnpm/@earendil-works+pi-coding-agent@*/` (Refs #661).
 
 ### Tool-injected messages
 
