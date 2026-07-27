@@ -314,7 +314,7 @@ src/
 │   ├── create-subagent-session.ts  assembly factory: session creation, binding, tool filtering
 │   ├── subagent-session.ts         born-complete child session: turn loop, steer, dispose
 │   ├── turn-limits.ts              normalizeMaxTurns (turn-count policy)
-│   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer)
+│   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer, wait-until-settled)
 │   ├── subagent-state.ts           lifecycle status + metrics + result-consumption value object (transitions, accumulators, classification predicates)
 │   ├── run-listeners.ts            per-run observer-unsub and signal-detach handles
 │   ├── workspace-bracket.ts        child workspace prepare/dispose lifecycle
