@@ -67,3 +67,32 @@ Co-authored-by: daoguademeng <whumaple@gmail.com>
 
 The close comment on PR #661 thanks `@daoguademeng` by name, links the implementing SHA(s), and credits the diagnosis — the fire→turn-end window was correctly identified and is a genuine defect.
 Reference the PR as `Refs #661` in commits; never `Closes #661`.
+
+## Stage: Planning (2026-07-27T01:10:40Z)
+
+### Session summary
+
+Wrote `docs/plans/0661-hold-completion-nudges-while-parent-streams.md` around the direction settled during PR review, so the `Decide` gate was already satisfied and not re-litigated.
+The plan is three TDD steps: gate `NotificationManager` on the parent turn boundary (with the `index.ts` wiring in the same commit), re-arrange the two Bug-1 race tests, then update the architecture module-tree entry and the package skill row.
+The central planning work was validating — by spike, not argument — that removing the 200 ms `NUDGE_HOLD_MS` debounce is safe despite two prior docs calling it load-bearing.
+
+### Observations
+
+The spike was the decisive step and is worth repeating in similar situations.
+`docs/architecture/history/phase-20-result-delivery.md:60` and retro `0535:42` both credit `NUDGE_HOLD_MS` as load-bearing for the `consume()`-after-await invariant, with an explicit warning that *decreasing* it narrows correctness.
+Rather than reason about that from prose, a scratch worktree implemented the collapsed design and ran the suite: exactly three tests failed, all of which had been using the timer as a stand-in for "a parent turn is in progress".
+After arranging the streaming state in those three, the full suite passed 1083/1083 with `check` and `lint` clean.
+The invariant strengthens rather than weakens, because the hold window widens from 200 ms to the remainder of the parent's agent run.
+
+The argument that makes the debounce removable is grep-verifiable, not theoretical: all three `markConsumed()` call sites (`get-result-tool.ts:44`, `foreground-runner.ts:114`, `agent-tool.ts:109`) execute inside tool handlers, which only run inside an agent run.
+So no consumer can race a nudge on the idle path, and the idle path needs no debounce.
+
+`pnpm fallow dead-code` against the spike flagged `onParentAgentSettled` as an unused class member until `index.ts` registers the handler.
+That forced a plan-shaping decision: the method and its wiring must land in one commit, which is why step 1 is deliberately larger than a pure red/green split would suggest.
+
+Two design choices were rejected.
+Putting the lifecycle hooks on the `NotificationSystem` interface was rejected on ISP grounds — `SubagentEventsObserver` calls only `sendCompletion`, and `index.ts` already holds the concrete `NotificationManager`, so the interface does not need to widen.
+Replacing `parentStreaming` with a direct `pi.isIdle()` query was rejected after checking the exact type the code holds: `isIdle()` is on `ExtensionContext`, not `ExtensionAPI`.
+That is recorded in Open Questions as the cleanup to make if Pi ever surfaces it on `ExtensionAPI`.
+
+No follow-up issues were filed — the plan names no concrete deferred work, and #636 (compact `get_subagent_result` rendering) already exists and is unrelated to delivery timing.
