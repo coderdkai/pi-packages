@@ -128,10 +128,15 @@ export interface NotificationSystem {
   dispose: () => void;
 }
 
-const NUDGE_HOLD_MS = 200;
-
 export class NotificationManager implements NotificationSystem {
-  private pendingNudges = new Map<string, ReturnType<typeof setTimeout>>();
+  // pi.sendMessage is fire-and-forget: while the parent's agent run is active,
+  // a followUp is handed to a queue the extension cannot recall, yet it is only
+  // delivered when the run drains that queue at turn end. A parent that pulls
+  // the result in between would receive it twice. So nudges that arrive mid-run
+  // are withheld here — where record.consumed is still consultable — and
+  // flushed once the run settles.
+  private pendingNudges = new Map<string, Subagent>();
+  private parentRunActive = false;
 
   constructor(
     private sendMessage: (
@@ -142,39 +147,43 @@ export class NotificationManager implements NotificationSystem {
 
   sendCompletion(record: Subagent): void {
     // Consumption is domain state on the record; the nudge is a pure
-    // announcement. Skip if the parent already pulled the result (schedule-time
-    // guard); emitIndividualNudge re-reads record.consumed at fire time for the
-    // pull-during-hold race.
+    // announcement. Skip if the parent already pulled the result (enqueue-time
+    // guard); emitIndividualNudge re-reads record.consumed when the nudge is
+    // actually emitted, which is what makes the flush a fresh re-check.
     if (record.consumed) return;
-    this.scheduleNudge(record.id, () => this.emitIndividualNudge(record));
+    if (this.parentRunActive) {
+      // Keyed by id, so a re-completion in the same run collapses to one nudge.
+      this.pendingNudges.set(record.id, record);
+      return;
+    }
+    this.emitIndividualNudge(record);
   }
 
-  dispose(): void {
-    for (const timer of this.pendingNudges.values()) clearTimeout(timer);
+  /** The parent's agent run became active; nudges are withheld until it settles. */
+  onParentAgentStart(): void {
+    this.parentRunActive = true;
+  }
+
+  /**
+   * The parent's agent run settled. Flush the nudges withheld during it, each
+   * re-checking consumption, so a result the parent pulled mid-run is dropped
+   * rather than announced a second time.
+   */
+  onParentAgentSettled(): void {
+    this.parentRunActive = false;
+    const withheld = [...this.pendingNudges.values()];
     this.pendingNudges.clear();
-  }
-
-  private cancelNudge(key: string): void {
-    const timer = this.pendingNudges.get(key);
-    if (timer != null) {
-      clearTimeout(timer);
-      this.pendingNudges.delete(key);
+    for (const record of withheld) {
+      try {
+        this.emitIndividualNudge(record);
+      } catch (err) {
+        debugLog("notification render", err);
+      }
     }
   }
 
-  private scheduleNudge(key: string, send: () => void, delay = NUDGE_HOLD_MS): void {
-    this.cancelNudge(key);
-    this.pendingNudges.set(
-      key,
-      setTimeout(() => {
-        this.pendingNudges.delete(key);
-        try {
-          send();
-        } catch (err) {
-          debugLog("notification render", err);
-        }
-      }, delay),
-    );
+  dispose(): void {
+    this.pendingNudges.clear();
   }
 
   private emitIndividualNudge(record: Subagent): void {

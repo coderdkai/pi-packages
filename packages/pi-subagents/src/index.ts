@@ -63,6 +63,13 @@ export default function (pi: ExtensionAPI) {
     (msg, opts) => pi.sendMessage(msg, opts),
   );
 
+  // Gate nudge delivery on the parent's agent run. agent_settled fires exactly
+  // once per run (from a finally block, so it also covers error and abort),
+  // whereas agent_end fires once per run segment — retries, auto-compaction and
+  // followUp continuations each emit one.
+  pi.on("agent_start", () => notifications.onParentAgentStart());
+  pi.on("agent_settled", () => notifications.onParentAgentSettled());
+
   // Settings: owns all three in-memory values and handles load/save/emit.
   // onMaxConcurrentChanged is wired to the limiter directly (closure captures by reference).
   const settings = new SettingsManager({

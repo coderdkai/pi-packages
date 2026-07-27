@@ -98,6 +98,9 @@ function seedNotificationScenario() {
   const { manager } = createManager({
     observer: { onSubagentCompleted: (r) => notifications.sendCompletion(r) },
   });
+  // The spawning tool call runs inside a parent agent run, so nudges are
+  // withheld until it settles.
+  notifications.onParentAgentStart();
   const id = spawnBgWithToolCall(manager, "tc-1");
   const record = manager.getRecord(id)!;
   return { manager, record, notifications, sendMessage };
@@ -115,20 +118,20 @@ describe("SubagentManager — Bug 1 race condition (consumed state vs onComplete
     vi.useRealTimers();
   });
 
-  it("marking consumed after awaiting still suppresses the nudge (fire-time re-check)", async () => {
+  it("marking consumed after awaiting still suppresses the nudge (flush-time re-check)", async () => {
     const seeded = seedNotificationScenario();
     manager = seeded.manager;
     const { record, sendMessage } = seeded;
 
-    // onSubagentCompleted already scheduled the nudge by the time this await
+    // onSubagentCompleted already withheld the nudge by the time this await
     // resumes (it fires synchronously inside record.promise's resolution
-    // chain). The parent pulls the result (markConsumed) during the nudge's
-    // hold window; the notification manager re-reads record.consumed at fire
-    // time and skips the nudge — no separate cancel call needed.
+    // chain). The parent pulls the result (markConsumed) later in the same
+    // run; the notification manager re-reads record.consumed when the run
+    // settles and drops the nudge — no separate cancel call needed.
     await record.promise;
     record.markConsumed();
 
-    await vi.advanceTimersByTimeAsync(300);
+    seeded.notifications.onParentAgentSettled();
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
@@ -138,11 +141,11 @@ describe("SubagentManager — Bug 1 race condition (consumed state vs onComplete
     const { record, sendMessage } = seeded;
 
     // The parent already holds the result: sendCompletion sees record.consumed
-    // at schedule time and never arms the timer.
+    // at enqueue time and never withholds a nudge to flush.
     record.markConsumed();
     await record.promise;
 
-    await vi.advanceTimersByTimeAsync(300);
+    seeded.notifications.onParentAgentSettled();
     expect(sendMessage).not.toHaveBeenCalled();
   });
 

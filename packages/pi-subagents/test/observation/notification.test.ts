@@ -162,14 +162,6 @@ describe("buildEventData", () => {
 // ---- Factory tests ----
 
 describe("NotificationManager", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   function makeArgs() {
     return {
       sendMessage: vi.fn(),
@@ -187,11 +179,10 @@ describe("NotificationManager", () => {
     lifetimeUsage: { input: 100, output: 200, cacheWrite: 0 },
   });
 
-  it("sendCompletion schedules a nudge after the hold delay", () => {
+  it("sendCompletion delivers the nudge immediately when the parent is idle", () => {
     const args = makeArgs();
     const system = makeManager(args);
     system.sendCompletion(baseRecord);
-    vi.advanceTimersByTime(300);
     expect(args.sendMessage).toHaveBeenCalledOnce();
   });
 
@@ -199,36 +190,98 @@ describe("NotificationManager", () => {
     const args = makeArgs();
     const system = makeManager(args);
     system.sendCompletion(baseRecord);
-    vi.advanceTimersByTime(300);
     const content = (args.sendMessage.mock.calls[0][0] as { content: string }).content;
     expect(content).toContain("get_subagent_result");
   });
 
-  it("sendCompletion skips the nudge when the record is already consumed (schedule-time guard)", () => {
+  it("sendCompletion skips the nudge when the record is already consumed (enqueue-time guard)", () => {
     const args = makeArgs();
     const system = makeManager(args);
     const consumedRecord = createTestSubagent({ id: "consumed-1", consumedAt: 5000 });
     system.sendCompletion(consumedRecord);
-    vi.advanceTimersByTime(300);
     expect(args.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("suppresses a scheduled nudge when the record becomes consumed before it fires (fire-time re-check)", () => {
-    const args = makeArgs();
-    const system = makeManager(args);
-    const record = createTestSubagent({ id: "race-1" });
-    system.sendCompletion(record);
-    record.markConsumed(); // parent pulled during the hold window
-    vi.advanceTimersByTime(300);
-    expect(args.sendMessage).not.toHaveBeenCalled();
-  });
+  describe("parent-turn boundary", () => {
+    /**
+     * Models Pi's delivery semantics. While the parent's agent run is active a
+     * `followUp` is queued unrecallably and drained at turn end; once the run has
+     * settled (`_isAgentRunActive` is already false when extensions are notified)
+     * a `triggerTurn` message starts a fresh turn.
+     * See `agent-session.ts:1443-1450` and `:581-582`.
+     */
+    function makePiParent() {
+      const deliveredToLlm: string[] = [];
+      let runActive = false;
+      const manager = new NotificationManager((msg, opts) => {
+        if (runActive && opts?.deliverAs === "followUp") {
+          deliveredToLlm.push(msg.content); // handed to the unrecallable queue
+        } else if (opts?.triggerTurn) {
+          deliveredToLlm.push(msg.content);
+        }
+      });
+      return {
+        manager,
+        deliveredToLlm,
+        startRun() {
+          runActive = true;
+          manager.onParentAgentStart();
+        },
+        settleRun() {
+          runActive = false;
+          manager.onParentAgentSettled();
+        },
+      };
+    }
 
-  it("dispose clears all pending timers", () => {
-    const args = makeArgs();
-    const system = makeManager(args);
-    system.sendCompletion(baseRecord);
-    system.dispose();
-    vi.advanceTimersByTime(300);
-    expect(args.sendMessage).not.toHaveBeenCalled();
+    it("withholds a nudge that arrives while the parent's run is active", () => {
+      const parent = makePiParent();
+      parent.startRun();
+      parent.manager.sendCompletion(createTestSubagent({ id: "held-1" }));
+      expect(parent.deliveredToLlm).toHaveLength(0);
+    });
+
+    it("delivers the withheld nudge once the run settles when the parent never pulled", () => {
+      const parent = makePiParent();
+      parent.startRun();
+      parent.manager.sendCompletion(createTestSubagent({ id: "kept-1" }));
+      parent.settleRun();
+      expect(parent.deliveredToLlm).toHaveLength(1);
+    });
+
+    it("suppresses the nudge when the parent pulls the result later in the same turn", () => {
+      const parent = makePiParent();
+      const record = createTestSubagent({ id: "race-1" });
+      parent.startRun();
+      parent.manager.sendCompletion(record);
+      record.markConsumed(); // get_subagent_result, later in the same turn
+      parent.settleRun();
+      expect(parent.deliveredToLlm).toHaveLength(0);
+    });
+
+    it("collapses a re-completion during the same turn into a single delivery", () => {
+      const parent = makePiParent();
+      const record = createTestSubagent({ id: "recomplete-1" });
+      parent.startRun();
+      parent.manager.sendCompletion(record);
+      parent.manager.sendCompletion(record); // e.g. a resumed run reaching terminal state again
+      parent.settleRun();
+      expect(parent.deliveredToLlm).toHaveLength(1);
+    });
+
+    it("delivers immediately when the parent is idle at completion", () => {
+      const parent = makePiParent();
+      parent.manager.sendCompletion(createTestSubagent({ id: "idle-1" }));
+      expect(parent.deliveredToLlm).toHaveLength(1);
+    });
+
+    it("dispose drops nudges withheld for the current run", () => {
+      const parent = makePiParent();
+      parent.startRun();
+      parent.manager.sendCompletion(createTestSubagent({ id: "disposed-1" }));
+      parent.manager.dispose();
+      parent.settleRun();
+      expect(parent.deliveredToLlm).toHaveLength(0);
+    });
   });
 });
