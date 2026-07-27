@@ -115,3 +115,14 @@ Had Red and Green been written together, it would have shipped green and pinned 
 Pre-completion reviewer: **PASS**.
 One WARN — `architecture.md`'s `Subagent` class diagram omitted `waitUntilSettled` — fixed in `5475ca28`, since the diagram already lists the sibling `run`/`resume`/`abort`/`steer` family and the omission read as inconsistency rather than terseness.
 All 5 diagrams re-verified with `mmdc` after the edit.
+
+## Stage: User Note (2026-07-27T15:43:52Z)
+
+Repeatedly hitting `sleep` in the ship stage's `release_pr_merge` retry loop for this issue (the release-please PR came back `UNSTABLE` with a genuinely `IN_PROGRESS` `check` run, not the empty-rollup `GITHUB_TOKEN` case, so `/ship-issue`'s runbook correctly polled rather than falling back to `gh pr merge`).
+The user flagged this as a recurring friction: is a fixed `sleep 60` the right accommodation, or does the workflow need to change?
+
+What we're accommodating: a release-please PR opened immediately after the shipped commit's own CI run completes can still have its *own* `check` run in flight when `/ship-issue` reaches step 6 — the PR is a fresh ref, so GitHub queues a new run for it rather than reusing the just-finished one from `main`.
+`release_pr_merge`'s single-shot `UNSTABLE` check can't distinguish "no checks ran" (the documented `GITHUB_TOKEN`-doesn't-trigger-workflows case, safe to `gh pr merge --rebase` past) from "a check is still running" (must wait) without a second `gh pr view --json statusCheckRollup` read — which this session did correctly, but by hand, with an arbitrary `sleep 60`.
+
+A sturdier accommodation would be a small poll loop (e.g. `gh pr checks 672 --watch` or a `statusCheckRollup`-driven loop with short backoff) instead of one fixed sleep — avoids both under-waiting (retrying too soon) and over-waiting (a flat 60s when the check finishes in 10s), and removes the manual re-poll step from the runbook prose into something scriptable.
+Worth raising at the next `/retro` for this issue as a candidate `ci_watch`-style helper for the release-please PR's own checks, parallel to the existing `ci_watch` tool for the shipped commit's CI run.
