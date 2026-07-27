@@ -77,3 +77,41 @@ And the new tests must not copy the PR's `await new Promise((r) => setTimeout(r,
 
 No follow-up issues were filed.
 Both Open Questions (signalling a cut-short wait in the report; a per-call `timeout`) are speculative and entangled with Issues #636 and #664, which already exist.
+
+## Stage: Implementation — TDD (2026-07-27T15:23:18Z)
+
+### Session summary
+
+Landed the three behavior fixes in three `fix:` commits plus three docs commits: `Subagent.waitUntilSettled()` for queued agents, the `AbortSignal` interrupt exit, and the republished `promise` getter across a resume.
+The `pi-subagents` suite went from 1087 to 1095 tests (+8), with `check`, root `lint`, `fallow dead-code`, and all 5 architecture Mermaid diagrams green.
+The pre-completion reviewer returned **PASS**; its one non-blocking WARN was fixed before stopping.
+
+### Observations
+
+The Tidy-First assessor (dispatched on `claude-opus-5` per the skill's model checkpoint) recommended no preparatory commits, but its reconnaissance changed the plan twice.
+It found an existing `describe("Subagent.scheduleVia() — eager promise capture")` block already using `Promise.withResolvers` gating — the exact timer-free idiom the new tests needed, confirming the plan's warning against the PR's `setTimeout(0)`.
+It also found that `"throws when no session exists"` already pins the resume precondition with `.rejects.toThrow(/missing session/)`, so the plan's step-5 rejection test was unnecessary — the existing test served as the guard across the `async`→synchronous conversion.
+Because Opus also reported no preparatory tidying, the skill's self-deleting model checkpoint was satisfied and removed (`da812270`, Refs #635).
+
+Five deviations from the plan, all accepted by the reviewer:
+
+1. Each Red was folded into its Green commit (3 `fix:` commits, not 6).
+   A committed red test leaves `main` failing, and the template calls test-only commits "rare; usually folded into the feat" — which matches #661's own history.
+   Red was verified in-session before each Green.
+2. `waitUntilSettled(signal)` takes a **required** signal, not the planned `signal?`.
+   The single caller always has one, and optional would have added a `if (!signal)` branch plus an unexercised no-signal path.
+3. The planned rejection test was replaced by the pre-existing one (above).
+4. A second resume test ("keeps a waiter blocked until the resume finishes") was written, found to **pass on unfixed `main`**, and deleted rather than shipped as a false-green.
+   The resume settles in the same tick that the test resolves it, so the observation microtask never runs while the stale handle is still observable; no timer-free construction distinguishes the two.
+   The surviving `expect(agent.promise).toBe(returned)` identity assertion is the stronger guard — it is synchronous and has no timing sensitivity at all.
+5. `da812270` (the skill-checkpoint removal) is scope creep relative to the plan, landed separately, referencing #635 and deliberately carrying no `#662` co-author trailer.
+
+The near-miss worth remembering is deviation 4.
+The test looked like a proper integration pin — it asserted the status a waiter observes, which is exactly the bug's symptom — and it was only caught because the Red step was run against unfixed source before implementing.
+Had Red and Green been written together, it would have shipped green and pinned nothing.
+
+`new Promise<void>(...)` did not trip `@typescript-eslint/no-invalid-void-type` (unlike `Promise.withResolvers<void>()` in `concurrency-limiter.ts`), so no `eslint-disable` was added — the plan's instruction not to add one preemptively paid off.
+
+Pre-completion reviewer: **PASS**.
+One WARN — `architecture.md`'s `Subagent` class diagram omitted `waitUntilSettled` — fixed in `5475ca28`, since the diagram already lists the sibling `run`/`resume`/`abort`/`steer` family and the omission read as inconsistency rather than terseness.
+All 5 diagrams re-verified with `mmdc` after the edit.
