@@ -326,7 +326,7 @@ src/
 │
 ├── observation/                    progress tracking and notification
 │   ├── record-observer.ts          session-event stats observer
-│   ├── notification.ts             completion nudges (announce-only; consumption is domain state on the record)
+│   ├── notification.ts             completion nudges (announce-only; withheld during the parent's agent run, flushed on agent_settled)
 │   ├── renderer.ts                 notification TUI component
 │   ├── composite-subagent-observer.ts fans manager notifications out to multiple observers
 │   └── subagent-events-observer.ts manager lifecycle observer (event emission + persistence + notification)

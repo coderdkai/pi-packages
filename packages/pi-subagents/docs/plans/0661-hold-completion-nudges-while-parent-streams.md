@@ -10,7 +10,10 @@ issue_title: "fix(pi-subagents): hold completion nudges while the parent agent s
 **Release:** ship independently
 
 Issue #661 is not part of any roadmap phase in `packages/pi-subagents/docs/architecture/architecture.md`, so no release batch applies.
-It lands as a `fix:` commit and cuts a release on the next release-please merge.
+It lands as a `fix!:` commit and cuts a **major** release on the next release-please merge.
+
+Revised during implementation: the `agent_settled` event this design depends on does not exist in the SDK version the package supported, so the peer floor is raised and the change is breaking.
+See the Goals note below.
 
 ## Problem Statement
 
@@ -33,8 +36,11 @@ The existing 200 ms `NUDGE_HOLD_MS` debounce only shrinks the completion→pull 
 - Collapse the hold mechanism to a single pending-nudge collection with a single delivery path.
 - Preserve today's correct behavior: a nudge for an agent the parent never pulled is still delivered exactly once, and an agent completing while the parent is idle still triggers a fresh turn.
 
-This change is **not breaking**.
-It removes a redundant message and a redundant forced turn; no output shape, config default, or public export changes.
+This change is **breaking**, as settled with the operator during implementation.
+The runtime behavior change is benign — it removes a redundant message and a redundant forced turn, with no output shape, config default, or public export change.
+What breaks is the supported host range: gating delivery on `agent_settled` requires `@earendil-works/pi-coding-agent >= 0.80.5`, raised from `>= 0.75.0`.
+On an older host the event never fires and withheld nudges would never be delivered, so the floor is raised rather than silently degrading.
+Commits use `fix!:` with a `BREAKING CHANGE:` footer.
 
 ## Non-Goals
 
@@ -134,6 +140,7 @@ Reentrancy: the flush calls `pi.sendMessage`, whose runtime binding is fire-and-
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/pi-subagents/src/observation/notification.ts`         | Remove `NUDGE_HOLD_MS`, `scheduleNudge`, `cancelNudge`; retype `pendingNudges` to `Map<string, Subagent>`; add `parentStreaming`, `onParentAgentStart`, `onParentAgentSettled`; gate `sendCompletion`; simplify `dispose`. |
 | `packages/pi-subagents/src/index.ts`                            | Register `agent_start` and `agent_settled` handlers delegating to the manager.                                                                                                                                             |
+| `packages/pi-subagents/package.json`                            | Added during implementation: raise the `@earendil-works/pi-coding-agent` peer floor to `>=0.80.5` and move the three `@earendil-works/*` dev pins to `0.80.5`.                                                             |
 | `packages/pi-subagents/test/observation/notification.test.ts`   | Re-arrange 2 timer-based tests to the turn boundary; rename the idle-delivery test; add a `parent-turn boundary` describe with a Pi-semantics double; drop now-dead fake timers.                                           |
 | `packages/pi-subagents/test/lifecycle/subagent-manager.test.ts` | `seedNotificationScenario` arranges the streaming state; 1 Bug-1 test re-arranged to settle instead of advancing timers.                                                                                                   |
 | `packages/pi-subagents/docs/architecture/architecture.md`       | Module-tree entry for `notification.ts` (line 329) gains the turn-boundary constraint.                                                                                                                                     |
