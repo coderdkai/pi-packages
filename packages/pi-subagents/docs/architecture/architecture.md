@@ -124,6 +124,7 @@ classDiagram
         +run()
         +resume(prompt, signal)
         +abort(): boolean
+        +waitUntilSettled(signal): Promise~void~
         +steer(message): Promise~SteerOutcome~
         +isSessionReady(): boolean
         +getConversation(): string | undefined
