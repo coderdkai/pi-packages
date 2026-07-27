@@ -334,11 +334,15 @@ export class Subagent {
 	 * handle. A queued agent is awaitable because scheduleVia() captures the
 	 * limiter promise at spawn, so the wait spans both the queue slot and the
 	 * run that follows it.
+	 *
+	 * When `signal` fires the wait ends early and the agent keeps running: this
+	 * is a query, so interrupting it must not cancel the work. Cancelling the
+	 * work on a parent interrupt is InterruptHandler's separate decision.
 	 */
-	async waitUntilSettled(): Promise<void> {
+	async waitUntilSettled(signal: AbortSignal): Promise<void> {
 		const run = this._promise;
 		if (!run || !this.isActive()) return;
-		await run;
+		await settleOrAbort(run, signal);
 	}
 
 	/**
@@ -517,4 +521,19 @@ export class Subagent {
 
 		this.execution.observer?.onRunFinished?.(this);
 	}
+}
+
+/**
+ * Settle with `run`, or early when `signal` fires — whichever comes first.
+ * The inner controller is the listener-cleanup channel: it detaches the abort
+ * listener whichever branch wins, so repeated waits within one parent turn do
+ * not accumulate listeners on that turn's signal.
+ */
+function settleOrAbort(run: Promise<void>, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.resolve();
+	const detach = new AbortController();
+	const interrupted = new Promise<void>((resolve) => {
+		signal.addEventListener("abort", () => { resolve(); }, { once: true, signal: detach.signal });
+	});
+	return Promise.race([run, interrupted]).finally(() => { detach.abort(); });
 }

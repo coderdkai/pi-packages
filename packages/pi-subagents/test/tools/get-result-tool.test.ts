@@ -18,9 +18,10 @@ function makeManager(records: Map<string, Subagent> = new Map()): GetResultToolM
 async function execute(
 	manager: GetResultToolManager,
 	params: { agent_id: string; wait?: boolean; verbose?: boolean },
+	signal: AbortSignal = new AbortController().signal,
 ) {
 	const tool = new GetResultTool(manager, testRegistry);
-	return tool.execute("tc-1", params, new AbortController().signal, undefined, STUB_CTX);
+	return tool.execute("tc-1", params, signal, undefined, STUB_CTX);
 }
 
 describe("GetResultTool", () => {
@@ -125,6 +126,30 @@ describe("GetResultTool", () => {
 		const result = await resultPromise;
 		expect(result.content[0].text).toContain("Finished after the queue.");
 		expect(record.consumed).toBe(true);
+	});
+
+	it("reports the current state when the parent turn is interrupted mid-wait", async () => {
+		const sessionStub = createSubagentSessionStub();
+		// A run that never settles — only the interrupt can end this wait.
+		sessionStub.runTurnLoop.mockReturnValue(new Promise<never>(() => {}));
+		const record = createTestSubagent({
+			status: "running",
+			completedAt: undefined,
+			execution: makeStubExecution({
+				createSubagentSession: async () => toSubagentSession(sessionStub),
+			}),
+		});
+		record.start();
+		const controller = new AbortController();
+		const records = new Map([["agent-1", record]]);
+
+		const resultPromise = execute(makeManager(records), { agent_id: "agent-1", wait: true }, controller.signal);
+		controller.abort();
+
+		const result = await resultPromise;
+		expect(result.content[0].text).toContain("Status: running");
+		// The parent never collected an outcome, so the completion nudge still owes it one.
+		expect(record.consumed).toBe(false);
 	});
 
 	it("includes conversation when verbose=true", async () => {

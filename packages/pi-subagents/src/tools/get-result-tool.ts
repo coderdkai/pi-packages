@@ -23,7 +23,7 @@ export class GetResultTool {
 	async execute(
 		_toolCallId: string,
 		params: { agent_id: string; wait?: boolean; verbose?: boolean },
-		_signal: AbortSignal,
+		signal: AbortSignal,
 		_onUpdate: unknown,
 		_ctx: unknown,
 	) {
@@ -34,9 +34,10 @@ export class GetResultTool {
 
 		// Wait for completion if requested. The record owns the decision of whether
 		// it is still awaitable — a queued agent counts, because scheduleVia()
-		// captures its limiter promise at spawn.
+		// captures its limiter promise at spawn. A parent interrupt ends the wait
+		// without cancelling the agent, leaving the outcome uncollected below.
 		if (params.wait) {
-			await record.waitUntilSettled();
+			await record.waitUntilSettled(signal);
 		}
 
 		// Pull-delivery edge: the parent is collecting the settled outcome here, so
