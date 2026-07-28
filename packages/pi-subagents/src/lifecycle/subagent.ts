@@ -100,6 +100,7 @@ export class Subagent {
 	get status(): SubagentStatus { return this.state.status; }
 	get result(): string | undefined { return this.state.result; }
 	get error(): string | undefined { return this.state.error; }
+	get stoppedWhileQueued(): boolean { return this.state.stoppedWhileQueued; }
 	get startedAt(): number { return this.state.startedAt; }
 	get completedAt(): number | undefined { return this.state.completedAt; }
 	get consumedAt(): number | undefined { return this.state.consumedAt; }
@@ -445,9 +446,20 @@ export class Subagent {
 	}
 
 	/**
+	 * Stop an agent that never started, then notify like every other terminal
+	 * transition. No listener release: nothing is wired before run().
+	 * The record leaves the active set here, so the thunk the limiter runs when
+	 * the slot finally frees no-ops on guardedRun()'s guard — one notification.
+	 */
+	stopQueued(): void {
+		this.state.stopQueued();
+		this.execution.observer?.onRunFinished?.(this);
+	}
+
+	/**
 	 * Abort a running agent: fire AbortController and transition to stopped.
 	 * Returns false if the agent is not running.
-	 * A still-queued agent is stopped by SubagentManager; its scheduled thunk
+	 * A still-queued agent is stopped via stopQueued(); its scheduled thunk
 	 * then no-ops on the queued-status guard.
 	 */
 	abort(): boolean {

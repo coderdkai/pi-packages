@@ -435,6 +435,37 @@ describe("Subagent — failRun", () => {
 
 });
 
+describe("Subagent — stopQueued", () => {
+	function createQueuedAgent(observer?: SubagentLifecycleObserver) {
+		return makeSubagent({
+			status: "queued",
+			execution: makeStubExecution({ observer }),
+		});
+	}
+
+	it("transitions to stopped and records that the agent never started", () => {
+		const record = createQueuedAgent();
+		record.stopQueued();
+		expect(record.status).toBe("stopped");
+		expect(record.stoppedWhileQueued).toBe(true);
+	});
+
+	it("fires observer.onRunFinished once, like every other terminal transition", () => {
+		const onRunFinished = vi.fn();
+		const record = createQueuedAgent({ onRunFinished });
+		record.stopQueued();
+		expect(onRunFinished).toHaveBeenCalledOnce();
+		expect(onRunFinished).toHaveBeenCalledWith(record);
+	});
+
+	it("leaves stoppedWhileQueued false for a running agent aborted mid-run", () => {
+		const record = makeSubagent({ status: "running" });
+		expect(record.abort()).toBe(true);
+		expect(record.status).toBe("stopped");
+		expect(record.stoppedWhileQueued).toBe(false);
+	});
+});
+
 describe("Subagent — disposeSession", () => {
 	it("disposes the wrapped SubagentSession", () => {
 		const record = makeSubagent();
