@@ -158,3 +158,34 @@ Baseline measured on `b1722630`: 64 test files, 1095 tests green, `pnpm fallow a
   Both Open Questions are watch-items, not concrete deferred work.
 - **Attribution is a live constraint.**
   Every implementation and docs commit carries `Co-authored-by: daoguademeng <whumaple@gmail.com>`, and #665 is referenced as `Refs #665`, never `Closes`.
+
+## Stage: Implementation — TDD (2026-07-28T00:24:05Z)
+
+### Session summary
+
+Executed all seven plan steps plus two tidy-first preparatory commits — nine commits total, every one carrying the `Co-authored-by` trailer.
+The change adds `SubagentState.stopQueued()` and a `stoppedWhileQueued` marker, funnels both `SubagentManager` queued-abort sites through a new `Subagent.stopQueued()`, emits a trimmed never-started `<task-notification>`, makes `NotificationManager.dispose()` a terminal latch with the shutdown handler reordered ahead of the aborts, and gives `get_subagent_result` an honest never-started body. pi-subagents tests went 1095 → 1114 (+19); `check`, root `lint`, `fallow dead-code`, and `fallow audit --base origin/main` all clean.
+
+### Observations
+
+- **The tidy-first assessor earned its keep.**
+  It proposed two extractions in `notification.ts` (`joinNotificationLines`, `buildPointerLines`) that the plan's own Design Overview snippets had already implied but not scheduled.
+  Landing them as `refactor:` commits first kept TDD 4's diff to the actual behavior change.
+  It correctly rejected four other candidates as scope creep, including consolidating `SubagentState`'s four guarded `mark*` transitions — a wrong-abstraction trap.
+- **The shutdown leak reproduced exactly as the issue predicted.**
+  The red test (`sendCompletion` after `dispose()`, no parent run active) failed on the pre-change code, confirming empirically what the PR-review stage had derived only from reading `NotificationManager`.
+  Scope item 3 of the issue asked for that confirmation and got it.
+- **The running-agent shutdown suppression is pinned by the record the test uses.**
+  The disposal test drives a default `createTestSubagent()` (a normally-completed record), not a never-started one — so it pins the broader suppression the operator asked to treat as intended, not just the queued case.
+- **One plan prediction was pessimistic.**
+  The plan expected 6 `AgentReport` literals in `get-result-report.test.ts` to need the new required field; the file builds every report through a single `makeReport` factory, so one edit covered them all.
+  The reviewer independently grepped to confirm no literal exists outside the factory.
+- **`arrangeQueuedPair` needed one optional parameter**, not the harness rework the assessor considered and rejected — adding an `observer?: Partial<SubagentManagerObserver>` passthrough was enough for all three carried-over tests.
+- **Found and fixed a pre-existing architecture-doc bug.**
+  The agent-lifecycle state diagram had `running --> aborted : abort() called` and `running --> stopped : max turns reached` — swapped relative to the code.
+  Verified against `subagent.ts` and corrected in the docs commit alongside the new `queued --> stopped` edge; `mmdc` renders all five diagrams in the file cleanly.
+- **Baseline flake worth remembering.**
+  The first root `pnpm run test` failed in `pi-autoformat` on an integration test that spawns a `pi rpc` session and timed out; it passed on rerun and on every subsequent full-suite run.
+  Unrelated to this change, but it briefly looked like a red baseline.
+- **Pre-completion reviewer: PASS** — no warnings.
+  It independently verified the attribution trailers on all nine commits, the fixture simplification, the shutdown-suppression test, the Mermaid edits against source, and both cross-step invariants (#542 full-value init, #563 exactly-once guard).
