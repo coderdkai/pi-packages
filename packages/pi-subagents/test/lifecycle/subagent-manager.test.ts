@@ -77,9 +77,9 @@ function spawnBgWithToolCall(mgr: SubagentManager, toolCallId: string, prompt = 
 }
 
 /** Arrange a manager at limit 1 with two bg agents over a blocking factory: first runs, second queues. */
-function arrangeQueuedPair() {
+function arrangeQueuedPair(observer?: Partial<SubagentManagerObserver>) {
   const factory = createBlockingFactory();
-  const { manager: mgr } = createManager({ createSubagentSession: factory, getMaxConcurrent: () => 1 });
+  const { manager: mgr } = createManager({ createSubagentSession: factory, getMaxConcurrent: () => 1, observer });
   const running = spawnBg(mgr, "a");
   const queued = spawnBg(mgr, "b");
   return { manager: mgr, factory, running, queued };
@@ -684,6 +684,87 @@ describe("SubagentManager — queueing and concurrency with injected stubs", () 
     expect(startedIds).toEqual([id1, id2]);
 
     await manager.getRecord(id2)!.promise;
+  });
+});
+
+// Diagnosis, boundary, and these three cases contributed by @daoguademeng in #665.
+describe("SubagentManager — stopping a queued agent", () => {
+  let manager: SubagentManager;
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it("abort() on a queued agent notifies onSubagentCompleted", () => {
+    const completed: Subagent[] = [];
+    const { manager: mgr, running, queued } = arrangeQueuedPair({
+      onSubagentCompleted: (record) => completed.push(record),
+    });
+    manager = mgr;
+
+    expect(manager.abort(queued)).toBe(true);
+
+    expect(completed).toHaveLength(1);
+    expect(completed[0]).toBe(manager.getRecord(queued));
+    expect(manager.getRecord(queued)!.status).toBe("stopped");
+    expect(manager.getRecord(queued)!.stoppedWhileQueued).toBe(true);
+
+    manager.abort(running);
+  });
+
+  it("abortAll() notifies onSubagentCompleted for queued agents", () => {
+    const completed: Subagent[] = [];
+    const { manager: mgr, queued } = arrangeQueuedPair({
+      onSubagentCompleted: (record) => completed.push(record),
+    });
+    manager = mgr;
+
+    expect(manager.abortAll()).toBe(2);
+
+    // Only the queued agent notifies here: the running one's session creation
+    // never resolves, so its run never reaches completeRun/failRun.
+    expect(completed).toHaveLength(1);
+    expect(completed[0]).toBe(manager.getRecord(queued));
+    expect(manager.getRecord(queued)!.stoppedWhileQueued).toBe(true);
+  });
+
+  it("notifies exactly once, even after the stopped agent's slot frees", async () => {
+    const completed: Subagent[] = [];
+    const { promise: gate, resolve } = Promise.withResolvers<void>(); // eslint-disable-line @typescript-eslint/no-invalid-void-type -- Promise.withResolvers<void> is valid; rule does not allow void in generic fn call type args
+
+    let callCount = 0;
+    const factory: SessionFactory = vi.fn(async () => {
+      callCount++;
+      const n = callCount;
+      const stub = createSubagentSessionStub();
+      stub.runTurnLoop.mockImplementation(async () => {
+        if (n === 1) await gate;
+        return { responseText: `result-${n}`, aborted: false, steered: false };
+      });
+      return toSubagentSession(stub);
+    });
+    ({ manager } = createManager({
+      createSubagentSession: factory,
+      getMaxConcurrent: () => 1,
+      observer: { onSubagentCompleted: (record) => completed.push(record) },
+    }));
+
+    const running = spawnBg(manager, "a");
+    const queued = spawnBg(manager, "b");
+    expect(manager.getRecord(queued)!.status).toBe("queued");
+
+    manager.abort(queued);
+    const notificationsFor = (id: string) => completed.filter((record) => record.id === id);
+    expect(notificationsFor(queued)).toHaveLength(1);
+
+    // Free the slot. The limiter runs the stopped agent's thunk, which must
+    // no-op on guardedRun()'s active guard rather than run and notify again.
+    resolve();
+    await manager.getRecord(running)!.promise;
+    await manager.getRecord(queued)!.promise;
+
+    expect(notificationsFor(queued)).toHaveLength(1);
+    expect(factory).toHaveBeenCalledOnce();
   });
 });
 

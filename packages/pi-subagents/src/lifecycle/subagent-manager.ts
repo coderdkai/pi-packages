@@ -252,10 +252,11 @@ export class SubagentManager {
     const record = this.agents.get(id);
     if (!record) return false;
 
-    // A queued agent has not started; mark it stopped. Its scheduled thunk
-    // becomes a no-op (status guard) when its slot finally opens.
+    // A queued agent has not started; stop it through the same terminal funnel
+    // a running agent's stop uses. Its scheduled thunk becomes a no-op (status
+    // guard) when its slot finally opens.
     if (record.status === "queued") {
-      record.markStopped();
+      record.stopQueued();
       return true;
     }
 
@@ -309,12 +310,11 @@ export class SubagentManager {
   }
 
   /** Abort all running and queued agents immediately. */
-  // fallow-ignore-next-line unused-class-member
   abortAll(): number {
     let count = 0;
     for (const record of this.agents.values()) {
       if (record.status === "queued") {
-        record.markStopped();
+        record.stopQueued();
         count++;
       } else if (record.abort()) {
         count++;
