@@ -189,3 +189,80 @@ The change adds `SubagentState.stopQueued()` and a `stoppedWhileQueued` marker, 
   Unrelated to this change, but it briefly looked like a red baseline.
 - **Pre-completion reviewer: PASS** — no warnings.
   It independently verified the attribution trailers on all nine commits, the fixture simplification, the shutdown-suppression test, the Mermaid edits against source, and both cross-step invariants (#542 full-value init, #563 exactly-once guard).
+
+## Stage: Final Retrospective (2026-07-28T00:38:35Z)
+
+### Session summary
+
+Four stages carried this issue end to end: a PR review that triaged @daoguademeng's #665 into an adopt-with-simplified-design decision, a planning stage that resolved three open design parameters through two `ask_user` rounds, a TDD stage that landed nine commits (two tidy-first preparatory refactors plus seven plan steps), and a ship that released `@gotgenes/pi-subagents` 19.1.0. pi-subagents tests went 1095 → 1114; the pre-completion reviewer returned PASS with no warnings, and every commit carried the `Co-authored-by` attribution the PR-review stage made a hard constraint.
+
+### Observations
+
+#### What went well
+
+- **The operator's bounced question forced a premise check.**
+  On the "where does the never-started fact live" question, the operator did not pick an option — they answered "if that state doesn't exist until the subagent actually starts, then it's clear that state probably ought to live upstream."
+  That is a conditional, and checking its antecedent is what resolved the question: `SubagentState` is constructed at `spawn` with `status: "queued"`, so the state does exist before the agent starts and there is no upstream gap.
+  A plain option-pick would have skipped that verification.
+- **The follow-up-ask rule fired correctly.**
+  The operator's answer also carried a direct question ("what disadvantages exist to this solution, besides the extra code?").
+  Per the system-prompt rule about following an `ask_user` elaboration with another structured ask rather than switching to plain-text multiple choice, the response enumerated three concrete costs (one-shot `dispose()`, a test-pinned cleanup-order change, and suppression breadth beyond queued agents) and re-asked — which is how the deliberate "treat the running-agent suppression as intended" decision got made rather than drifting in unannounced.
+- **The tidy-first assessor caught a plan gap, not a code smell.**
+  Both extractions it recommended (`joinNotificationLines`, `buildPointerLines`) were already implied by the plan's own Design Overview snippets but never scheduled as steps.
+  This is a different failure mode than the one the assessor was built for, and it caught it.
+- **The `release_pr_merge` `UNSTABLE` three-way branch paid off on its rarest arm.**
+  `statusCheckRollup` was non-empty with a check `IN_PROGRESS` — neither the expected `GITHUB_TOKEN` empty-rollup case nor a genuine block.
+  Waiting with `gh pr checks --watch --fail-fast` and retrying `release_pr_merge` (rather than falling back to `gh pr merge`) was the prescribed handling and worked.
+  Independent confirmation that [#673] is worth fixing at the tool level.
+
+#### What caused friction (agent side)
+
+- `instruction-violation` (self-identified post-hoc; **recurrence**) — gated a commit on a check piped through `tail`: `pnpm run check 2>&1 | grep -E "error|Done" | tail -3 && git add … && git commit …` (the first tidy-first commit, `6aa82b9d`).
+  A pipeline's exit status is `tail`'s, so the `&&` gate was void — had `check` failed, the commit would still have landed.
+  This is the exact footgun that **retro #427 added the `AGENTS.md` rule for**, violated again.
+  The motive was output compaction (nine packages of `tsc` output), and the existing rule's remedies ("run unpiped, or test `${PIPESTATUS[0]}`") do not offer a compact option.
+  Impact: no rework — `check` was passing — but the safety property was silently absent for that commit.
+- `instruction-violation` (self-identified post-hoc) — `/plan-issue` lists "Load the `colgrep` skill before code exploration"; it was the one listed skill never loaded.
+  Impact: none.
+  Every exploration target was an exact symbol (`markStopped`, `abortAll`, `onRunFinished`, `"No output."`), which the `colgrep` skill's own decision table assigns to `grep` — so the tool choices were right by accident rather than by consultation.
+- `other` (stale cwd model) — after ~20 bash calls prefixed `cd packages/pi-subagents &&`, reached for `cd .. && grep … packages/` to widen a search to the repo root, which the permission system denied as external-directory access.
+  Each bash call starts at the repo root, so the widening needed no `cd` at all.
+  Impact: one denied tool call, immediately re-run correctly.
+- `other` (redundant verification) — ran `git rev-parse HEAD | wc -c` to confirm a SHA was 40 characters, when the value came straight from `git rev-parse` and could not have been anything else.
+  The ship prompt's (well-founded) emphasis on never hand-typing a SHA induced a check on a value that was never hand-typed.
+  Impact: one tool call.
+
+#### What caused friction (user side)
+
+- Nothing to flag.
+  Both `ask_user` rounds got substantive answers, and the second included a redirecting question rather than a correction — which is the intervention shape that costs the least rework.
+
+### Diagnostic details
+
+- **Model-performance correlation** — no mismatches.
+  Planning and TDD ran on `anthropic/claude-opus-5` (design decisions, `ask_user` framing, TDD sequencing, invariant analysis — judgment-heavy); ship ran on `anthropic/claude-sonnet-5` (push, CI watch, release merge — mechanical, and its one judgment call, the `UNSTABLE` branch, was handled correctly).
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) are pinned to `anthropic/claude-sonnet-5`; both produced substantive, correctly-scoped reports, including four explicit scope-creep rejections from the assessor.
+- **Escalation-delay tracking** — no `rabbit-hole` friction points.
+  The longest same-topic run was three calls (green-baseline flake: root `pnpm run test` → standalone package run → root re-run), well under the five-call threshold.
+- **Unused-tool detection** — no gap.
+  `colgrep` was never dispatched, but every search was exact-symbol; its own skill assigns those to `grep`.
+  No `Explore` subagent was warranted — the module set was small and already familiar from the PR-review stage.
+- **Feedback-loop gap analysis** — no gap; this was the strongest part of the session.
+  `pnpm run check` ran after every Green step (8 invocations), the affected test file ran on every Red and Green, the full package suite ran after TDD steps 3–6, and root `pnpm run lint` ran before the docs commit and again at ship.
+  Nothing was deferred to an end-of-session batch.
+- **Known flake recurred past its fix.**
+  The green baseline failed on `pi-autoformat`'s real-CLI acceptance test with `pi rpc session timed out`, under root `pnpm run test`; it passed standalone and on every later root run.
+  [#618] raised `DEFAULT_RPC_TIMEOUT_MS` to 30 s specifically for this, and its own retro noted that a single green run "is not proof the flake is gone under all load conditions."
+  This session is evidence that 30 s is still not enough under cross-package contention — the levers #618 deliberately deferred (retry-once, in-package serialization) are now worth revisiting.
+  Filed as [#678].
+
+### Changes made
+
+1. `AGENTS.md` (§ Commits, appended to the existing pipe-gate rule) — added the status-preserving compact form: `pnpm run check >/dev/null && git commit …`.
+   The rule banned the piped shortcut without offering a short-output alternative, which is why the shortcut recurred here after retro #427 introduced the rule.
+2. Filed [#678] — `pi-autoformat` real-CLI acceptance tests still flake at the 30 s RPC timeout #618 raised them to, with the three candidate directions (retry-once, serialization, removing them from the default root test path).
+3. `packages/pi-subagents/docs/retro/0674-emit-terminal-lifecycle-for-stopped-while-queued-agents.md` — appended this Final Retrospective stage entry.
+
+[#618]: https://github.com/gotgenes/pi-packages/issues/618
+[#673]: https://github.com/gotgenes/pi-packages/issues/673
+[#678]: https://github.com/gotgenes/pi-packages/issues/678
