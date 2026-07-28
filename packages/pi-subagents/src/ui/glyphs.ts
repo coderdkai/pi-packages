@@ -13,8 +13,8 @@
  *
  * Coverage on macOS 15, counted in families:
  *
- *   ⟳ U+27F3 turns          0  — overflows; replaced, see #669
- *   ↻ U+21BB compactions    1  (Menlo)
+ *   ↻ U+21BB turns          1  (Menlo)
+ *   ⇊ U+21CA compactions    1  (Menlo)
  *   ✓ U+2713 success        6
  *   ✗ U+2717 failure        6
  *   ▸ U+25B8 tool call      6
@@ -34,10 +34,10 @@
 
 /** Semantic indicator glyphs rendered in the widget, inline results, and notifications. */
 export const GLYPHS = {
-  /** Turn count, as `⟳5≤30`. */
-  turns: "⟳",
+  /** Turn count, as `↻5≤30`. */
+  turns: "↻",
   /** Session compaction count, annotating the token field. */
-  compactions: "↻",
+  compactions: "⇊",
   /** Completed outcome, also used dim/warning for a wrapped-up agent. */
   success: "✓",
   /** Error or aborted outcome. */
