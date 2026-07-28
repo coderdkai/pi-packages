@@ -100,3 +100,31 @@ Release recommendation is ship independently: the issue is in no roadmap phase a
 - **Open for the implementation session.**
   Whether to read the contributor's fork branch (`fc45d4c`); the plan recommends not reading it, since the design is fully specified here and the co-author trailer goes on regardless.
 - No follow-up issues filed — everything deferred is already tracked by #676 (shortcut-driven stop UX) and #674 (queued-stop lifecycle).
+
+## Stage: Implementation — TDD (2026-07-28T01:52:28Z)
+
+### Session summary
+
+Landed the `abortAllOnInterrupt` policy setting in four commits (one Tidy-First prep `refactor:`, three `feat:`), plus a `docs:` and a `style:` follow-up.
+The pi-subagents suite went 1114 → 1134 tests (+20); root `check`, `lint`, `test`, and `fallow dead-code` are all green.
+The plan was followed without deviation; every implementation and docs commit carries the `Co-authored-by: daoguademeng <whumaple@gmail.com>` trailer.
+
+### Observations
+
+- **Tidy-First earned its keep.**
+  The `tidy-first-assessor` recommended exactly one preparatory commit — splitting the descriptor-shape refactor in `src/ui/subagents-settings.ts` out of the feature commit — and rejected four other candidates as scope creep (generalizing `sanitize()`'s numeric branches, restructuring `load()`, sharing the toast type across files, touching `interrupt.ts`/`index.ts`).
+  Landing `SettingDescriptorBase`, the `kind` tags, the `NUMERIC_SETTINGS` → `SETTINGS` rename, the `SettingsToast` alias, and the `promptNumeric()` extraction first left the feature commit as a genuinely additive diff: one array entry, one interface variant, one early-return branch.
+  The prep commit needed zero test changes, which verified it was behavior-preserving for free.
+- **One judgment call against the assessor.**
+  It suggested `handle()` dispatch on `descriptor.kind` in the prep commit with the `"toggle"` arm unreached; that is not expressible without the variant existing, and a one-member union alias would have been speculative.
+  Settled on tagging `kind: "numeric"` and typing the array `readonly NumericSettingDescriptor[]`, then widening to the union in the feature commit.
+- **Snapshot growth rippled predictably.**
+  Adding a field to `snapshot()` broke seven existing full-object `toEqual` assertions across the `snapshot()` and `saveAndNotify()` blocks.
+  Extended them in place rather than loosening to `toMatchObject`, so a dropped numeric field still fails loudly.
+- **Policy read timing is pinned by four tests**, including one asserting the predicate is *not* consulted until the signal fires — the mid-session-toggle guarantee lives in a test, not just prose.
+- **README structure needed a second pass.**
+  The new `### Abort on interrupt` subsection initially landed between the Persistent Settings prose and its global-defaults example, orphaning the example under the wrong heading; moved it below the failure-behavior paragraph.
+  Also updated the example's trailing sentence, which enumerated the example's keys.
+- **Pre-completion reviewer: PASS.**
+  One non-blocking nit — `abortAllOnInterrupt` landed between the `apply*` methods in `SubagentsSettingsManager` instead of with the other readonly properties; fixed in `d698de0b` (`style:`).
+  The reviewer also noted pre-existing mock-typing drift in the two touched test files (`ReturnType<typeof vi.fn<Sig>>` rather than the `testing` skill's `Mock<Sig>`), which predates this issue and was left alone.
