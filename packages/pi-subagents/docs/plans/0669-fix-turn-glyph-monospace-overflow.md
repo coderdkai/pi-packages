@@ -51,7 +51,7 @@ It does reassign the meaning of an existing glyph (`↻` moves from compactions 
 The defect and the direction were already established in `docs/retro/0669-fix-turn-glyph-monospace-overflow.md` during the review of [#681], the third-party PR from `@goranmoomin` that ports the upstream `tintinweb/pi-subagents` fix.
 The operator's recorded decision is to keep upstream's glyph choices but land the work here with expanded scope, using [#681] as reference rather than as the merge target.
 
-Coverage measured on macOS 15 with `fc-list ":charset=<cp>:spacing=100" family | sed 's/,.*//' | sort -u | grep -v LastResort`, counting families:
+Coverage measured on macOS 15 with `fc-list ":charset=<cp>:spacing=100" family | cut -d, -f1 | sort -u | grep -v LastResort`, counting families:
 
 | Glyph                           | Codepoint              | Role                                         | Monospace families |
 | ------------------------------- | ---------------------- | -------------------------------------------- | ------------------ |
@@ -64,6 +64,9 @@ Coverage measured on macOS 15 with `fc-list ":charset=<cp>:spacing=100" family |
 | `✓` `✗` `▸`                     | U+2713, U+2717, U+25B8 | status icons, tool-call bullet               | 6                  |
 | `■` `●` `○` `◦` `├` `└` `│` `─` | U+25A0 etc.            | status icon, headings, tree                  | 9                  |
 | `≤`                             | U+2264                 | turn-limit separator                         | 10                 |
+
+The family-trimming step above must be `cut -d, -f1` rather than the more habitual `sed 's/,.*//'` wherever the command is quoted inside a block comment.
+The `sed` script contains `*/`, which closes the comment early and breaks the enclosing file's parse.
 
 Two constraints from `AGENTS.md` and the package skill apply.
 First, the package is a hard fork whose stated policy is to cherry-pick upstream fixes that align with the fork's scope, which is exactly what the glyph substitution is.
@@ -109,7 +112,7 @@ Consumers in `observation/` and `tools/` already import from `ui/display.ts`, so
  *
  * Before adding or changing a glyph, measure its monospace coverage:
  *
- *   fc-list ":charset=<codepoint>:spacing=100" family | sed 's/,.*//' | sort -u | grep -v LastResort
+ *   fc-list ":charset=<codepoint>:spacing=100" family | cut -d, -f1 | sort -u | grep -v LastResort
  *
  * Coverage on macOS 15, in families:
  *
