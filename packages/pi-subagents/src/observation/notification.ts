@@ -193,19 +193,26 @@ export class NotificationManager implements NotificationSystem {
     if (record.consumed) return;
 
     const notification = formatTaskNotification(record, 500);
-    const outputFile = record.outputFile;
-    const transcriptLine = outputFile ? `\nFull transcript available at: ${outputFile}` : "";
-    // The nudge only announces; the parent must pull to collect (and consume).
-    const retrievalLine = `\nCall get_subagent_result("${record.id}") to collect the full result.`;
 
     this.sendMessage(
       {
         customType: "subagent-notification",
-        content: notification + transcriptLine + retrievalLine,
+        content: notification + this.buildPointerLines(record),
         display: true,
         details: buildNotificationDetails(record, 500),
       },
       { deliverAs: "followUp", triggerTurn: true },
     );
+  }
+
+  /**
+   * The trailing pointer lines: where the transcript lives, and how to collect
+   * the result. The nudge only announces; the parent must pull to collect (and
+   * consume).
+   */
+  private buildPointerLines(record: Subagent): string {
+    const outputFile = record.outputFile;
+    const transcriptLine = outputFile ? `\nFull transcript available at: ${outputFile}` : "";
+    return `${transcriptLine}\nCall get_subagent_result("${record.id}") to collect the full result.`;
   }
 }
