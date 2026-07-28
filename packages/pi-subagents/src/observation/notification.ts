@@ -58,7 +58,7 @@ export function formatTaskNotification(record: Subagent, resultMaxLen: number): 
 
   const toolCallId = record.toolCallId;
   const outputFile = record.outputFile;
-  return [
+  return joinNotificationLines([
     "<task-notification>",
     `<task-id>${record.id}</task-id>`,
     toolCallId ? `<tool-use-id>${escapeXml(toolCallId)}</tool-use-id>` : null,
@@ -68,9 +68,12 @@ export function formatTaskNotification(record: Subagent, resultMaxLen: number): 
     `<result>${escapeXml(resultPreview)}</result>`,
     `<usage><total_tokens>${totalTokens}</total_tokens><tool_uses>${record.toolUses}</tool_uses>${ctxXml}${compactXml}<duration_ms>${durationMs}</duration_ms></usage>`,
     "</task-notification>",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ]);
+}
+
+/** Join notification lines, dropping the ones a conditional element omitted. */
+function joinNotificationLines(lines: (string | null)[]): string {
+  return lines.filter(Boolean).join("\n");
 }
 
 /** Build notification details for the custom message renderer. */
