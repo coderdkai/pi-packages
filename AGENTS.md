@@ -71,6 +71,7 @@ The `pi-autoformat` extension emits a `[pi-autoformat] Formatted N file(s)` mess
 It is informational — not a turn boundary.
 Continue the current step (e.g. Red→Green→Commit) until it is complete.
 It also reflows what you just wrote (line wrapping, quote style), so an `oldText` built from the layout you emitted can fail to match — re-read a region you just edited before editing it again.
+It also joins a line ending in `:` with the sentence after it — to add a sentence there, start a new paragraph, not a new line.
 
 ### Stale prompt-template expansion
 
@@ -83,7 +84,7 @@ A multi-edit `Edit` call is atomic: if one `oldText` fails to match, the whole b
 Each `edits[]` entry has exactly one `oldText`/`newText` — put a second replacement in a second array entry, never as `oldText2`/`newText2`.
 Extra suffixed keys are silently ignored while the tool still reports `Successfully replaced N block(s)`, so count reported blocks against intended edits (Refs #605).
 After a rejection, re-apply every intended edit (not just the ones you retried) and run `pnpm run check` to confirm none were silently dropped — but `tsc` passes on a dropped `import type` removal (an unused type import is not an error), so re-read the affected region rather than trusting the check alone.
-When an edit's `oldText` would span a decorative comment rule (a long run of `─`/`═`), anchor on adjacent unique code lines rather than the rule itself — miscounting the run fails the whole atomic batch.
+When an edit's `oldText` would span a decorative comment rule (a long run of `─`/`═`) or a width-padded table row, anchor on adjacent unique code lines rather than the padded span itself — miscounting it fails the whole atomic batch, and `rumdl fmt` does not re-pad tables for you.
 If you delete such a block by line number with `sed`, re-read the region afterward to confirm you did not remove an enclosing brace.
 A multi-line `perl -0777`/`sed` regex substitution across many similar blocks is a trap — a non-greedy `.*?` group spans block boundaries and silently corrupts a neighbor; collapse repeated multi-line literals with per-block `Edit` calls and reserve scripted substitution for single-line per-symbol renames (Refs #525).
 A replacement containing backslashes is a trap even as a single-line rename — shell, perl, and the regex engine each consume an escape level.
@@ -266,6 +267,8 @@ Quote a glob pattern meant for a command rather than the shell — `--include='*
 Unquoted, it expands against the cwd first: bash silently substitutes a matched filename, and zsh aborts with `no matches found`.
 Do not start a bash word with `=` — zsh's `equals` expansion reads `=word` as a command-path lookup, so a decorative `echo ===` separator aborts with `zsh:1: == not found` and discards the rest of an `A; B; C` chain.
 Use `echo ---`.
+A shell snippet quoted inside a `/* */` block comment must not contain `*/` — a `sed 's/,.*//'` closes the comment and breaks the file's parse.
+Use `cut -d, -f1`.
 
 ## Markdown
 

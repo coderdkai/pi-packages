@@ -130,3 +130,80 @@ Test count is unchanged at 1135 — by design, since the guard decision was docu
 - Pre-completion reviewer: WARN (1 non-blocking finding).
   Reviewer warnings: the plan's embedded sketch still showed the broken `sed` form with no record of the deviation — addressed in `a5fc1f0b`, which corrects the sketch and states why `cut` is required there.
   Everything else passed, including the issue-specific attribution check (all implementation commits carry the `Co-authored-by` trailer, none uses `Closes #681`) and the follow-up-filing check (#683).
+
+## Stage: Final Retrospective (2026-07-28T21:39:28Z)
+
+### Session summary
+
+One continuous session carried a third-party PR from evaluation to release: PR #681 was evaluated and declined-in-favor-of-reimplementation, issue #669 was planned, implemented across four TDD commits, shipped, and released as `@gotgenes/pi-subagents@19.2.1`.
+The defect was confirmed by mechanism rather than by the PR's narrative — `⟳` (U+27F3) has zero monospace coverage, so Pi's one-cell allocation overflows — and the fix landed behind a preparatory extraction of `src/ui/glyphs.ts`.
+Contributor credit rode every commit as a `Co-authored-by` trailer, and both #669 and PR #681 were closed with linked SHAs.
+
+### Observations
+
+#### What went well
+
+- **The Verify gate paid for itself immediately, and inverted the PR's own diagnosis.**
+  Both the issue body ("East Asian Width is Ambiguous") and the reporter's framing (font-specific to their Ghostty + IBM Plex + `ko_KR` setup) were wrong.
+  Reading Pi's own source at `../pi/packages/tui/src/utils.ts:196` plus an `fc-list` coverage sweep established the real mechanism in under ten tool calls, which is what made the fix generalizable rather than a sympathetic patch.
+  The upstream commit message, not the issue, turned out to be the accurate account — worth remembering that a linked upstream fix can be right for reasons its own issue states incorrectly.
+- **Tidy First validated a plan's sequencing instead of adding work.**
+  The `tidy-first-assessor` returned "no preparatory tidying warranted" and argued that Step 1 *was* the tidy-first move, explicitly rejecting a pre-normalization pass as double-touching the same lines.
+  This is the first time the assessor's value showed up as a confirmation rather than a list — a useful demonstration that a null result from it is a real signal, not a wasted dispatch.
+- **The extraction's correctness proof was a measurement, not an argument.**
+  "Full suite green with zero test files edited" is checkable in a way that "this refactor is behavior-preserving" is not.
+  Worth reaching for whenever a refactor precedes a behavior change.
+- **The PR-review → planning handoff did not re-litigate the decision.**
+  The recorded direction in the PR Review stage entry satisfied `/plan-issue`'s Decide gate, so planning spent its `ask_user` budget on genuinely open design parameters (module scope, guard shape, rationale home, follow-up breadth) rather than re-asking whether to proceed.
+- **The ship stage honored a subtle prompt distinction under a cheaper model.**
+  `release_pr_merge` refused with `merge_state: UNSTABLE`; the rollup showed a check genuinely `IN_PROGRESS` rather than the empty-rollup `GITHUB_TOKEN` case, so the run was watched to completion and the merge retried — no `gh pr merge` fallback.
+
+#### What caused friction (agent side)
+
+- `missing-context` — the plan's sketched module doc comment embedded `sed 's/,.*//'`, whose `*/` closes the enclosing block comment.
+  Nothing in planning screened the snippet for comment-terminating sequences before writing it into a `/** ... */` block.
+  Impact: 66 biome parse errors on the first `Write` of `src/ui/glyphs.ts`, one corrective edit, and a follow-up commit (`a5fc1f0b`) to fix the plan — the latter only because the pre-completion reviewer flagged the plan/implementation divergence.
+  Self-identified at write time; the plan-side correction was reviewer-caught.
+- `missing-context` — a coverage measurement was wrong for two full stages.
+  The PR-review stage counted monospace families with `wc -w` on a family list, inflating `✓`/`✗` to "18–27" (real: 6) and box drawing to the same (real: 9), because multi-word names such as `Andale Mono` counted twice.
+  Impact: wrong figures shipped into issue #683's body and had to be corrected with `gh issue edit` before the plan was committed; no code impact.
+  Self-identified during planning when the sweep was re-run.
+- `missing-context` — the PR-review completeness check ("no stray `⟳` remains") used a literal-only grep against a codebase that writes the same glyphs as `\uXXXX` escapes.
+  Impact: no rework — planning caught it before implementation, and it became the strongest argument for the vocabulary module — but the review stage's confidence was unearned at the time it was stated.
+- `other` (tooling) — `pi-autoformat` rejoins a line ending in `:` with the sentence following it, so a deviation note appended after the coverage-table lead-in collapsed onto one line twice before being restructured as its own paragraph below the table.
+  Impact: two extra edit round-trips.
+- `other` (tooling) — an `Edit` on the package skill's domain table failed because its cells are padded to fixed widths past 600 characters and the `oldText` was reconstructed rather than read.
+  Impact: one failed edit, recovered with a short Python rewrite that preserved column widths; verified afterwards that `rumdl fmt` does **not** re-pad tables, so preserving alignment by hand was in fact required.
+- `other` — the first `ask_user` call in planning bundled four questions and came back with the `direction` answer missing.
+  Impact: one extra `ask_user` round-trip to recover the single dropped answer.
+
+#### What caused friction (user side)
+
+- Nothing obstructive — the session ran with near-full delegation across five stages.
+  The one mid-flow intervention ("Next step is /plan-issue?") was a cheap confirming question at a stage boundary, which is the right shape.
+- Opportunity, not criticism: the operator's four planning answers were all preference calls that only they could make, so the `ask_user` budget was well spent.
+  The one place earlier context would have helped is the release-batching picture — an unreleased sibling `fix:` (`b6ab6bbe`, the `escapeXml` fix) was sitting on `main` and rode this release, which only surfaced at step 4b of shipping.
+  Knowing that up front would not have changed the outcome, but it would have made the release contents predictable rather than discovered.
+
+### Diagnostic details
+
+- **Model-performance correlation** — clean, no mismatches.
+  PR review, planning, and TDD ran on `anthropic/claude-opus-5` (judgment-heavy: defect verification, design parameters, code review).
+  Shipping ran on `anthropic/claude-sonnet-5` (mechanical: push, CI watch, merge, close) and still handled its two prose tasks — the issue close comment and the PR #681 credit comment — without quality loss.
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `anthropic/claude-sonnet-5` per their frontmatter; the reviewer produced a substantive, correct WARN, so neither was under-powered.
+- **Escalation-delay tracking** — nothing to flag; no `rabbit-hole` friction points, and the longest streak on a single error was two tool calls (the plan-file edit after an autoformat reflow).
+- **Unused-tool detection** — no gap.
+  `colgrep` went unused, correctly: every search was an exact character, codepoint, or symbol hunt where `rg` is the right instrument.
+  The `../pi` lookup for the width function was a single targeted read, which `AGENTS.md` explicitly permits without an `Explore` dispatch.
+- **Feedback-loop gap analysis** — no gap.
+  Verification ran incrementally rather than only at the end: a green baseline (`check`, `lint`, `test`) before Step 1; `check` + full package suite + root `lint` after the extraction; a targeted `vitest run` to confirm the red; full suite + `check` + `lint` after the green; then full gates plus `pnpm fallow dead-code` before the pre-completion dispatch.
+  The planning stage also ran `rumdl check` on the plan before committing it.
+
+### Changes made
+
+1. `AGENTS.md` — Code Style: added the rule that a shell snippet quoted inside a `/* */` block comment must not contain `*/`, with `cut -d, -f1` as the replacement for `sed 's/,.*//'`.
+2. `AGENTS.md` — Edit tool batches: extended the existing decorative-comment-rule anchoring sentence to cover width-padded table rows, noting that `rumdl fmt` does not re-pad tables.
+3. `AGENTS.md` — Tool-injected messages: added that `pi-autoformat` joins a line ending in `:` with the sentence after it, so a following sentence needs a new paragraph.
+4. `.pi/prompts/plan-issue.md` — Module-Level Changes: added the rule to grep the `\uXXXX` escaped form as well as the literal when a step changes a character or codepoint, or to scan non-ASCII wholesale.
+
+Considered and rejected: a `wc -l` vs `wc -w` counting rule (generic shell competence, and `AGENTS.md` is already dense); an `ask_user` batch-size limit (one occurrence, reads as a UI artifact); a heuristic that documented rationale can beat a guard test (one data point, and it risks discouraging real tests).
