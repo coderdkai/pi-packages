@@ -76,3 +76,27 @@ Agreed shape there is two keys — an immediate "stop all subagents" fast path p
 ## 664 governs what ESC destroys by default; #676 governs whether the operator has a deliberate alternative to reaching for ESC at all
 
 Unrelated to both: #674 tracks the queued-stop lifecycle defect from the same contributor's PR #665.
+
+## Stage: Planning (2026-07-28T01:38:26Z)
+
+### Session summary
+
+Wrote `packages/pi-subagents/docs/plans/0664-abort-all-on-interrupt-policy-setting.md` on top of the triage decision: an `abortAllOnInterrupt` setting defaulting to `true`, a policy predicate consulted inside `InterruptHandler`'s abort listener, and a direct-flip toggle in `/subagents:settings`.
+Four steps — persist the setting, gate the interrupt, add the toggle, document it — with the `Co-authored-by: daoguademeng <whumaple@gmail.com>` trailer required on every commit.
+Release recommendation is ship independently: the issue is in no roadmap phase and the change is a self-contained additive `feat:`.
+
+### Observations
+
+- **Measurement that shaped the design.**
+  Traced the abort paths rather than assuming: `spawnBackground` passes no `signal`, so `InterruptHandler` is the *only* thing that aborts a background agent on ESC; `runForeground` and the resume path both pass the tool's `signal` straight through to `Subagent.run()`'s `listeners.wireSignal`, so a foreground agent self-aborts on ESC regardless of the setting.
+  The contributor's offered "scope it to background-only agents" variant is therefore already the effective behavior — no filtering needed in `abortAll()`.
+- **Operator decisions taken at the `ask_user` gate.** (1) Keep the name `abortAllOnInterrupt` and document the foreground nuance in the README, rather than renaming to a background-explicit key. (2) Fold the boolean into `subagents-settings.ts`'s descriptor table as a `kind`-discriminated union (`numeric` | `toggle`) with one dispatch point, rather than a second table or an inline special case. (3) With the policy off, skip `abortAll()` entirely so queued agents are spared too — no "drop the queue, spare the running" variant.
+- **Tell-Don't-Ask on the toggle.**
+  The manager exposes `toggleAbortAllOnInterrupt()` and owns the negation; the UI descriptor never reads the boolean, negates it, and writes it back.
+  Consequently no public setter and no `applyAbortAllOnInterrupt(value)` — a value-taking apply method would be dead code.
+- **Predicate over settings object.**
+  `InterruptHandler` takes a required `() => boolean`, matching `new ConcurrencyLimiter(() => settings.maxConcurrent)` in `index.ts`, so the handler never learns the settings key's name and the value is read at abort time.
+  Required rather than defaulted so a future wiring site cannot silently opt out.
+- **Open for the implementation session.**
+  Whether to read the contributor's fork branch (`fc45d4c`); the plan recommends not reading it, since the design is fully specified here and the co-author trailer goes on regardless.
+- No follow-up issues filed — everything deferred is already tracked by #676 (shortcut-driven stop UX) and #674 (queued-stop lifecycle).
