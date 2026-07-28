@@ -19,6 +19,7 @@ function makeReport(overrides: Partial<AgentReport> = {}): AgentReport {
 		description: "Investigate the bug",
 		result: "All done.",
 		error: undefined,
+		stoppedWhileQueued: false,
 		conversation: undefined,
 		transcriptPath: undefined,
 		...overrides,
@@ -81,6 +82,15 @@ describe("renderReportBody", () => {
 	it("shows a no-output fallback when result is undefined", () => {
 		const body = renderReportBody(makeReport({ status: "completed", result: undefined }));
 		expect(body).toBe("No output.");
+	});
+
+	it("says an agent stopped while queued never started, rather than showing no output", () => {
+		const body = renderReportBody(
+			makeReport({ status: "stopped", stoppedWhileQueued: true, result: undefined }),
+		);
+		expect(body).toBe(
+			"Agent was stopped while queued and never started. No work was performed.",
+		);
 	});
 });
 

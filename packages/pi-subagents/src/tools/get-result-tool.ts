@@ -63,6 +63,7 @@ export class GetResultTool {
 			description: record.description,
 			result: record.result,
 			error: record.error,
+			stoppedWhileQueued: record.stoppedWhileQueued,
 			conversation: verbose ? record.getConversation() : undefined,
 			// Transcript pointer: lets the parent read the full session from disk,
 			// and covers verbose after the live session was released (no conversation).
