@@ -121,3 +121,40 @@ Co-authored-by: daoguademeng <whumaple@gmail.com>
 
 The close comment on #665 thanks @daoguademeng by name, links the implementing SHA(s), and credits the diagnosis and the exactly-once test.
 Reference the PR as `Refs #665` — never `Closes #665`.
+
+## Stage: Planning (2026-07-28T00:03:50Z)
+
+### Session summary
+
+Wrote `packages/pi-subagents/docs/plans/0674-emit-terminal-lifecycle-for-stopped-while-queued-agents.md` — seven steps (six red→green→commit cycles plus a docs commit) implementing the PR-review stage's adopt-with-simplified-design decision.
+The PR-review retro settled the direction, so planning only had to resolve three open design parameters: the shape of the never-started notification, where the never-started fact is stored, and the mechanism for suppressing shutdown-time nudges.
+Baseline measured on `b1722630`: 64 test files, 1095 tests green, `pnpm fallow audit --base origin/main` clean.
+
+### Observations
+
+- **Notification shape — trimmed block.**
+  The operator chose omitting `<result>` and `<usage>` entirely for a never-started agent over keeping the full block with honest wording: a zeroed `<usage>` is itself a lie of shape.
+  Cost accepted: `formatTaskNotification` gains a second block layout.
+- **State placement.**
+  The operator's uncertainty was whether a pre-start fact could live in `SubagentState`.
+  It can — `SubagentState` is constructed at spawn with `status: "queued"`, so there is no upstream gap.
+  Chose `stoppedWhileQueued`, written only by a new `stopQueued()` transition (one writer, no init-seeding subtlety), over an `everRan` bit maintained by `markRunning()`.
+  A new `SubagentStatus` union member was rejected as wire-visible with no new presentation to justify it.
+- **Shutdown — reorder plus latch, deliberately broad.**
+  Named three disadvantages before the operator confirmed: `dispose()` becomes one-shot; a documented, test-pinned cleanup order changes; and it also suppresses the nudges *running* agents currently leak asynchronously at shutdown.
+  The operator chose to treat the third as intended and have the plan test it, so this fix is not scoped purely to queued agents.
+- **ESC path needs no work.** `InterruptHandler` fires inside the parent's run, so `parentRunActive` is true and the new nudges are withheld and flushed on `agent_settled` per #661 — the leak is specific to `session_shutdown`, where no run is active.
+- **Scope grew by one surface.**
+  `get_subagent_result` would have returned the same `"No output."` lie, so `renderReportBody` gets a never-started branch (TDD 6).
+  Kept as its own step so it can be dropped without disturbing the rest.
+- **Rejected widening the wire payload.**
+  `subagents:failed` / `subagents:record` do not carry the never-started fact: two tests pin the record entry's exact eight fields, and no consumer has asked.
+  Recorded as an Open Question rather than filed as an issue.
+- **Pre-existing doc bug found.**
+  The architecture doc's agent-lifecycle state diagram has `running --> aborted : abort() called` and `running --> stopped : max turns reached` — swapped relative to the code (`abort()` → `markStopped()`; turn limit → `markAborted()`).
+  The README status table is correct.
+  Folded the correction into the docs step since that diagram is being edited anyway to add the `queued --> stopped` edge.
+- **No follow-up issues filed.**
+  Both Open Questions are watch-items, not concrete deferred work.
+- **Attribution is a live constraint.**
+  Every implementation and docs commit carries `Co-authored-by: daoguademeng <whumaple@gmail.com>`, and #665 is referenced as `Refs #665`, never `Closes`.
