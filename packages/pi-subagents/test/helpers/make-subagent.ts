@@ -33,6 +33,8 @@ export interface TestSubagentOptions {
 	status?: SubagentStatus;
 	result?: string;
 	error?: string;
+	/** Seed the never-started marker (the agent was stopped before it was admitted). */
+	stoppedWhileQueued?: boolean;
 	startedAt?: number;
 	completedAt?: number;
 	/** Seed the consumed-outcome timestamp (undefined = obligation open). */

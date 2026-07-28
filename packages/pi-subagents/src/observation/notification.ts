@@ -43,6 +43,8 @@ export function getStatusLabel(status: string, error?: string): string {
 
 /** Format a structured <task-notification> XML block for the parent agent to parse. */
 export function formatTaskNotification(record: Subagent, resultMaxLen: number): string {
+  if (record.stoppedWhileQueued) return formatNeverStartedNotification(record);
+
   const status = getStatusLabel(record.status, record.error);
   const durationMs = record.completedAt ? record.completedAt - record.startedAt : 0;
   const totalTokens = getLifetimeTotal(record.lifetimeUsage);
@@ -71,6 +73,23 @@ export function formatTaskNotification(record: Subagent, resultMaxLen: number): 
   ]);
 }
 
+/**
+ * Format the block for an agent stopped before the limiter admitted it. Such an
+ * agent never ran, so it has no result and no usage — reporting either (even as
+ * zeroes) would point the parent at work that does not exist.
+ */
+function formatNeverStartedNotification(record: Subagent): string {
+  const toolCallId = record.toolCallId;
+  return joinNotificationLines([
+    "<task-notification>",
+    `<task-id>${record.id}</task-id>`,
+    toolCallId ? `<tool-use-id>${escapeXml(toolCallId)}</tool-use-id>` : null,
+    "<status>Stopped before starting</status>",
+    `<summary>Subagent "${escapeXml(record.description)}" was stopped while queued and never started</summary>`,
+    "</task-notification>",
+  ]);
+}
+
 /** Join notification lines, dropping the ones a conditional element omitted. */
 function joinNotificationLines(lines: (string | null)[]): string {
   return lines.filter(Boolean).join("\n");
@@ -94,12 +113,17 @@ export function buildNotificationDetails(
     durationMs: record.completedAt ? record.completedAt - record.startedAt : 0,
     outputFile: record.outputFile,
     error: record.error,
-    resultPreview: record.result
-      ? record.result.length > resultMaxLen
-        ? record.result.slice(0, resultMaxLen) + "…"
-        : record.result
-      : "No output.",
+    resultPreview: buildResultPreview(record, resultMaxLen),
   };
+}
+
+/** The renderer's preview text: the (truncated) result, or why there is none. */
+function buildResultPreview(record: Subagent, resultMaxLen: number): string {
+  if (record.stoppedWhileQueued) return "Never started — stopped while queued.";
+  if (!record.result) return "No output.";
+  return record.result.length > resultMaxLen
+    ? record.result.slice(0, resultMaxLen) + "…"
+    : record.result;
 }
 
 /** Build event data for lifecycle events from a Subagent. */
@@ -193,11 +217,13 @@ export class NotificationManager implements NotificationSystem {
     if (record.consumed) return;
 
     const notification = formatTaskNotification(record, 500);
+    // A never-started agent has no transcript and nothing to collect.
+    const pointerLines = record.stoppedWhileQueued ? "" : this.buildPointerLines(record);
 
     this.sendMessage(
       {
         customType: "subagent-notification",
-        content: notification + this.buildPointerLines(record),
+        content: notification + pointerLines,
         display: true,
         details: buildNotificationDetails(record, 500),
       },

@@ -78,6 +78,35 @@ describe("formatTaskNotification", () => {
     const xml = formatTaskNotification(baseRecord, 500);
     expect(xml).not.toContain("tool-use-id");
   });
+
+  describe("an agent stopped before it ever started", () => {
+    // Stats are seeded non-zero by the factory: a never-started block omits
+    // <usage> because the agent never ran, not because the numbers are zero.
+    const neverStarted = createTestSubagent({
+      status: "stopped",
+      stoppedWhileQueued: true,
+      result: undefined,
+      toolCallId: "tc-123",
+    });
+
+    it("emits a trimmed block that claims no result and no usage", () => {
+      expect(formatTaskNotification(neverStarted, 500)).toBe(
+        [
+          "<task-notification>",
+          "<task-id>agent-1</task-id>",
+          "<tool-use-id>tc-123</tool-use-id>",
+          "<status>Stopped before starting</status>",
+          '<summary>Subagent "Test task" was stopped while queued and never started</summary>',
+          "</task-notification>",
+        ].join("\n"),
+      );
+    });
+
+    it("omits the tool-use-id when the spawn carried none", () => {
+      const record = createTestSubagent({ status: "stopped", stoppedWhileQueued: true, result: undefined });
+      expect(formatTaskNotification(record, 500)).not.toContain("tool-use-id");
+    });
+  });
 });
 
 describe("buildNotificationDetails", () => {
@@ -116,6 +145,12 @@ describe("buildNotificationDetails", () => {
     const details = buildNotificationDetails(record, 100);
     expect(details.resultPreview).toHaveLength(101); // 100 chars + "…"
     expect(details.resultPreview.endsWith("…")).toBe(true);
+  });
+
+  it("previews a never-started agent as never started, not as empty output", () => {
+    const record = createTestSubagent({ status: "stopped", stoppedWhileQueued: true, result: undefined });
+    const details = buildNotificationDetails(record, 500);
+    expect(details.resultPreview).toBe("Never started — stopped while queued.");
   });
 });
 
@@ -192,6 +227,15 @@ describe("NotificationManager", () => {
     system.sendCompletion(baseRecord);
     const content = (args.sendMessage.mock.calls[0][0] as { content: string }).content;
     expect(content).toContain("get_subagent_result");
+  });
+
+  it("omits the retrieval instruction for an agent that never started", () => {
+    const args = makeArgs();
+    const system = makeManager(args);
+    const record = createTestSubagent({ status: "stopped", stoppedWhileQueued: true, result: undefined });
+    system.sendCompletion(record);
+    const content = (args.sendMessage.mock.calls[0][0] as { content: string }).content;
+    expect(content).toBe(formatTaskNotification(record, 500));
   });
 
   it("sendCompletion skips the nudge when the record is already consumed (enqueue-time guard)", () => {
