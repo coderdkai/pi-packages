@@ -227,14 +227,15 @@ The message interrupts after the current tool execution.
 
 ## Commands
 
-| Command               | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| `/subagents:settings` | Configure subagent settings (concurrency, turn limits) |
-| `/subagents:sessions` | View a subagent's session transcript (read-only)       |
+| Command               | Description                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `/subagents:settings` | Configure subagent settings (concurrency, turn limits, retention, interrupt policy) |
+| `/subagents:sessions` | View a subagent's session transcript (read-only)                                    |
 
 ### `/subagents:settings`
 
-Interactive list to tune runtime settings — max concurrency, default max turns, and grace turns.
+Interactive list to tune runtime settings — max concurrency, default max turns, grace turns, the two session-retention windows, and whether ESC aborts every subagent.
+The numeric settings open an input prompt; the abort-on-ESC entry is a direct flip.
 Changes persist across pi restarts (see [Persistent Settings](#persistent-settings)).
 
 ### `/subagents:sessions`
@@ -272,7 +273,7 @@ Because that agent never started, the notification says so and offers no result 
 
 ## Persistent Settings
 
-Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns, and the two session-retention windows) persist across pi restarts.
+Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns, the two session-retention windows, and the abort-on-interrupt policy) persist across pi restarts.
 A completed subagent's record is kept for the whole parent session (so `get_subagent_result` never misses); only its heavy in-memory session is released — after `consumedSessionRetentionMinutes` once the result has been collected, or after the `unconsumedSessionRetentionMinutes` safety cap if it never was.
 Two files, merged on load:
 
@@ -282,7 +283,7 @@ Two files, merged on load:
   Written by `/subagents:settings`.
 
 **Precedence:** project overrides global on any field present in both.
-Missing fields fall back to the hardcoded defaults (max concurrency `4`, default max turns unlimited, grace turns `5`, consumed-session retention `10` minutes, unconsumed-session retention `720` minutes).
+Missing fields fall back to the hardcoded defaults (max concurrency `4`, default max turns unlimited, grace turns `5`, consumed-session retention `10` minutes, unconsumed-session retention `720` minutes, abort-all-on-interrupt `true`).
 
 **Example — global defaults for a beefy machine:**
 
@@ -292,15 +293,26 @@ cat > ~/.pi/agent/subagents.json <<'EOF'
 {
   "maxConcurrent": 16,
   "graceTurns": 10,
-  "unconsumedSessionRetentionMinutes": 1440
+  "unconsumedSessionRetentionMinutes": 1440,
+  "abortAllOnInterrupt": false
 }
 EOF
 ```
 
-Every project now starts with concurrency 16 and grace 10, without ever touching the command.
+Every project now starts with concurrency 16, grace 10, and ESC left to the parent, without ever touching the command.
 Individual projects can still override via `/subagents:settings`.
 
 **Failure behavior:** missing file is silent; malformed JSON logs a `[pi-subagents] Ignoring malformed settings at …` warning to stderr; invalid/out-of-range field values are dropped per-field; write failures downgrade the `/subagents:settings` toast to a warning with `(session only; failed to persist)`.
+
+### Abort on interrupt
+
+By default, pressing ESC to interrupt the parent agent also aborts every subagent.
+Set `abortAllOnInterrupt` to `false` (or flip it from `/subagents:settings`) to keep background and queued subagents running when you interrupt the parent — useful when you spawn long background work and then want to steer the parent without losing it.
+
+A foreground agent aborts on ESC regardless of this setting.
+It holds the parent's own run signal for the duration of its blocking tool call, so the interrupt reaches it directly; the policy governs background and queued agents.
+
+The policy is read at the moment ESC fires, so flipping it mid-session applies to the very next interrupt.
 
 ## Events
 

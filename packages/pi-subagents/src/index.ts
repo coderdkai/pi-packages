@@ -171,7 +171,7 @@ export default function (pi: ExtensionAPI) {
   const subagentsSettings = new SubagentsSettingsHandler(settings);
 
   pi.registerCommand("subagents:settings", {
-    description: "Configure subagent settings (concurrency, turn limits, retention)",
+    description: "Configure subagent settings (concurrency, turn limits, retention, interrupt policy)",
     handler: async (_args, ctx) => {
       await subagentsSettings.handle({ ui: ctx.ui });
     },

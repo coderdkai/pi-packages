@@ -359,7 +359,7 @@ src/
 │
 └── handlers/                       event handlers
     ├── index.ts                    barrel re-export
-    ├── interrupt.ts                turn_start handler — abort all subagents on parent interrupt (ESC)
+    ├── interrupt.ts                turn_start handler — abort all subagents on parent interrupt (ESC), when policy allows
     ├── lifecycle.ts                session_start, session_before_switch, session_shutdown
     └── tool-start.ts               tool_execution_start handler
 ```
