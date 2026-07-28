@@ -219,10 +219,11 @@ stateDiagram-v2
     [*] --> queued : spawn (background, at capacity)
     [*] --> running : spawn (foreground or under limit)
     queued --> running : capacity available
+    queued --> stopped : stopQueued() — never started
     running --> completed : all turns finished
     running --> error : unhandled exception
-    running --> aborted : abort() called
-    running --> stopped : max turns reached
+    running --> aborted : max turns reached
+    running --> stopped : abort() called
     running --> steered : steer message injected
     steered --> running : continues with message
     completed --> running : resetForResume
@@ -243,6 +244,7 @@ stateDiagram-v2
 
 Note: `markStopped` always succeeds regardless of current status.
 Other terminal transitions guard against overwriting `stopped` — once an agent is stopped, only `resetForResume` can return it to `running`.
+`stopQueued` composes `markStopped` with a never-started marker and, like `completeRun`/`failRun`, notifies the lifecycle observer — so a queued stop publishes the same events, session entry, and nudge a running stop does.
 
 ## Execution flow
 

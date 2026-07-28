@@ -267,6 +267,9 @@ The widget shows queued agents as a collapsed count.
 
 Foreground agents bypass the queue — they block the parent anyway.
 
+Stopping a still-queued agent produces the same completion notification a running agent's stop does.
+Because that agent never started, the notification says so and offers no result to collect.
+
 ## Persistent Settings
 
 Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns, and the two session-retention windows) persist across pi restarts.
