@@ -353,6 +353,7 @@ src/
 │   ├── agent-widget.ts             above-editor live status widget
 │   ├── widget-renderer.ts          pure rendering for widget
 │   ├── display.ts                  pure formatters and shared types
+│   ├── glyphs.ts                   semantic display-glyph vocabulary (monospace-coverage constraint, #669)
 │   ├── subagents-settings.ts       /subagents:settings command handler
 │   ├── session-navigation.ts       pure session-selection and transcript-source logic
 │   └── session-navigator.ts        /subagents:sessions command handler
@@ -657,7 +658,7 @@ That method — testability friction as a boundary probe, with its limits — is
 | Metric                     | Value                                                                   |
 | -------------------------- | ----------------------------------------------------------------------- |
 | Health score               | 78/100 (B), end of Phase 21                                             |
-| Total LOC                  | 7,432 (57 files)                                                        |
+| Total LOC                  | 7,432 (58 files)                                                        |
 | Dead code                  | 0 files, 0 exports                                                      |
 | Maintainability index      | 91.0 (good)                                                             |
 | Avg cyclomatic complexity  | 1.3                                                                     |
