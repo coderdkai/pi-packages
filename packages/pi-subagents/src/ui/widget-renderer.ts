@@ -21,9 +21,9 @@ import {
 	formatTurns,
 	getDisplayName,
 	getPromptModeLabel,
-	SPINNER,
 	type Theme,
 } from "#src/ui/display";
+import { GLYPHS, SPINNER } from "#src/ui/glyphs";
 
 // ── Data interfaces ──────────────────────────────────────────────────────────
 
@@ -63,21 +63,21 @@ export function renderFinishedLine(
 	let icon: string;
 	let statusText: string;
 	if (agent.status === "completed") {
-		icon = theme.fg("success", "✓");
+		icon = theme.fg("success", GLYPHS.success);
 		statusText = "";
 	} else if (agent.status === "steered") {
-		icon = theme.fg("warning", "✓");
+		icon = theme.fg("warning", GLYPHS.success);
 		statusText = theme.fg("warning", " (turn limit)");
 	} else if (agent.status === "stopped") {
-		icon = theme.fg("dim", "■");
+		icon = theme.fg("dim", GLYPHS.stopped);
 		statusText = theme.fg("dim", " stopped");
 	} else if (agent.status === "error") {
-		icon = theme.fg("error", "✗");
+		icon = theme.fg("error", GLYPHS.failure);
 		const errMsg = agent.error ? `: ${agent.error.slice(0, 60)}` : "";
 		statusText = theme.fg("error", ` error${errMsg}`);
 	} else {
 		// aborted
-		icon = theme.fg("error", "✗");
+		icon = theme.fg("error", GLYPHS.failure);
 		statusText = theme.fg("warning", " aborted");
 	}
 
@@ -116,7 +116,7 @@ export function renderRunningLines(
 	const activityText = describeActivity(agent.activeTools, agent.responseText);
 
 	const header = `${theme.fg("accent", frame)} ${theme.bold(name)}${modeTag}  ${theme.fg("muted", agent.description)} ${theme.fg("dim", "·")} ${theme.fg("dim", statsText)}`;
-	const activityLine = theme.fg("dim", `  \u23BF  ${activityText}`);
+	const activityLine = theme.fg("dim", `  ${GLYPHS.subLine}  ${activityText}`);
 
 	return [header, activityLine];
 }
@@ -176,7 +176,7 @@ function buildSections(
 	}
 
 	const queuedLine = categories.queued.length > 0
-		? truncate(theme.fg("dim", "\u251C\u2500") + ` ${theme.fg("muted", "\u25E6")} ${theme.fg("dim", `${categories.queued.length} queued`)}`)
+		? truncate(theme.fg("dim", "\u251C\u2500") + ` ${theme.fg("muted", GLYPHS.queued)} ${theme.fg("dim", `${categories.queued.length} queued`)}`)
 		: undefined;
 
 	return { finishedLines, runningLines, queuedLine };
@@ -274,7 +274,7 @@ export function renderWidgetLines(params: {
 
 	const truncate = (line: string) => truncateToWidth(line, terminalWidth);
 	const headingColor = hasActive ? "accent" : "dim";
-	const headingIcon = hasActive ? "\u25CF" : "\u25CB";
+	const headingIcon = hasActive ? GLYPHS.agentsActive : GLYPHS.agentsIdle;
 
 	const { finishedLines, runningLines, queuedLine } = buildSections(
 		{ running, queued, finished },

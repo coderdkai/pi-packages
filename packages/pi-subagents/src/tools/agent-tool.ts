@@ -12,6 +12,7 @@ import { renderAgentResult } from "#src/tools/result-renderer";
 import { type ModelInfo, resolveSpawnConfig } from "#src/tools/spawn-config";
 import type { ParentSessionInfo, Subagent } from "#src/types";
 import { type AgentDetails, getDisplayName, type Theme } from "#src/ui/display";
+import { GLYPHS } from "#src/ui/glyphs";
 
 // ---- Deps interfaces ----
 
@@ -219,7 +220,7 @@ ${guidelines}
 					: "Subagent";
 				const desc = (args.description as string | undefined) ?? "";
 				return new Text(
-					"▸ " +
+					`${GLYPHS.toolCall} ` +
 						theme.fg("toolTitle", theme.bold(displayName)) +
 						(desc ? "  " + theme.fg("muted", desc) : ""),
 					0,

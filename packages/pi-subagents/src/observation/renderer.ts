@@ -5,6 +5,7 @@ import {
 } from "#src/lifecycle/subagent-state";
 import type { NotificationDetails } from "#src/observation/notification";
 import { formatMs, formatTokens, formatTurns } from "#src/ui/display";
+import { GLYPHS } from "#src/ui/glyphs";
 
 /** Narrow theme interface — only the methods the renderer actually calls. */
 interface RendererTheme {
@@ -33,9 +34,10 @@ export interface StatusPresentation {
 
 /** Decide the icon and status label for a notification's status, once. */
 export function resolveStatusPresentation(status: SubagentStatus): StatusPresentation {
-  if (isTerminalErrorStatus(status)) return { iconGlyph: "✗", iconStyle: "error", statusText: status };
+  if (isTerminalErrorStatus(status))
+    return { iconGlyph: GLYPHS.failure, iconStyle: "error", statusText: status };
   const statusText = status === "steered" ? "completed (steered)" : "completed";
-  return { iconGlyph: "✓", iconStyle: "success", statusText };
+  return { iconGlyph: GLYPHS.success, iconStyle: "success", statusText };
 }
 
 /** Fields `buildStatsParts` reads from a `NotificationDetails`. */
@@ -88,7 +90,7 @@ export function createNotificationRenderer() {
     if (expanded) {
       for (const l of previewLines) line += "\n" + theme.fg("dim", `  ${l}`);
     } else {
-      line += "\n  " + theme.fg("dim", `⎿  ${previewLines[0] ?? ""}`);
+      line += "\n  " + theme.fg("dim", `${GLYPHS.subLine}  ${previewLines[0] ?? ""}`);
     }
 
     // Line 4: output file link (if present)

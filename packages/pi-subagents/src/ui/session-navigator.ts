@@ -40,6 +40,7 @@ import {
 import type { AgentConfigLookup } from "#src/config/agent-types";
 import type { SessionMessage } from "#src/types";
 import { describeActivity, type Theme } from "#src/ui/display";
+import { GLYPHS } from "#src/ui/glyphs";
 import { fileSnapshotSource, listNavigableAgents, liveSource, type NavigableSubagent, type TranscriptSource } from "#src/ui/session-navigation";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -264,7 +265,10 @@ export class TranscriptOverlay implements Component {
     const lines = this.content.render(innerW);
     const streaming = this.source.streaming();
     if (streaming) {
-      lines.push("", `◍ ${describeActivity(streaming.activeTools, streaming.responseText)}`);
+      lines.push(
+        "",
+        `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`,
+      );
     }
     return lines.map((l) => truncateToWidth(l, innerW));
   }

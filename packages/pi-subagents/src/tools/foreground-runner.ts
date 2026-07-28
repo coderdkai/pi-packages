@@ -9,12 +9,8 @@ import {
 } from "#src/tools/helpers";
 import type { ResolvedSpawnConfig } from "#src/tools/spawn-config";
 import type { ParentSessionInfo, Subagent } from "#src/types";
-import {
-  type AgentDetails,
-  describeActivity,
-  formatMs,
-  SPINNER,
-} from "#src/ui/display";
+import { type AgentDetails, describeActivity, formatMs } from "#src/ui/display";
+import { SPINNER } from "#src/ui/glyphs";
 
 /** Narrow manager interface for the foreground runner. */
 export interface ForegroundManagerDeps {
