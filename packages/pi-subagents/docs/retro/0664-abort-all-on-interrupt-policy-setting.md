@@ -128,3 +128,74 @@ The plan was followed without deviation; every implementation and docs commit ca
 - **Pre-completion reviewer: PASS.**
   One non-blocking nit — `abortAllOnInterrupt` landed between the `apply*` methods in `SubagentsSettingsManager` instead of with the other readonly properties; fixed in `d698de0b` (`style:`).
   The reviewer also noted pre-existing mock-typing drift in the two touched test files (`ReturnType<typeof vi.fn<Sig>>` rather than the `testing` skill's `Mock<Sig>`), which predates this issue and was left alone.
+
+## Stage: Final Retrospective (2026-07-28T13:53:22Z)
+
+### Session summary
+
+Shipped `abortAllOnInterrupt` end to end across four stages (triage → planning → TDD → ship) as `pi-subagents-v19.2.0`, from a third-party proposal by @daoguademeng that the operator chose to implement in-repo with co-authorship credit.
+Six commits: one Tidy-First `refactor:`, three `feat:`, one `docs:`, one reviewer-prompted `style:`; pi-subagents tests 1114 → 1134 (+20).
+The defining moment was a planning-time code trace that changed the shape of the operator's decision rather than merely confirming the proposal.
+
+### Observations
+
+#### What went well
+
+1. **A measurement reframed the design question.**
+   The contributor offered "scope it to background-only agents" as an alternative shape.
+   Tracing the abort paths (8 tool calls through `background-spawner.ts`, `agent-tool.ts`, `foreground-runner.ts`, `subagent.ts`, `run-listeners.ts`) established that background spawns pass **no** `signal` while foreground and resume paths pass the parent's run signal straight into `Subagent.run()`'s `listeners.wireSignal`.
+   So background-only scoping was already the effective behavior, needing no filtering in `abortAll()`.
+   That fact went into the pre-`ask_user` message as a concrete before/after, and it produced a third decision the issue never raised — whether to rename the key to match — which the operator answered directly.
+   The `/plan-issue` discipline of "measure, don't argue" paid off at the point where it matters most: shaping the option set, not defending a plan.
+2. **Tidy First earned its keep on its first application to this package's UI layer.**
+   The `tidy-first-assessor` recommended exactly one preparatory commit and explicitly rejected four candidates as scope creep (generalizing `sanitize()`'s numeric branches, restructuring `load()`, sharing the toast type across files, touching `interrupt.ts`/`index.ts`).
+   The prep commit `5397edef` needed **zero** test changes, which verified it behavior-preserving for free before the risk-bearing feature commit landed on top.
+   The feature commit that followed was three small additions instead of a mixed refactor-plus-behavior diff.
+3. **The `release_pr_merge` in-progress-check branch worked as written.**
+   The PR came back `UNSTABLE`; the rollup had one check `IN_PROGRESS` rather than being empty.
+   That is precisely the case `/ship-issue` step 6.4 distinguishes, and the correct path (wait with `gh pr checks --watch --fail-fast`, then retry `release_pr_merge`; do **not** fall back to `gh pr merge` while a check runs) was followed without improvisation.
+   Worth recording because the earlier, simpler version of that rule would have merged through a running check.
+4. **Cross-session context bridge held.**
+   The triage stage entry carried the operator's direction decision, the co-authorship requirement, the rejected ESC-interception design, and the reasons — so the planning session did not re-litigate any of it and the `ask_user` gate could go straight to the genuinely open parameters.
+
+#### What caused friction (agent side)
+
+1. `other` (shell/zsh mechanics) — four compound `bash` calls died on a decorative `echo` separator: `echo ===` → `zsh:1: == not found`, `echo =====` twice, `echo =-=-=` → `zsh:1: -=-= not found`. zsh's `equals` expansion treats a word starting with `=` as a command-path lookup, so the separator I typed was never echoed — and because the separator sat in the middle of an `A; B; C` chain, the whole call had to be re-run.
+   The same mistake recurred at three separate points in the planning stage after the first failure, which is the real signal: it never got encoded.
+   Impact: 4 wasted tool calls, no rework to any deliverable.
+2. `missing-context` — the `### Abort on interrupt` README subsection was inserted after the "Precedence" paragraph without first reading the full extent of the `## Persistent Settings` section, which orphaned the `**Example — global defaults**` block and its trailing sentence under the new heading.
+   Caught by re-reading the rendered region, then fixed by relocating the subsection below the failure-behavior paragraph and updating the example's trailing sentence (which enumerates the example's keys).
+   Impact: one extra read and one extra edit pass; caught before the commit, so committed history is clean.
+3. `other` (minor) — `abortAllOnInterrupt` landed between the `apply*` methods in `SubagentsSettingsManager` rather than with the other readonly properties.
+   The pre-completion reviewer caught it; fixed in `d698de0b`.
+   Impact: one extra `style:` commit.
+   Arguably the review gate working as designed rather than friction.
+
+#### What caused friction (user side)
+
+1. Nothing that cost this session anything.
+   The triage session's decision record was unusually complete — it pre-answered direction, default, naming, attribution, and the rejected alternative, with the mechanical reasons ESC interception is unreachable.
+   That is the pattern to keep for third-party proposals: decide direction in triage, then let `/plan-issue` spend its `ask_user` budget on parameters the operator has not already settled.
+2. One small opportunity: the plan deferred "should the global-defaults README example include the new key?"
+   to the docs step as an Open Question.
+   Deciding it at docs time is what surfaced the section-structure slip above.
+   A deferred doc-shape question is cheap to answer at planning time and would have had the section read in full before the edit.
+
+### Diagnostic details
+
+- **Model-performance correlation** — planning, TDD, and this retrospective ran on `anthropic/claude-opus-5` (judgment-heavy: design decisions, `ask_user` framing, test design); the ship stage ran on `anthropic/claude-sonnet-5` (mechanical: push, CI watch, release merge).
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `anthropic/claude-sonnet-5` per their frontmatter, and both produced substantive judgment — the assessor's four explicit scope-creep rejections and the reviewer's cross-step invariant check against #540 (plus `mmdc` parsing all five Mermaid diagrams).
+  No mismatch in either direction.
+- **Escalation-delay tracking** — no `rabbit-hole` friction points.
+  The four zsh separator failures were single-call retries, not an escalation delay; the pattern is recurrence across the session, not persistence on one error.
+- **Unused-tool detection** — `colgrep` was loaded but never used; correctly so, since every search was exact-symbol (`InterruptHandler`, `signal`, `spawnAndWait`, `wireSignal`), which the decision table assigns to `grep`.
+  The 8-call signal-flow trace is a borderline `Explore` subagent candidate, but it ran in this package rather than the `../pi` checkout the `AGENTS.md` rule targets, and its output fed directly into the design — keeping it inline preserved the detail the `ask_user` message needed.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check` ran after every green step (five times) rather than only at the end, the full suite ran at the baseline and after the last step, and root `lint` plus `fallow dead-code` ran both before the final commits and again as pre-push gates.
+
+### Changes made
+
+1. `AGENTS.md` — added a zsh `equals`-expansion rule to `## Code Style`, beside the existing glob-quoting rule: do not start a bash word with `=`, since `echo ===` aborts the whole compound command.
+2. `.pi/skills/markdown-conventions/SKILL.md` — added an `### Inserting a new section` rule: read the parent section end to end before inserting a new heading, because an insertion point that reads correctly at the seam can reparent a following example block or summary sentence.
+
+Considered and rejected: a `code-design` rule on interface member ordering (over-specification for a one-line reviewer catch); encoding the abort-path measurement into `/plan-issue` (duplicates the existing measure-don't-argue rules); migrating the two touched test files to the `testing` skill's `Mock<Sig>` convention (pre-existing drift, separate cleanup); a rule about deferring doc-shape Open Questions (the section-insertion rule addresses the real failure mode).

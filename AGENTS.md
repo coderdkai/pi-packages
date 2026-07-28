@@ -264,6 +264,8 @@ Before implementing, refactoring, or reviewing code, load the `code-design` skil
 Use `colgrep` for intent-based codebase exploration and convention discovery; use `grep` for exact symbol matching.
 Quote a glob pattern meant for a command rather than the shell — `--include='*.ts'`, `find . -name '*.ts'`.
 Unquoted, it expands against the cwd first: bash silently substitutes a matched filename, and zsh aborts with `no matches found`.
+Do not start a bash word with `=` — zsh's `equals` expansion reads `=word` as a command-path lookup, so a decorative `echo ===` separator aborts with `zsh:1: == not found` and discards the rest of an `A; B; C` chain.
+Use `echo ---`.
 
 ## Markdown
 

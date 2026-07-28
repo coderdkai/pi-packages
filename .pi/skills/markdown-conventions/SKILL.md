@@ -33,6 +33,11 @@ Rules below are named by their markdownlint `MDxxx` IDs because `rumdl` implemen
 - Use sequential numbering (`1.` `2.` `3.`) in ordered lists, restarting at `1.` under each new heading — markdownlint's MD029 rejects continued numbering across section boundaries.
 - Do not use bold text (`**...**`) as a substitute for headings — use proper heading syntax; markdownlint's MD036 rejects emphasis used as headings.
 
+### Inserting a new section
+
+Before inserting a new `##`/`###` section into an existing document, read the parent section end to end.
+An insertion point that reads correctly at the seam can reparent what follows it — a shared example block, a trailing summary sentence — under the new heading.
+
 ### Tables and blockquotes
 
 - Use compact table style with no cell padding — markdownlint's MD060 enforces consistent column style and is not auto-fixable.
