@@ -69,3 +69,33 @@ Co-authored-by: Sungbin Jo <goranmoomin@daum.net>
 
 Reference the PR as `Refs #681` / `(#681)`, never `Closes #681`.
 At ship time, close PR #681 with a comment thanking `@goranmoomin` by name, crediting the upstream port and the glyph analysis, and linking the implementing SHA(s).
+
+## Stage: Planning (2026-07-28T16:48:21Z)
+
+### Session summary
+
+Wrote `docs/plans/0669-fix-turn-glyph-monospace-overflow.md`: a four-step plan that extracts `src/ui/glyphs.ts` first (tidy first, zero test edits as the proof), then swaps the two glyph constants red/green, then documents the monospace-coverage constraint in the architecture doc and the package skill.
+The operator settled four design parameters via `ask_user`: the module covers semantic indicators only (box drawing stays inline as layout), the guard is a documented rationale rather than a new test, the rationale lives in a module doc comment plus a package-skill note, and the follow-up covers `⎿` + `◍` + the Braille spinner.
+Filed that follow-up as issue #683 with the coverage measurements recorded.
+
+### Observations
+
+- **The strongest argument for the vocabulary module was found during planning, not during review.**
+  The same glyph is written two ways in one file — literal `⎿` at `src/tools/result-renderer.ts:37` and `\u23BF` at line 43, `✓` literal in `src/observation/renderer.ts` but `\u2713` in `src/tools/result-renderer.ts`.
+  A literal-only grep — which PR #681 relied on, and which the PR-review stage of this issue also used — cannot see the escaped sites, and it missed `\u25E6` (queued marker) and `\u25CF`/`\u25CB` (widget heading) entirely.
+  Centralization removes the failure mode where a glyph is changed at four of its six sites.
+  Lesson worth carrying: when auditing character-level usage, scan for the escaped form (`rg '\\u[0-9A-Fa-f]{4}'`) as well as the literal, or scan non-ASCII wholesale.
+- **A measurement was wrong for two stages before it was caught.**
+  The PR-review stage reported `✓`/`✗`/box-drawing as covering "18–27 monospace families"; the real figures are 6 and 9.
+  The pipeline used `wc -w` on a family list, so every multi-word family name (`Andale Mono`, `Courier New`) counted two or three times.
+  Corrected here, and issue #683's body was edited to match before the plan was committed.
+  Counting lines of a list requires `grep -c .` or `wc -l`, never `wc -w`.
+- **Ordering was inverted relative to the PR deliberately.**
+  PR #681 changes the glyph in place; this plan extracts first so the `fix:` commit is a two-constant diff.
+  That also gives the extraction a free correctness proof — the existing rendered-output tests pass with no test file edited — which is a measurement rather than a review argument.
+- **The docs-only guard decision is the honest one, and worth recording as a general point.**
+  An EAW-based assertion would pass on the buggy glyph (`⟳` is width 1), and a font-coverage assertion is machine-dependent.
+  When a defect class has no deterministic detector, a documented rationale next to the constrained code beats a test that pins the wrong property.
+- **The architecture doc's `Total LOC` figure is stale under an unknown counter** — it reads `7,432 (57 files)` while the tree measures 7,721 raw and 6,853 non-blank lines.
+  The plan updates the file count only and defers the LOC recompute rather than inventing a number.
+- Issue #669 is absent from the architecture roadmap, so the release recommendation is `ship independently` with no batch tag to consult.
