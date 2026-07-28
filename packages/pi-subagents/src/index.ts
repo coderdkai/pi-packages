@@ -149,8 +149,9 @@ export default function (pi: ExtensionAPI) {
   const toolStart = new ToolStartHandler(widget);
   pi.on("tool_execution_start", (event, ctx) => toolStart.handleToolExecutionStart(event, ctx));
 
-  // Abort all subagents when the parent agent loop is interrupted (ESC).
-  const interrupt = new InterruptHandler(manager);
+  // Abort all subagents when the parent agent loop is interrupted (ESC), unless
+  // the user has turned that policy off. The predicate is read at abort time.
+  const interrupt = new InterruptHandler(manager, () => settings.abortAllOnInterrupt);
   pi.on("turn_start", (_event, ctx) => interrupt.handleTurnStart(ctx));
 
   // ---- Agent tool ----
