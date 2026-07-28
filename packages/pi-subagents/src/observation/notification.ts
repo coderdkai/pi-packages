@@ -164,6 +164,7 @@ export class NotificationManager implements NotificationSystem {
   // flushed once the run settles.
   private pendingNudges = new Map<string, Subagent>();
   private parentRunActive = false;
+  private disposed = false;
 
   constructor(
     private sendMessage: (
@@ -173,6 +174,10 @@ export class NotificationManager implements NotificationSystem {
   ) {}
 
   sendCompletion(record: Subagent): void {
+    // The session is gone. It is the aborts fired during shutdown that reach
+    // here, and with no parent run active a nudge would go straight out as an
+    // unrecallable followUp.
+    if (this.disposed) return;
     // Consumption is domain state on the record; the nudge is a pure
     // announcement. Skip if the parent already pulled the result (enqueue-time
     // guard); emitIndividualNudge re-reads record.consumed when the nudge is
@@ -209,7 +214,9 @@ export class NotificationManager implements NotificationSystem {
     }
   }
 
+  /** Terminal: the manager stops announcing anything, now and afterwards. */
   dispose(): void {
+    this.disposed = true;
     this.pendingNudges.clear();
   }
 

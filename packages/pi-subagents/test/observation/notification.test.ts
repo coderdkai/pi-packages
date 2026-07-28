@@ -246,6 +246,38 @@ describe("NotificationManager", () => {
     expect(args.sendMessage).not.toHaveBeenCalled();
   });
 
+  describe("disposal", () => {
+    // At session_shutdown no parent run is active, so sendCompletion would
+    // otherwise skip the withhold queue and hand Pi an unrecallable followUp.
+    it("sends nothing after dispose, with no parent run to defer to", () => {
+      const args = makeArgs();
+      const system = makeManager(args);
+      system.dispose();
+      system.sendCompletion(baseRecord);
+      expect(args.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("withholds a never-started agent's nudge while the parent run is active", () => {
+      const args = makeArgs();
+      const system = makeManager(args);
+      const record = createTestSubagent({
+        id: "never-1",
+        status: "stopped",
+        stoppedWhileQueued: true,
+        result: undefined,
+      });
+
+      // The ESC path: InterruptHandler stops queued agents from inside the
+      // parent's run, so the nudge waits for agent_settled like any other.
+      system.onParentAgentStart();
+      system.sendCompletion(record);
+      expect(args.sendMessage).not.toHaveBeenCalled();
+
+      system.onParentAgentSettled();
+      expect(args.sendMessage).toHaveBeenCalledOnce();
+    });
+  });
+
   describe("parent-turn boundary", () => {
     /**
      * Models Pi's delivery semantics. While the parent's agent run is active a
