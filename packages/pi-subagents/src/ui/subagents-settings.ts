@@ -13,10 +13,10 @@ export interface SubagentsSettingsManager {
   readonly graceTurns: number;
   readonly consumedSessionRetentionMinutes: number;
   readonly unconsumedSessionRetentionMinutes: number;
+  readonly abortAllOnInterrupt: boolean;
   applyMaxConcurrent(n: number): SettingsToast;
   applyDefaultMaxTurns(n: number): SettingsToast;
   applyGraceTurns(n: number): SettingsToast;
-  readonly abortAllOnInterrupt: boolean;
   applyConsumedSessionRetentionMinutes(n: number): SettingsToast;
   applyUnconsumedSessionRetentionMinutes(n: number): SettingsToast;
   toggleAbortAllOnInterrupt(): SettingsToast;
