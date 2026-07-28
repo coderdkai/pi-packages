@@ -204,6 +204,22 @@ describe("settings persistence", () => {
       writeProject({ maxConcurrent: 1_000_000, defaultMaxTurns: 1_000_000, graceTurns: 1_000_000 });
       expect(loadSettings(globalDir, projectDir)).toEqual({});
     });
+
+    it("keeps abortAllOnInterrupt when it is a boolean", () => {
+      writeProject({ abortAllOnInterrupt: false });
+      expect(loadSettings(globalDir, projectDir)).toEqual({ abortAllOnInterrupt: false });
+      writeProject({ abortAllOnInterrupt: true });
+      expect(loadSettings(globalDir, projectDir)).toEqual({ abortAllOnInterrupt: true });
+    });
+
+    it("drops a non-boolean abortAllOnInterrupt", () => {
+      writeProject({ abortAllOnInterrupt: "false", graceTurns: 5 });
+      expect(loadSettings(globalDir, projectDir)).toEqual({ graceTurns: 5 });
+      writeProject({ abortAllOnInterrupt: 0 });
+      expect(loadSettings(globalDir, projectDir)).toEqual({});
+      writeProject({ abortAllOnInterrupt: null });
+      expect(loadSettings(globalDir, projectDir)).toEqual({});
+    });
   });
 
   describe("save result + corrupt-file warning", () => {
@@ -286,6 +302,11 @@ describe("SettingsManager", () => {
     it("defaults to unconsumedSessionRetentionMinutes: 720", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       expect(sm.unconsumedSessionRetentionMinutes).toBe(720);
+    });
+
+    it("defaults to abortAllOnInterrupt: true (ESC keeps its current blast radius)", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      expect(sm.abortAllOnInterrupt).toBe(true);
     });
   });
 
@@ -427,6 +448,22 @@ describe("SettingsManager", () => {
       expect(sm.unconsumedSessionRetentionMinutes).toBe(60);
     });
 
+    it("applies abortAllOnInterrupt: false from disk", () => {
+      mkdirSync(join(projectDir, ".pi"), { recursive: true });
+      writeFileSync(join(projectDir, ".pi", "subagents.json"), JSON.stringify({ abortAllOnInterrupt: false }));
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: globalDir });
+      sm.load();
+      expect(sm.abortAllOnInterrupt).toBe(false);
+    });
+
+    it("leaves abortAllOnInterrupt at its default when the file omits it", () => {
+      mkdirSync(join(projectDir, ".pi"), { recursive: true });
+      writeFileSync(join(projectDir, ".pi", "subagents.json"), JSON.stringify({ graceTurns: 7 }));
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: globalDir });
+      sm.load();
+      expect(sm.abortAllOnInterrupt).toBe(true);
+    });
+
     it("emits subagents:settings_loaded with merged settings", () => {
       mkdirSync(join(projectDir, ".pi"), { recursive: true });
       writeFileSync(join(projectDir, ".pi", "subagents.json"), JSON.stringify({ graceTurns: 7 }));
@@ -456,7 +493,7 @@ describe("SettingsManager", () => {
   describe("snapshot()", () => {
     it("returns default values before any changes", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true });
     });
 
     it("reflects mutations: defaultMaxTurns undefined maps to 0 in snapshot", () => {
@@ -464,20 +501,26 @@ describe("SettingsManager", () => {
       sm.defaultMaxTurns = undefined;
       sm.graceTurns = 3;
       sm.maxConcurrent = 8;
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 8, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 8, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true });
     });
 
     it("reflects a concrete defaultMaxTurns value", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       sm.defaultMaxTurns = 20;
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 20, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 20, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true });
     });
 
     it("reflects mutated retention windows", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       sm.consumedSessionRetentionMinutes = 30;
       sm.unconsumedSessionRetentionMinutes = 1440;
-      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 30, unconsumedSessionRetentionMinutes: 1440 });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 30, unconsumedSessionRetentionMinutes: 1440, abortAllOnInterrupt: true });
+    });
+
+    it("reflects a flipped abortAllOnInterrupt", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      sm.toggleAbortAllOnInterrupt();
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: false });
     });
   });
 
@@ -499,7 +542,7 @@ describe("SettingsManager", () => {
       const toast = sm.saveAndNotify("Max concurrency set to 5");
       expect(toast).toEqual({ message: "Max concurrency set to 5", level: "info" });
       const written = JSON.parse(readFileSync(join(projectDir, ".pi", "subagents.json"), "utf-8"));
-      expect(written).toEqual({ maxConcurrent: 5, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
+      expect(written).toEqual({ maxConcurrent: 5, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true });
     });
 
     it("emits subagents:settings_changed with persisted:true on success", () => {
@@ -508,7 +551,7 @@ describe("SettingsManager", () => {
       sm.graceTurns = 3;
       sm.saveAndNotify("Grace turns set to 3");
       expect(emit).toHaveBeenCalledWith("subagents:settings_changed", {
-        settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 },
+        settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true },
         persisted: true,
       });
     });
@@ -536,7 +579,7 @@ describe("SettingsManager", () => {
         const sm = new SettingsManager({ emit, cwd: filePosingAsCwd, agentDir: "/nonexistent" });
         sm.saveAndNotify("something");
         expect(emit).toHaveBeenCalledWith("subagents:settings_changed", {
-          settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 },
+          settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true },
           persisted: false,
         });
       } finally {
@@ -688,6 +731,68 @@ describe("SettingsManager", () => {
       const onChanged = vi.fn();
       const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent", onMaxConcurrentChanged: onChanged });
       sm.applyGraceTurns(5);
+      expect(onChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("toggleAbortAllOnInterrupt()", () => {
+    let projectDir: string;
+
+    beforeEach(() => {
+      projectDir = mkdtempSync(join(tmpdir(), "pi-sm-toggle-"));
+    });
+
+    afterEach(() => {
+      rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    it("flips the policy off, persists it, and reports the new state", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      const toast = sm.toggleAbortAllOnInterrupt();
+      expect(sm.abortAllOnInterrupt).toBe(false);
+      expect(toast).toEqual({ message: "Abort all subagents on ESC: off", level: "info" });
+      const written = JSON.parse(readFileSync(join(projectDir, ".pi", "subagents.json"), "utf-8"));
+      expect(written.abortAllOnInterrupt).toBe(false);
+    });
+
+    it("flips the policy back on", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      sm.toggleAbortAllOnInterrupt();
+      const toast = sm.toggleAbortAllOnInterrupt();
+      expect(sm.abortAllOnInterrupt).toBe(true);
+      expect(toast).toEqual({ message: "Abort all subagents on ESC: on", level: "info" });
+    });
+
+    it("emits subagents:settings_changed carrying the flipped value", () => {
+      const emit = vi.fn();
+      const sm = new SettingsManager({ emit, cwd: projectDir, agentDir: "/nonexistent" });
+      sm.toggleAbortAllOnInterrupt();
+      expect(emit).toHaveBeenCalledWith("subagents:settings_changed", {
+        settings: { maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: false },
+        persisted: true,
+      });
+    });
+
+    it("keeps the in-memory flip and warns when the write fails", () => {
+      const filePosingAsCwd = join(tmpdir(), `pi-sm-notdir-toggle-${Date.now()}`);
+      writeFileSync(filePosingAsCwd, "");
+      try {
+        const sm = new SettingsManager({ emit: vi.fn(), cwd: filePosingAsCwd, agentDir: "/nonexistent" });
+        const toast = sm.toggleAbortAllOnInterrupt();
+        expect(sm.abortAllOnInterrupt).toBe(false);
+        expect(toast).toEqual({
+          message: "Abort all subagents on ESC: off (session only; failed to persist)",
+          level: "warning",
+        });
+      } finally {
+        rmSync(filePosingAsCwd, { force: true });
+      }
+    });
+
+    it("does not call onMaxConcurrentChanged", () => {
+      const onChanged = vi.fn();
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent", onMaxConcurrentChanged: onChanged });
+      sm.toggleAbortAllOnInterrupt();
       expect(onChanged).not.toHaveBeenCalled();
     });
   });

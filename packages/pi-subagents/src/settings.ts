@@ -18,6 +18,12 @@ export interface SubagentsSettings {
   consumedSessionRetentionMinutes?: number;
   /** Minutes an unconsumed agent's session is retained (safety cap). */
   unconsumedSessionRetentionMinutes?: number;
+  /**
+   * When false, a parent interrupt (ESC) leaves background and queued subagents
+   * running. Foreground agents hold the parent's run signal directly, so they
+   * abort on ESC either way.
+   */
+  abortAllOnInterrupt?: boolean;
 }
 
 
@@ -28,6 +34,7 @@ const DEFAULT_MAX_CONCURRENT = 4;
 const DEFAULT_GRACE_TURNS = 5;
 const DEFAULT_CONSUMED_RETENTION_MINUTES = 10;
 const DEFAULT_UNCONSUMED_RETENTION_MINUTES = 720;
+const DEFAULT_ABORT_ALL_ON_INTERRUPT = true;
 
 /**
  * Owns all three in-memory settings values and their load/save/persist cycle.
@@ -39,6 +46,7 @@ export class SettingsManager {
   private _maxConcurrent: number = DEFAULT_MAX_CONCURRENT;
   private _consumedSessionRetentionMinutes: number = DEFAULT_CONSUMED_RETENTION_MINUTES;
   private _unconsumedSessionRetentionMinutes: number = DEFAULT_UNCONSUMED_RETENTION_MINUTES;
+  private _abortAllOnInterrupt: boolean = DEFAULT_ABORT_ALL_ON_INTERRUPT;
 
   private readonly emit: SettingsEmit;
   private readonly cwd: string;
@@ -104,6 +112,12 @@ export class SettingsManager {
     this._unconsumedSessionRetentionMinutes = clampRetentionMinutes(n);
   }
 
+  // ── abortAllOnInterrupt: flipped via toggleAbortAllOnInterrupt(); no normalization ──
+
+  get abortAllOnInterrupt(): boolean {
+    return this._abortAllOnInterrupt;
+  }
+
   // ── Lifecycle methods ──
 
   /**
@@ -120,6 +134,8 @@ export class SettingsManager {
       this.consumedSessionRetentionMinutes = settings.consumedSessionRetentionMinutes;
     if (typeof settings.unconsumedSessionRetentionMinutes === "number")
       this.unconsumedSessionRetentionMinutes = settings.unconsumedSessionRetentionMinutes;
+    if (typeof settings.abortAllOnInterrupt === "boolean")
+      this._abortAllOnInterrupt = settings.abortAllOnInterrupt;
     this.emit("subagents:settings_loaded", { settings });
     return settings;
   }
@@ -134,6 +150,7 @@ export class SettingsManager {
     graceTurns: number;
     consumedSessionRetentionMinutes: number;
     unconsumedSessionRetentionMinutes: number;
+    abortAllOnInterrupt: boolean;
   } {
     return {
       maxConcurrent: this._maxConcurrent,
@@ -141,6 +158,7 @@ export class SettingsManager {
       graceTurns: this._graceTurns,
       consumedSessionRetentionMinutes: this._consumedSessionRetentionMinutes,
       unconsumedSessionRetentionMinutes: this._unconsumedSessionRetentionMinutes,
+      abortAllOnInterrupt: this._abortAllOnInterrupt,
     };
   }
 
@@ -182,6 +200,17 @@ export class SettingsManager {
   applyUnconsumedSessionRetentionMinutes(n: number): { message: string; level: "info" | "warning" } {
     this.unconsumedSessionRetentionMinutes = n; // setter normalizes: clamp [1, ceiling]
     return this.saveAndNotify(`Unconsumed-session retention set to ${this.unconsumedSessionRetentionMinutes} min`);
+  }
+
+  /**
+   * Flip whether a parent interrupt (ESC) aborts every subagent, persist, and
+   * return the toast. The manager owns the negation so callers just say "flip it".
+   */
+  toggleAbortAllOnInterrupt(): { message: string; level: "info" | "warning" } {
+    this._abortAllOnInterrupt = !this._abortAllOnInterrupt;
+    return this.saveAndNotify(
+      `Abort all subagents on ESC: ${this._abortAllOnInterrupt ? "on" : "off"}`,
+    );
   }
 
   /**
@@ -246,6 +275,9 @@ function sanitize(raw: unknown): SubagentsSettings {
   }
   if (isRetentionMinutes(r.unconsumedSessionRetentionMinutes)) {
     out.unconsumedSessionRetentionMinutes = r.unconsumedSessionRetentionMinutes;
+  }
+  if (typeof r.abortAllOnInterrupt === "boolean") {
+    out.abortAllOnInterrupt = r.abortAllOnInterrupt;
   }
   return out;
 }
