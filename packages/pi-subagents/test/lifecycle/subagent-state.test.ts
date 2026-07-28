@@ -237,6 +237,49 @@ describe("SubagentState — markStopped", () => {
 		state.markStopped(8000);
 		expect(state.status).toBe("stopped");
 	});
+
+	it("leaves stoppedWhileQueued false — the agent had started", () => {
+		const state = new SubagentState({ status: "running" });
+		state.markStopped(8000);
+		expect(state.stoppedWhileQueued).toBe(false);
+	});
+});
+
+describe("SubagentState — stopQueued", () => {
+	it("sets status to 'stopped' and completedAt", () => {
+		const state = new SubagentState({ status: "queued" });
+		state.stopQueued(7000);
+		expect(state.status).toBe("stopped");
+		expect(state.completedAt).toBe(7000);
+	});
+
+	it("records that the agent never started", () => {
+		const state = new SubagentState({ status: "queued" });
+		expect(state.stoppedWhileQueued).toBe(false);
+		state.stopQueued(7000);
+		expect(state.stoppedWhileQueued).toBe(true);
+	});
+
+	it("defaults completedAt to Date.now() when not provided", () => {
+		const state = new SubagentState({ status: "queued" });
+		const before = Date.now();
+		state.stopQueued();
+		const after = Date.now();
+		expect(state.completedAt).toBeGreaterThanOrEqual(before);
+		expect(state.completedAt).toBeLessThanOrEqual(after);
+	});
+
+	it("stops an already-running agent without claiming it never started", () => {
+		const state = new SubagentState({ status: "running" });
+		state.stopQueued(7000);
+		expect(state.status).toBe("stopped");
+		expect(state.stoppedWhileQueued).toBe(false);
+	});
+
+	it("seeds stoppedWhileQueued from init", () => {
+		const state = new SubagentState({ status: "stopped", stoppedWhileQueued: true });
+		expect(state.stoppedWhileQueued).toBe(true);
+	});
 });
 
 describe("SubagentState — incrementToolUses", () => {

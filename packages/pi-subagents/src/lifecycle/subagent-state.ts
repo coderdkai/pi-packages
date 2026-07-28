@@ -54,6 +54,8 @@ export interface SubagentStateInit {
 	status?: SubagentStatus;
 	result?: string;
 	error?: string;
+	/** Whether the agent was stopped before the limiter ever admitted it. */
+	stoppedWhileQueued?: boolean;
 	startedAt?: number;
 	completedAt?: number;
 	/** Time the parent collected the outcome; undefined = obligation still open. */
@@ -78,6 +80,11 @@ export class SubagentState {
 
 	private _error?: string;
 	get error(): string | undefined { return this._error; }
+
+	// Never-started marker — a queued agent stopped before its slot opened has no
+	// result, as distinct from a started agent that produced none.
+	private _stoppedWhileQueued: boolean;
+	get stoppedWhileQueued(): boolean { return this._stoppedWhileQueued; }
 
 	private _startedAt: number;
 	get startedAt(): number { return this._startedAt; }
@@ -116,6 +123,7 @@ export class SubagentState {
 		this._status = init.status ?? "queued";
 		this._result = init.result;
 		this._error = init.error;
+		this._stoppedWhileQueued = init.stoppedWhileQueued ?? false;
 		this._startedAt = init.startedAt ?? Date.now();
 		this._completedAt = init.completedAt;
 		this._consumedAt = init.consumedAt;
@@ -263,6 +271,16 @@ export class SubagentState {
 	markStopped(completedAt?: number): void {
 		this._status = "stopped";
 		this._completedAt = completedAt ?? Date.now();
+	}
+
+	/**
+	 * Stop an agent that is still awaiting a concurrency slot. Records the
+	 * never-started fact only when the agent is genuinely still queued, so a
+	 * mis-targeted call cannot claim it.
+	 */
+	stopQueued(completedAt?: number): void {
+		if (this._status === "queued") this._stoppedWhileQueued = true;
+		this.markStopped(completedAt);
 	}
 
 	/** Reset for resume: running status, new startedAt, clear completedAt/result/error/consumedAt. */
