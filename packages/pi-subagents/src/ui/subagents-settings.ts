@@ -16,8 +16,10 @@ export interface SubagentsSettingsManager {
   applyMaxConcurrent(n: number): SettingsToast;
   applyDefaultMaxTurns(n: number): SettingsToast;
   applyGraceTurns(n: number): SettingsToast;
+  readonly abortAllOnInterrupt: boolean;
   applyConsumedSessionRetentionMinutes(n: number): SettingsToast;
   applyUnconsumedSessionRetentionMinutes(n: number): SettingsToast;
+  toggleAbortAllOnInterrupt(): SettingsToast;
 }
 
 /** Narrow UI interface — only the ctx.ui methods the settings handler calls. */
@@ -52,7 +54,16 @@ interface NumericSettingDescriptor extends SettingDescriptorBase {
   apply: (settings: SubagentsSettingsManager, n: number) => SettingsToast;
 }
 
-const SETTINGS: readonly NumericSettingDescriptor[] = [
+/** Describes one boolean setting, flipped directly from the select list. */
+interface ToggleSettingDescriptor extends SettingDescriptorBase {
+  kind: "toggle";
+  /** Flips the setting and returns the toast to display. */
+  toggle: (settings: SubagentsSettingsManager) => SettingsToast;
+}
+
+type SettingDescriptor = NumericSettingDescriptor | ToggleSettingDescriptor;
+
+const SETTINGS: readonly SettingDescriptor[] = [
   {
     kind: "numeric",
     label: "Max concurrency",
@@ -103,6 +114,12 @@ const SETTINGS: readonly NumericSettingDescriptor[] = [
     validationMessage: "Must be a positive integer.",
     apply: (settings, n) => settings.applyUnconsumedSessionRetentionMinutes(n),
   },
+  {
+    kind: "toggle",
+    label: "Abort all subagents on ESC",
+    currentDisplay: (settings) => (settings.abortAllOnInterrupt ? "on" : "off"),
+    toggle: (settings) => settings.toggleAbortAllOnInterrupt(),
+  },
 ];
 
 // ---- Class ----
@@ -125,6 +142,12 @@ export class SubagentsSettingsHandler {
 
     const descriptor = SETTINGS.find((d) => choice.startsWith(d.label));
     if (!descriptor) return;
+
+    if (descriptor.kind === "toggle") {
+      const toast = descriptor.toggle(this.settings);
+      ui.notify(toast.message, toast.level);
+      return;
+    }
 
     await this.promptNumeric(ui, descriptor);
   }

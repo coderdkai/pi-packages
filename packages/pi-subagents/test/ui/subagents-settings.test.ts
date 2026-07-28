@@ -29,6 +29,11 @@ function makeSettings() {
       message: "Unconsumed-session retention set to 1440 min",
       level: "info",
     })),
+    abortAllOnInterrupt: true,
+    toggleAbortAllOnInterrupt: vi.fn((): { message: string; level: "info" | "warning" } => ({
+      message: "Abort all subagents on ESC: off",
+      level: "info",
+    })),
   };
 }
 
@@ -47,7 +52,7 @@ describe("SubagentsSettingsHandler", () => {
     expect(handler).toBeInstanceOf(SubagentsSettingsHandler);
   });
 
-  it("shows the five settings options with current values", async () => {
+  it("shows the six settings options with current values", async () => {
     const { handler } = makeHandler();
     const ui = makeMenuUI([undefined]); // cancel immediately
     await handler.handle({ ui });
@@ -58,7 +63,18 @@ describe("SubagentsSettingsHandler", () => {
       "Grace turns (current: 5)",
       "Consumed-session retention (current: 10 min)",
       "Unconsumed-session retention (current: 720 min)",
+      "Abort all subagents on ESC (current: on)",
     ]);
+  });
+
+  it("renders the abort-on-ESC option as off when the policy is disabled", async () => {
+    const settings = makeSettings();
+    settings.abortAllOnInterrupt = false;
+    const { handler } = makeHandler(settings);
+    const ui = makeMenuUI([undefined]);
+    await handler.handle({ ui });
+    const options = ui.select.mock.calls[0][1] as string[];
+    expect(options[5]).toBe("Abort all subagents on ESC (current: off)");
   });
 
   it("applies no change when the settings list is cancelled", async () => {
@@ -186,5 +202,37 @@ describe("SubagentsSettingsHandler — retention windows", () => {
     await handler.handle({ ui });
     expect(settings.applyConsumedSessionRetentionMinutes).not.toHaveBeenCalled();
     expect(ui.notify).toHaveBeenCalledWith("Must be a positive integer.", "warning");
+  });
+});
+
+describe("SubagentsSettingsHandler — abort all subagents on ESC", () => {
+  it("flips the policy directly and notifies the returned toast", async () => {
+    const { handler, settings } = makeHandler();
+    const ui = makeMenuUI(["Abort all subagents on ESC (current: on)"]);
+    await handler.handle({ ui });
+    expect(settings.toggleAbortAllOnInterrupt).toHaveBeenCalledOnce();
+    expect(ui.notify).toHaveBeenCalledWith("Abort all subagents on ESC: off", "info");
+  });
+
+  it("never prompts for input — the toggle is a direct flip", async () => {
+    const { handler } = makeHandler();
+    const ui = makeMenuUI(["Abort all subagents on ESC (current: on)"]);
+    await handler.handle({ ui });
+    expect(ui.input).not.toHaveBeenCalled();
+  });
+
+  it("does not flip the policy when the settings list is cancelled", async () => {
+    const { handler, settings } = makeHandler();
+    const ui = makeMenuUI([undefined]);
+    await handler.handle({ ui });
+    expect(settings.toggleAbortAllOnInterrupt).not.toHaveBeenCalled();
+  });
+
+  it("does not flip the policy when a numeric setting is chosen", async () => {
+    const { handler, settings } = makeHandler();
+    const ui = makeMenuUI(["Grace turns (current: 5)"]);
+    ui.input = vi.fn().mockResolvedValue("3");
+    await handler.handle({ ui });
+    expect(settings.toggleAbortAllOnInterrupt).not.toHaveBeenCalled();
   });
 });
