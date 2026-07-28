@@ -99,3 +99,34 @@ Filed that follow-up as issue #683 with the coverage measurements recorded.
 - **The architecture doc's `Total LOC` figure is stale under an unknown counter** — it reads `7,432 (57 files)` while the tree measures 7,721 raw and 6,853 non-blank lines.
   The plan updates the file count only and defers the LOC recompute rather than inventing a number.
 - Issue #669 is absent from the architecture roadmap, so the release recommendation is `ship independently` with no batch tag to consult.
+
+## Stage: Implementation — TDD (2026-07-28T17:45:18Z)
+
+### Session summary
+
+Executed all four planned steps in order: extracted `src/ui/glyphs.ts` as a pure refactor (`5b22891f`), turned the five test files red on the new glyphs (`fd8035f8`), went green by changing two constants plus the doc comments and 11 README examples (`8a54b9ca`), and documented the monospace-coverage constraint in the architecture doc and package skill (`0bf4e4e6`).
+A fifth commit (`a5fc1f0b`) corrected a trap in the plan itself, in response to the reviewer's WARN.
+Test count is unchanged at 1135 — by design, since the guard decision was documented rationale rather than a new test; the five test files' assertions were updated in place.
+
+### Observations
+
+- **The plan's own doc-comment sketch was unshippable, and the failure was instant and loud.**
+  The sketch trimmed `fc-list` output with `sed 's/,.*//'`, whose script contains `*/`.
+  Quoted inside the `/** ... */` block comment it was documenting, that closed the comment early; biome reported 66 parse errors on the first write of `src/ui/glyphs.ts`, including "unterminated regex literal" pointing at the `sed` script.
+  Fixed by switching to `cut -d, -f1`, verified equivalent.
+  Generalizable: any shell snippet embedded in a block comment must be screened for `*/`, and `sed` substitutions ending in `//` are the common way to smuggle one in.
+- **Tidy First paid off exactly as the plan predicted, and the assessor agreed without adding work.**
+  The `tidy-first-assessor` returned "no preparatory tidying warranted," explicitly reasoning that Step 1 *is* the tidy-first move and that pre-normalizing the literal-vs-escape split would touch the same lines twice for no risk reduction.
+  The extraction commit then passed the full suite with zero test files edited, which is the measurement the plan wanted, and the `fix:` commit's source diff came out to two constants.
+- **The escaped-glyph hazard the plan flagged was real in practice, not just in theory.**
+  `src/tools/result-renderer.ts` alone held six `\u23BF` escapes plus one literal `⎿`, and `widget-renderer.ts` line 179 interleaves a box-drawing escape that stays with a `\u25E6` that goes.
+  The non-ASCII scan (`rg -n '[^\x00-\x7f]' src`) rather than a per-glyph grep was what made completeness checkable; after Step 1 it reported only `glyphs.ts`, layout box drawing, punctuation, and the four doc comments Step 3 then updated.
+- **`pi-autoformat` fought a one-sentence-per-line edit twice.**
+  It rejoins a colon-terminated line with the sentence after it, so the deviation note appended to the coverage-table lead-in kept collapsing back onto one line.
+  Resolved by moving the note below the table as its own paragraph.
+  Worth remembering: to add a sentence after a colon-terminated line, start a new paragraph rather than a new line.
+- **A skill-table edit needed a script, not the `Edit` tool.**
+  The package skill's domain table is padded to fixed column widths well past 600 characters, so changing `6` → `7` and widening a description cell by hand would have broken alignment; a short Python rewrite preserved the exact line length.
+- Pre-completion reviewer: WARN (1 non-blocking finding).
+  Reviewer warnings: the plan's embedded sketch still showed the broken `sed` form with no record of the deviation — addressed in `a5fc1f0b`, which corrects the sketch and states why `cut` is required there.
+  Everything else passed, including the issue-specific attribution check (all implementation commits carry the `Co-authored-by` trailer, none uses `Closes #681`) and the follow-up-filing check (#683).
