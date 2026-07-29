@@ -70,4 +70,81 @@ Root `pnpm run test` dropped from 21.6 s to 16.2 s, and `pi-autoformat` is no lo
 - The CI step's real verification is deferred to ship time by design.
   It is the one part of this change that cannot be confirmed locally, and a mistake there would silently drop real-CLI coverage entirely — confirm at `/ship-issue` that the `Real-CLI acceptance tests (pi-autoformat)` step appears and reports 2 passing tests.
 
+## Stage: Final Retrospective (2026-07-29T01:08:04Z)
+
+### Session summary
+
+Ran Planning, TDD, and Ship for #678 in one continuous session, landing `pi-autoformat` 5.1.8.
+The change took the two real-`pi`-CLI acceptance tests off the default `pnpm test` path via a Vitest `unit`/`acceptance` project split, with a partition guard, a dedicated CI step, and docs — six commits, no rework, and a clean PASS from the pre-completion reviewer.
+The session's defining feature was that measurement, not reasoning, drove every significant decision; its defining flaw was one place where I let an *un*measured number wear the same clothes.
+
+### Observations
+
+#### What went well
+
+- Measuring before asking did not just inform the choice — it changed what the options *meant*.
+  The baseline sweep showed the two acceptance files were 97% of the package's suite time (20.3 s of 20.9 s) and the long pole of the entire root run.
+  Without that, "take them off the default path" reads as trading coverage for reliability; with it, the same option also makes the root suite 25% faster.
+  It also killed a plausible-sounding theory: 12 CPU spinners slowed the tests only ~15%, so the trigger is the concurrent module-import storm (`pi-permission-system` reports `import 40.55s` across 130 files), not CPU contention — which is why [#618]'s in-package timeout fix could never have worked.
+- The TDD red step caught a defect in the **plan**, not in the code.
+  `test/project-partition.test.ts` matched itself, because a guard that names its own marker string (`runRpcSession(`) is inside the set it scans.
+  This is TDD acting as design feedback rather than regression protection, and it is the strongest argument for writing the guard before wiring the split.
+- A prior retro's fix demonstrably held.
+  [#618]'s retro recorded an `instruction-violation` at ship step 6.4 — reaching for `ci_find`/`ci_watch` on an `UNSTABLE` release PR instead of re-polling `statusCheckRollup`.
+  This time I read the rollup, distinguished a genuinely `IN_PROGRESS` check from the empty-rollup `GITHUB_TOKEN` case, waited with `gh pr checks --watch`, and merged.
+  Worth recording that the loop closed.
+- The `pre-completion-reviewer` earned its dispatch on judgment rather than checklist.
+  It caught that my code comment promised a guarantee the code does not provide (see below) — a correctness claim, not a style nit.
+- Grounding the operator's own new idea beat arguing about it.
+  When they raised targeted per-package test suites, I ran `pnpm --filter '...[origin/main]'` both ways and found it selects nothing on a clean tree synced with `origin/main` — exactly the state at `/tdd-plan`'s green-baseline step, where it would pass vacuously.
+  A verified two-line demonstration settled a question that prose could not.
+
+#### What caused friction (agent side)
+
+- `missing-context` (self-identified) — I put a fabricated number with false precision into an `ask_user` option preview.
+  The "Vitest projects" option listed as a benefit: "`fileParallelism: false` also removes the in-package overlap between the two spawns for free (18.0 s wall → ~18.5 s serial, since they currently overlap only slightly)."
+  I had not measured that.
+  When I did measure it later in planning, serializing cost ~6.5 s of wall time and bought ~1 s of per-test headroom — the opposite of "for free."
+  Impact: no rework, and I documented the refutation honestly in the plan and kept the setting for a different, stated reason (2–4 vCPU CI runners).
+  But the operator chose among options partly on a stated benefit that did not exist, which is the one failure mode a decision-support artifact must not have.
+- `missing-context` (self-identified) — the same root cause produced the plan's "~12 s" root-suite prediction against a measured 16.2 s actual.
+  I measured the baseline (21.6 s) and the package suite without the two files (0.59 s), then *inferred* the post-change root total from "`pi-permission-system`'s 11.6 s becomes the long pole" instead of running the root suite with the files excluded — a measurement I could have taken in under a minute with the tools already in hand.
+  Impact: no rework; caught and reported at implementation time, and recorded in the TDD stage note because the plan's table still reads "~12 s."
+- `other` (self-identified) — my first probe of the partition guard's non-vacuity was itself a false negative.
+  I wrote `void runRpcSession;`, which contains no call, so the guard correctly did not fire — briefly looking like evidence the guard was broken.
+  Impact: one extra tool call, no rework.
+  The trap is subtle because a near-miss probe produces a *confident wrong conclusion* about the guard in either direction.
+
+#### What caused friction (user side)
+
+- None — and one intervention was unusually valuable.
+  The operator declined to rubber-stamp the first `ask_user`, answering with "I'm not totally confident in my answer.
+  Maybe it is some combination.
+  Or maybe it is targeted test suites" and two concrete questions (when would we run them; how do we avoid CI timeouts).
+  That surfaced an option I had not offered and forced the mechanism into the open.
+- Opportunity: those two questions were answerable from my own option set and should not have needed asking.
+  My option B preview stated the *outcome* ("only the dedicated CI step gates extension-load regressions") without the *mechanism* (a dedicated step runs alone, which is precisely the contention that causes the flake).
+  When an option's viability rests on a mechanism, the mechanism belongs in the option.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the session hopped models (`sonnet-5` → `deepseek-v4-flash` → `fable-5` → `haiku-4-5` → `opus-5` → `sonnet-5` → `opus-5`); the ship stage ran entirely on `claude-sonnet-5` and the retro on `claude-opus-5`.
+  Both subagents ran on their frontmatter-configured `anthropic/claude-sonnet-5`, which matched task weight — the reviewer's catch (an overstated correctness guarantee in a comment) is judgment work a weaker model plausibly misses.
+  No mismatch observed in either direction.
+- **Escalation-delay tracking** — no rabbit-holes.
+  The longest same-error sequence was two tool calls (the guard-probe false negative, corrected on the next call).
+- **Unused-tool detection** — `colgrep` went unused this session, correctly: every search was for an exact symbol or script name (`runRpcSession`, `pnpm test`, `fileParallelism`), which is `grep`'s domain per the `colgrep` skill's decision table.
+  No friction point had an undispatched subagent that would have helped.
+- **Feedback-loop gap analysis** — no gap.
+  Verification ran per TDD step (`vitest run <file>` plus `check`), root `lint` before each commit, and the full gate set at the end.
+  The root `pnpm run test` was also run mid-cycle at step 2 to verify a timing claim rather than deferred to the end.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — added a number-provenance rule to the `Decide` section: every number in an `ask_user` option or the plan's predicted-effect table must be labeled measured or estimated, and measured when the command runs in under a minute.
+   Prompted by the fabricated "18.0 s → ~18.5 s" benefit in this session's first `ask_user` and the inferred "~12 s" prediction against a measured 16.2 s.
+2. `.pi/skills/testing/SKILL.md` — added a rule under § Test assertions that a non-vacuity probe must match the guard's exact predicate, since a near-miss probe leaves the guard silent and reads as proof it is broken.
+
+Considered and rejected: a rule requiring the *mechanism* (not just the outcome) in `ask_user` options, as duplicative of the existing Refs #635 rule; a `/tdd-plan` step to re-measure the plan's predicted numbers, as over-correction for a self-caught issue that caused no rework; codifying the Vitest `retry: { condition }` finding, which belongs in this retro as a discoverable lever rather than a standing rule.
+
 [#618]: https://github.com/gotgenes/pi-packages/issues/618

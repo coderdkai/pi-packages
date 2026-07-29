@@ -98,6 +98,8 @@ The ambiguity for a third-party issue is not *how* to build it but *whether* the
 Use `ask-user` to confirm the direction before planning: at minimum ask whether to (a) implement the proposal as described, (b) implement a different approach to the same underlying problem, or (c) decline/defer.
 When the issue is in an unfamiliar domain (a platform, protocol, or tool you have not verified), research the domain facts first — the direction options themselves depend on them, and an ungrounded ask gets bounced (Refs #533).
 When an option's differentiator is a behavior change, put the concrete before/after in the pre-ask message — the scenarios where behavior differs and where it does not — since an abstractly-labeled option set gets bounced (Refs #635).
+Label every number in an `ask_user` option or the plan's predicted-effect table as measured or estimated.
+Measure when the command runs in under a minute; an inferred number with false precision ("18.0 s → ~18.5 s") sells an option on a benefit the real measurement may refute (Refs #678).
 When the proposal also has design ambiguities, fold those into the same `ask-user` call.
 Let the operator's answers — not the issue body — drive the plan's Goals and Design Overview.
 

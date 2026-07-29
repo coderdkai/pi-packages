@@ -61,6 +61,8 @@ Load this skill when writing, debugging, or planning tests.
   When a weak assertion is necessary (third-party output, non-deterministic ordering), add a comment explaining why.
 - When a test drives the code through a validation/parse step and the invalid-input fallback returns the same value a negative-path test asserts (e.g. a forwarded-response fixture missing a required field and a `denied` expectation both yield `{ approved: false, state: "denied" }`), a broken fixture false-greens the negative test.
   Assert the positive (non-fallback) path against the same fixture builder first — a malformed fixture then fails loudly there — or assert a discriminating field the fallback cannot produce.
+- When proving a guard test is not vacuous, build the probe to match the guard's exact predicate.
+  A near-miss probe (`void runRpcSession;` against a guard matching `runRpcSession(`) leaves the guard silent and looks like proof it is broken (Refs #678).
 - Prefer a concrete test asserting current (even imperfect) behavior over `test.todo`.
   A real assertion documents the limitation and lets a future fix flip the expectation.
 - When a test reveals a pre-existing bug rather than a wrong assumption, use `test.fails` to document the expected behavior and file a GitHub issue.
