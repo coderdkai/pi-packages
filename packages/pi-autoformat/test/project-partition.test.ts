@@ -21,10 +21,13 @@ const TEST_DIR = join(PACKAGE_ROOT, "test");
 /**
  * The harness call that marks a test file as driving the real `pi` CLI.
  *
- * Matched as a call rather than an import because a call site is always
- * spelled `runRpcSession(`, whereas an import can be reformatted or aliased.
- * A predicate that under-matches would let a real-CLI file sit in the `unit`
- * project with this guard still green, so it errs toward over-matching.
+ * Matched as a call rather than an import because import formatting varies
+ * (a long specifier list gets wrapped) while an unaliased call site does not.
+ *
+ * The residual gap is an aliased import: `runRpcSession as run` would be
+ * called as `run(...)` and escape this predicate, landing a real-CLI file in
+ * the `unit` project with this guard still green. Nothing aliases it today.
+ * If that changes, match the import instead of the call.
  */
 const HARNESS_CALL = "runRpcSession(";
 
