@@ -41,4 +41,33 @@ The operator chose direction B (take the real-CLI tests off the default root pat
 - Release: ship independently — no `docs/architecture/` roadmap exists for this package.
   The `test:` and `ci:` commits are hidden changelog types; the `docs(pi-autoformat):` commit carries the release.
 
+## Stage: Implementation — TDD (2026-07-29T00:07:57Z)
+
+### Session summary
+
+Landed all four planned TDD steps plus one follow-up correction: the `ACCEPTANCE_FILES` source of truth and its partition guard, the `unit`/`acceptance` Vitest project split, the dedicated CI step, and the docs.
+Test count went from 19 files / 306 tests to 20 files / 308 tests under `test:all`, split 18 / 306 for the default `unit` project and 2 / 2 for `acceptance`.
+Root `pnpm run test` dropped from 21.6 s to 16.2 s, and `pi-autoformat` is no longer the long pole.
+
+### Observations
+
+- The red step caught a real defect in the plan's sketched predicate: `test/project-partition.test.ts` matched *itself*, because the guard names the marker string `runRpcSession(` in a constant.
+  Fixed by exempting the guard file explicitly rather than switching to an import-shaped regex — a call-site substring cannot be broken by reformatting, whereas a regex that under-matches would leave a real-CLI file in the `unit` project with the guard still green (a false green is the one failure mode a guard must not have).
+- The plan predicted root `pnpm run test` would fall to ~12 s; the measured result is 16.2 s.
+  The prediction assumed `pi-permission-system`'s 11.6 s would simply become the long pole, but it takes 12.8 s once it is no longer competing with `pi-autoformat`, and pnpm's per-package startup across nine packages adds the rest.
+  Treated as a prediction refinement rather than a missed target: the Goals are about determinism by construction, not a speed number, and no design decision hung on the figure.
+  Recording it here because the plan's predicted-effect table still reads "~12 s".
+- Verified the guard is not vacuous by adding a throwaway test file that calls `runRpcSession(...)` and confirming the guard fails and names it.
+  The first attempt at this probe was a false negative of my own making — I wrote `void runRpcSession;`, which contains no call and correctly did not trip the predicate.
+  Worth remembering: when probing a guard, make the probe match the guard's actual contract, or you "verify" nothing.
+- The `tidy-first-assessor` returned "no preparatory tidying warranted" and was right — every modified file was either brand new or under 20 lines.
+  It also independently confirmed the grep predicate was safe against the current import layout, which is the question I had flagged for it.
+- Pre-completion reviewer: **PASS**, with two WARNs.
+  The first (the plan's stale "~12 s") is addressed by this retro entry.
+  The second was a genuine catch: my code comment claimed the call-site predicate "cannot silently under-match," which is false for an aliased import (`runRpcSession as run`).
+  Landed `7a570dd6` to state the gap and its remedy instead of promising a guarantee the code does not provide.
+- The docs commit also corrected two pre-existing stale claims in the sections it was already rewriting: `pnpm run typecheck` (no such script — it is `pnpm run check`) and a "no workflow changes needed" bullet that the new CI step supersedes.
+- The CI step's real verification is deferred to ship time by design.
+  It is the one part of this change that cannot be confirmed locally, and a mistake there would silently drop real-CLI coverage entirely — confirm at `/ship-issue` that the `Real-CLI acceptance tests (pi-autoformat)` step appears and reports 2 passing tests.
+
 [#618]: https://github.com/gotgenes/pi-packages/issues/618
