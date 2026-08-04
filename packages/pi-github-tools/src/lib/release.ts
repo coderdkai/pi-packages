@@ -154,19 +154,28 @@ export async function mergeReleasePR(
   );
 
   if (pr.mergeable !== "MERGEABLE" || pr.mergeStateStatus !== "CLEAN") {
-    return {
-      content: [
-        `PR #${prNumber} is not mergeable`,
-        `  mergeable: ${pr.mergeable}`,
-        `  merge_state: ${pr.mergeStateStatus}`,
-        `  title: ${pr.title}`,
-      ].join("\n"),
-      isError: true,
-    };
+    return blockedResult(pr);
   }
 
   const method = args.method ?? "merge";
   return performMerge(prNumber, method, pr.title, signal);
+}
+
+/**
+ * Format the "not mergeable" error result for a blocked PR.
+ * An optional `reason` appends a machine-greppable `reason:` line.
+ */
+function blockedResult(pr: PRState, reason?: string): ToolResult {
+  const lines = [
+    `PR #${pr.number} is not mergeable`,
+    `  mergeable: ${pr.mergeable}`,
+    `  merge_state: ${pr.mergeStateStatus}`,
+    `  title: ${pr.title}`,
+  ];
+  if (reason) {
+    lines.push(`  reason: ${reason}`);
+  }
+  return { content: lines.join("\n"), isError: true };
 }
 
 /** Merge the PR, pull the result, and report the new HEAD SHA. */
