@@ -35,3 +35,31 @@ Four TDD steps, no follow-up issues filed.
 - The change gives `formatProgress`'s `prefix` parameter its first production caller; today only a test exercises it.
 
 [#564]: https://github.com/gotgenes/pi-packages/issues/564
+
+## Stage: Implementation — TDD (2026-08-04T20:50:16Z)
+
+### Session summary
+
+Implemented the plan in 4 TDD cycles plus a docs commit, preceded by 2 Tidy-First preparatory `refactor:` commits (`performMerge`/`blockedResult` extraction) recommended by the `tidy-first-assessor`.
+`mergeReleasePR` is now a bounded 10 s-interval poll loop dispatching on a new pure `classifyMergeState` (in `src/lib/merge-state.ts`) that normalizes GitHub's `statusCheckRollup` into the existing `CIJob` vocabulary and reuses `formatProgress`.
+Test count in `pi-github-tools` went from 82 to 112 (+30: 24 in the new `merge-state.test.ts`, 6 net new in `release.test.ts`); full monorepo suite stayed green throughout (2672 + 1135 + others, no regressions).
+
+### Observations
+
+- **Tidy-First paid off exactly as predicted.**
+  The assessor's two recommended extractions (`performMerge`, `blockedResult`) landed as pure no-behavior-change moves verified by the *existing* tests, before the loop rewrite.
+  The subsequent feature commit (`feat: wait out in-progress checks`) was then a clean diff: wrap in a loop, classify, switch — no subprocess-call relocation mixed in.
+  This also retired the plan's own named risk (signal relay dropping during the `performMerge` move) *before* the riskier rewrite landed on top.
+- **The `FAILING_STATUS_CONTEXT_STATES` false start.**
+  First draft of `classifyMergeState` declared a separate `FAILING_STATUS_CONTEXT_STATES` set for `StatusContext`'s `FAILURE`/`ERROR` states, then discovered `toCIJob` already normalizes `StatusContext`'s `state` into the same lowercase `conclusion` vocabulary as `CheckRun` — so the separate set was dead weight requiring a `void` no-op to silence the unused-variable lint.
+  Caught it before committing (the `void FAILING_STATUS_CONTEXT_STATES;` line was a smell in its own right) and merged "error" into the single `FAILING_CONCLUSIONS` set instead — five lines simpler, same coverage, no lint workaround needed.
+  Worth naming: a hand-rolled unused-variable suppression during implementation is a signal to re-derive the normalization, not to silence the linter.
+- **Pre-completion reviewer caught a real gap.**
+  The plan's "Invariants at Risk" section explicitly committed to a test asserting `sleep` receives the `signal` during the new wait path.
+  That assertion was never actually written — the abort test asserted the *aborted result*, not that `sleep` was called with the real signal.
+  Reviewer returned WARN with this single finding; fixed by adding `expect(mockSleep).toHaveBeenCalledWith(10000, controller.signal)`, folded into the original feature commit via `git commit --fixup` + `git rebase -i --autosquash` (unpushed, so no history-cleanliness cost) rather than a `test:` commit.
+  The gap was real but non-blocking: production code already threaded the signal correctly, so this was a coverage hole, not a behavior bug.
+- **Docs step touched both passages in all three prompts as the plan anticipated.**
+  `ship-issue.md`, `land-worktree.md`, and `ship-no-issue.md` each state their `UNSTABLE` handling twice (a numbered step + a Constraints bullet); both were updated together in each file, verified by grep afterward — no stale `UNSTABLE` references remain in any living doc (historical retro entries in other packages that describe the old manual runbook were left alone, correctly, as session logs).
+- No deviations from the plan's TDD Order or Module-Level Changes list; every planned file was touched, nothing extra.
+- Pre-completion reviewer: WARN → fixed → all deterministic checks (`pnpm run check`, `pnpm run lint`, `pnpm run test`, `pnpm fallow dead-code`) pass after the fix.
