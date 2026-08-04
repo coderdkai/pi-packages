@@ -63,3 +63,102 @@ Test count in `pi-github-tools` went from 82 to 112 (+30: 24 in the new `merge-s
   `ship-issue.md`, `land-worktree.md`, and `ship-no-issue.md` each state their `UNSTABLE` handling twice (a numbered step + a Constraints bullet); both were updated together in each file, verified by grep afterward — no stale `UNSTABLE` references remain in any living doc (historical retro entries in other packages that describe the old manual runbook were left alone, correctly, as session logs).
 - No deviations from the plan's TDD Order or Module-Level Changes list; every planned file was touched, nothing extra.
 - Pre-completion reviewer: WARN → fixed → all deterministic checks (`pnpm run check`, `pnpm run lint`, `pnpm run test`, `pnpm fallow dead-code`) pass after the fix.
+
+## Stage: Final Retrospective (2026-08-04T21:25:27Z)
+
+### Session summary
+
+Planned, implemented, and shipped this issue end to end in a single session: `release_pr_merge` now waits out an in-progress check or an undecided `UNKNOWN` mergeability state instead of failing immediately, released as `pi-github-tools-v4.2.0`.
+The work spanned 4 TDD cycles, 2 Tidy-First preparatory refactors, and a docs commit that removed the manual `gh pr checks --watch` runbook from three workflow prompts and `AGENTS.md`.
+The defining irony of the session: the ship step could not use the fix it had just shipped, because Pi had loaded `release_pr_merge` at session start.
+
+### Observations
+
+#### What went well
+
+1. **Measurement overturned a documented premise — twice.**
+   At planning time, reading `statusCheckRollup` off the last six release PRs disproved the "release-please PRs get no CI runs" note that every ship prompt carried, and surfaced the `SKIPPED`-conclusion trap that would have hard-failed every merge.
+   The same instinct fired again during this retro: before proposing a factual correction to `AGENTS.md`'s claim that "`rumdl fmt` does not re-pad tables for you," I built two fixture tables and ran the formatter — which **confirmed the existing rule** and killed the proposal.
+   Verifying before proposing is now the pattern that has paid off at both ends of this issue.
+2. **Tidy-First retired the plan's own named risk before the risky change landed.**
+   The `tidy-first-assessor` recommended extracting `performMerge` and `blockedResult` as pure moves first.
+   Because both landed against the *existing* signal-threading test, the plan's named risk ("moving the merge calls into `performMerge` could drop the `signal` relay from [#5]") was retired before the loop rewrite was written on top of it.
+   The subsequent feature diff was genuinely small: wrap in a loop, classify, switch.
+3. **The stale-prompt-expansion rule fired on a self-edited prompt.**
+   `/ship-issue`'s pasted body still contained the `UNSTABLE`/`gh pr checks --watch` runbook this very session had just replaced.
+   Reading the on-disk file first (per `AGENTS.md`) caught it immediately — the first observed instance of that rule mattering because *this session* was the one that made the prompt stale.
+4. **`pre-completion-reviewer` caught a plan-to-code gap all four deterministic gates missed.**
+   The plan's "Invariants at Risk" section committed to a test asserting `sleep` receives the `signal`; that assertion was never written.
+   `check`, `lint`, `test`, and `fallow dead-code` were all green over the gap — only a reviewer reading the plan against the diff could find it.
+5. **Verification ran incrementally, not just at the end.**
+   `pnpm run check` plus the package suite ran after every TDD step, and root-level `pnpm run lint` ran after each of the two Tidy-First commits and each feature commit — not only at the cycle end.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — **Dismissed the user's correct prediction that a reload was needed.**
+   The user asked, before the release step, "Do we need to pause and reload to use this tool now?"
+   I answered "No — nothing here requires a pause or reload" and continued.
+   Pi loads each extension once at session start, so `release_pr_merge` was still running the pre-change single-shot code — the exact code this issue replaced.
+   The call returned the old bare "not mergeable" error while a `check` was genuinely `IN_PROGRESS`.
+   User-caught, and in fact user-*predicted* one turn earlier.
+   Impact: one wasted `release_pr_merge` call, one wrong `ci_find` call, a full session reload, and two user interventions.
+   Had I said yes, the reloaded tool would have waited out the check automatically — demonstrating the fix instead of working around it.
+2. `other` — **Passed a CI run ID to `ci_find` as `expected_sha`.**
+   Reaching for the check's `detailsUrl` number (`30950299939`) instead of the PR head SHA, which was one `gh pr view 700 --json headRefOid` away.
+   Burned the full 125 s exponential backoff before timing out.
+   Self-identified.
+   Impact: 125 s wasted, one tool call; no rework.
+   Largely designed out going forward — the shipped tool removes the need to hand-watch a release PR's checks at all.
+3. `instruction-violation` — **Retyped a width-padded markdown table into `oldText` instead of anchoring around it.**
+   `AGENTS.md` explicitly warns against exactly this for "a width-padded table row."
+   Two `Edit` calls failed before I read exact bytes with `python3 repr()`.
+   Self-identified.
+   Impact: 7 consecutive tool calls on one edit (2 failed edits, 4 inspections, 1 success); no rework.
+4. `instruction-violation` — **Emitted an extra `newText2` key in an `Edit` call.**
+   `AGENTS.md` names this precisely ("never as `oldText2`/`newText2` … silently ignored while the tool still reports `Successfully replaced N block(s)`", Refs #605).
+   Self-identified immediately and verified with `git diff`.
+   Impact: one extra verification call; no rework — the stray value was empty.
+5. `instruction-violation` — **Made both Tidy-First extractions in one edit before splitting them.**
+   The `tidy-first` skill says to land each recommended tidying as its own commit.
+   Caught before committing and redone one at a time via `git checkout`.
+   Self-identified.
+   Impact: ~5 wasted tool calls; final history is clean.
+
+#### What caused friction (user side)
+
+1. **The redirecting question was right and I overrode it — the failure was mine, not the intervention's.**
+   "Do we need to pause and reload to use this tool now?"
+   is precisely the strategic-judgment intervention style that works best: a question, not a correction, at the exact moment it mattered.
+   The only opportunity here is that a follow-up ("are you sure?
+   the tool you just changed is the one you're about to call") would have forced the reasoning I skipped — but the first question should have been enough.
+
+### Diagnostic details
+
+- **Model-performance correlation** — clean split with no mismatches.
+  Planning and this retrospective ran on `anthropic/claude-opus-5` (judgment-heavy: measurement design, the four-question `ask_user` gate, proposal synthesis); TDD and ship ran on `anthropic/claude-sonnet-5` (execution against a written plan).
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) are pinned to `anthropic/claude-sonnet-5`, appropriate for their design-judgment scope — and the reviewer's single WARN was a real finding, not noise.
+- **Escalation-delay tracking** — one sequence exceeded the 5-call threshold: the README table edit ran 7 consecutive calls on the same failing `oldText` match.
+  No subagent was warranted; the fix was to stop retyping and read exact bytes, which `AGENTS.md` already prescribes.
+  The stale-tool friction was *not* an escalation-delay case — it was resolved in 2 calls once the symptom appeared; the delay was in the reasoning one turn earlier.
+- **Unused-tool detection** — no available tool or subagent would have caught the stale-extension issue; it required reasoning about Pi's extension-loading lifecycle, which no gate inspects.
+  This is precisely why it belongs in `AGENTS.md` rather than in a checklist.
+- **Feedback-loop gap analysis** — no gap found.
+  Verification was incremental throughout; `pnpm fallow dead-code` ran both at cycle end and again as a pre-push gate.
+
+### Changes made
+
+1. `AGENTS.md` — added a `### Stale in-process extension code` section after `### Stale prompt-template expansion`, recording that Pi loads each package's extension once at session start, so a session editing `packages/<pkg>/src/` keeps running the pre-edit tool and must restart before a workflow step that calls it.
+
+### Considered and rejected
+
+1. **Correcting the `rumdl fmt` table-padding claim in `AGENTS.md`.**
+   I hypothesized the existing sentence ("`rumdl fmt` does not re-pad tables for you") was wrong, since a README table appeared to change padding after an edit.
+   Tested with two fixture tables — one compact, one padded with inconsistent widths — and `rumdl fmt` left both untouched.
+   The existing rule is correct; proposal withdrawn on evidence.
+2. **A `/ship-issue` step 6.4 pointer duplicating the stale-extension rule.**
+   Rejected as duplication — `AGENTS.md` is always in context.
+3. **Rules for the `ci_find` run-ID slip, the `newText2` key, and the padded-table `oldText` retype.**
+   The latter two already have crisp `AGENTS.md` rules; a repeat violation is not fixed by more prose.
+   The first is designed out by the shipped tool, which removes the need to hand-watch a release PR's checks.
+
+[#5]: https://github.com/gotgenes/pi-packages/issues/5

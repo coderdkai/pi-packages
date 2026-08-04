@@ -78,6 +78,11 @@ It also joins a line ending in `:` with the sentence after it — to add a sente
 A slash command's expanded body is a snapshot from when the Pi process loaded it — so after this session edits a `.pi/prompts/*.md` template, a later same-process invocation of that command can run the **pre-edit** copy.
 When the pasted prompt body contradicts the on-disk file (e.g. you just changed `/ship-issue` and its steps read stale), treat the **on-disk file as authoritative** and follow it, not the injected text (Refs #586).
 
+### Stale in-process extension code
+
+Pi loads each package's extension once at session start, so a session that edits `packages/<pkg>/src/` keeps running the **pre-edit** tool for the rest of its life.
+When the change targets a tool the workflow itself calls (`release_pr_merge`, `ci_watch`, `issue_close`), restart Pi before the step that uses it — otherwise `/ship-issue` exercises the old behavior and the new code looks broken (Refs #673).
+
 ### Edit tool batches
 
 A multi-edit `Edit` call is atomic: if one `oldText` fails to match, the whole batch is rejected and nothing is applied.
