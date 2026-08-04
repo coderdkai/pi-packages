@@ -89,6 +89,7 @@ describe("mergeReleasePR", () => {
       title: "chore(main): release 1.2.0",
       mergeable: "MERGEABLE",
       mergeStateStatus: "CLEAN",
+      statusCheckRollup: [],
     });
     // gh pr merge
     mockCmd("merged");
@@ -175,7 +176,7 @@ describe("mergeReleasePR", () => {
         "view",
         "42",
         "--json",
-        "number,title,mergeable,mergeStateStatus",
+        "number,title,mergeable,mergeStateStatus,statusCheckRollup",
       ],
       signal: controller.signal,
     });
@@ -189,6 +190,186 @@ describe("mergeReleasePR", () => {
       args: ["pull", "--ff-only"],
       signal: controller.signal,
     });
+  });
+
+  it("waits for an in-progress check then merges once CLEAN", async () => {
+    // first poll: UNSTABLE with an IN_PROGRESS check
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "UNSTABLE",
+      statusCheckRollup: [
+        {
+          __typename: "CheckRun",
+          name: "check",
+          status: "IN_PROGRESS",
+          conclusion: null,
+        },
+      ],
+    });
+    // second poll: CLEAN
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      statusCheckRollup: [],
+    });
+    mockCmd("merged");
+    mockRunCommand.mockResolvedValueOnce({
+      stdout: "Already up to date.\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      stdout: "abc1234567890\n",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const onProgress = vi.fn();
+    const result = await mergeReleasePR({ prNumber: 42, onProgress });
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain("Merged PR #42");
+    expect(onProgress).toHaveBeenCalledWith(
+      "checks: [0/1] check — in_progress (0s)",
+    );
+    expect(mockSleep).toHaveBeenCalledTimes(1);
+    expect(mockSleep).toHaveBeenCalledWith(10000, undefined);
+  });
+
+  it("polls while mergeability is UNKNOWN then merges once resolved", async () => {
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "UNKNOWN",
+      mergeStateStatus: "UNKNOWN",
+      statusCheckRollup: [],
+    });
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      statusCheckRollup: [],
+    });
+    mockCmd("merged");
+    mockRunCommand.mockResolvedValueOnce({
+      stdout: "Already up to date.\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    mockRunCommand.mockResolvedValueOnce({
+      stdout: "abc1234567890\n",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const onProgress = vi.fn();
+    const result = await mergeReleasePR({ prNumber: 42, onProgress });
+
+    expect(result.isError).toBe(false);
+    expect(onProgress).toHaveBeenCalledWith(
+      "waiting for GitHub to compute mergeability... (0s)",
+    );
+  });
+
+  it("blocks with a reason when the rollup is empty", async () => {
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "UNSTABLE",
+      statusCheckRollup: [],
+    });
+
+    const result = await mergeReleasePR({ prNumber: 42 });
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("PR #42 is not mergeable");
+    expect(result.content).toContain(
+      "reason: no checks reported (statusCheckRollup is empty)",
+    );
+  });
+
+  it("blocks with a reason naming a failing check", async () => {
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "UNSTABLE",
+      statusCheckRollup: [
+        {
+          __typename: "CheckRun",
+          name: "check",
+          status: "COMPLETED",
+          conclusion: "FAILURE",
+        },
+      ],
+    });
+
+    const result = await mergeReleasePR({ prNumber: 42 });
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("reason: check failed: check");
+  });
+
+  it("returns a timeout result when checks never settle", async () => {
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "UNSTABLE",
+      statusCheckRollup: [
+        {
+          __typename: "CheckRun",
+          name: "check",
+          status: "IN_PROGRESS",
+          conclusion: null,
+        },
+      ],
+    });
+
+    const result = await mergeReleasePR({ prNumber: 42, timeout: 0 });
+    expect(result.isError).toBe(true);
+    expect(result.content).toBe(
+      [
+        "timeout: PR #42 did not become mergeable within 0s",
+        "  mergeable: MERGEABLE",
+        "  merge_state: UNSTABLE",
+        "  title: chore(main): release 1.2.0",
+        "  checks: [0/1] check — in_progress (0s)",
+      ].join("\n"),
+    );
+    expect(mockSleep).not.toHaveBeenCalled();
+  });
+
+  it("returns abort message when signal fires during the wait", async () => {
+    const controller = new AbortController();
+    mockGhJson({
+      number: 42,
+      title: "chore(main): release 1.2.0",
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "UNSTABLE",
+      statusCheckRollup: [
+        {
+          __typename: "CheckRun",
+          name: "check",
+          status: "IN_PROGRESS",
+          conclusion: null,
+        },
+      ],
+    });
+    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+
+    const result = await mergeReleasePR({
+      prNumber: 42,
+      signal: controller.signal,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("aborted:");
+    expect(result.content).toContain("cancelled by user");
+    expect(mockSleep).toHaveBeenCalledWith(10000, controller.signal);
   });
 });
 

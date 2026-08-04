@@ -7,9 +7,10 @@
  *   - watchRelease    → release_watch
  */
 
-import { findRetryDelay } from "./ci-helpers";
+import { findRetryDelay, formatProgress } from "./ci-helpers";
 import type { MergeMethod } from "./config";
 import { gh, ghJson, git } from "./github";
+import { classifyMergeState, type MergeReadiness } from "./merge-state";
 import { sleep } from "./process";
 
 export type { MergeMethod };
@@ -23,11 +24,9 @@ interface ReleasePR {
   mergeStateStatus: string;
 }
 
-interface PRState {
+interface PRState extends MergeReadiness {
   number: number;
   title: string;
-  mergeable: string;
-  mergeStateStatus: string;
 }
 
 export interface ToolResult {
@@ -133,6 +132,8 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
 export interface MergeReleasePRArgs {
   prNumber: number;
   method?: MergeMethod;
+  timeout?: number;
+  onProgress?: (line: string) => void;
   signal?: AbortSignal;
 }
 
@@ -141,24 +142,56 @@ export async function mergeReleasePR(
 ): Promise<ToolResult> {
   const prNumber = args.prNumber;
   const signal = args.signal;
-
-  const pr = await ghJson<PRState>(
-    [
-      "pr",
-      "view",
-      String(prNumber),
-      "--json",
-      "number,title,mergeable,mergeStateStatus",
-    ],
-    signal,
-  );
-
-  if (pr.mergeable !== "MERGEABLE" || pr.mergeStateStatus !== "CLEAN") {
-    return blockedResult(pr);
-  }
-
+  const onProgress = args.onProgress;
+  const timeout = args.timeout ?? 300;
   const method = args.method ?? "merge";
-  return performMerge(prNumber, method, pr.title, signal);
+  const pollInterval = 10;
+  let elapsed = 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
+  while (true) {
+    if (signal?.aborted) {
+      return abortedMergeResult(elapsed);
+    }
+
+    const pr = await ghJson<PRState>(
+      [
+        "pr",
+        "view",
+        String(prNumber),
+        "--json",
+        "number,title,mergeable,mergeStateStatus,statusCheckRollup",
+      ],
+      signal,
+    );
+
+    const decision = classifyMergeState(pr);
+    let progressLine: string | undefined;
+    switch (decision.kind) {
+      case "ready":
+        return performMerge(prNumber, method, pr.title, signal);
+      case "blocked":
+        return blockedResult(pr, decision.reason);
+      case "waiting-checks":
+        progressLine = formatProgress(decision.checks, elapsed, "checks: ");
+        break;
+      case "waiting-mergeability":
+        progressLine = `waiting for GitHub to compute mergeability... (${elapsed}s)`;
+        break;
+    }
+    onProgress?.(progressLine);
+
+    if (elapsed >= timeout) {
+      return timeoutMergeResult(pr, timeout, progressLine);
+    }
+
+    try {
+      await sleep(pollInterval * 1000, signal);
+    } catch {
+      return abortedMergeResult(elapsed);
+    }
+    elapsed += pollInterval;
+  }
 }
 
 /**
@@ -176,6 +209,34 @@ function blockedResult(pr: PRState, reason?: string): ToolResult {
     lines.push(`  reason: ${reason}`);
   }
   return { content: lines.join("\n"), isError: true };
+}
+
+/** Format the timeout result when the PR never became mergeable within the bound. */
+function timeoutMergeResult(
+  pr: PRState,
+  timeout: number,
+  lastProgressLine: string | undefined,
+): ToolResult {
+  const lines = [
+    `timeout: PR #${pr.number} did not become mergeable within ${timeout}s`,
+    `  mergeable: ${pr.mergeable}`,
+    `  merge_state: ${pr.mergeStateStatus}`,
+    `  title: ${pr.title}`,
+  ];
+  if (lastProgressLine) {
+    lines.push(`  ${lastProgressLine}`);
+  }
+  return { content: lines.join("\n"), isError: true };
+}
+
+/** Format the abort result when the signal fires while waiting for the PR to become mergeable. */
+function abortedMergeResult(elapsed: number): ToolResult {
+  return {
+    content: ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
+      "\n",
+    ),
+    isError: true,
+  };
 }
 
 /** Merge the PR, pull the result, and report the new HEAD SHA. */
