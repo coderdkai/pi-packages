@@ -112,7 +112,7 @@ So a refactor-only plan's `Release Recommendation` rationale must not claim it w
 Release is driven by the release-please PR merge over `main` commits, independent of any issue's open/closed state: holding an issue open does not defer its already-merged `fix:`/`feat:` commits from releasing at the next merge, and the only lever to defer a release is leaving the release-please PR unmerged (Refs #625).
 
 Release-please PRs merge by **rebase** (linear `chore: release main`), per `defaultMergeMethod: rebase` (`.pi/extensions/pi-github-tools/config.json`) — set in `cacc724f`.
-Prefer `release_pr_merge`; on its `UNSTABLE`-no-checks refusal, fall back to `gh pr merge <N> --rebase`, never `--merge`.
+Prefer `release_pr_merge` — it waits out an in-progress check or an undecided mergeability state on its own; on its `reason: no checks reported` refusal (the `GITHUB_TOKEN` case), fall back to `gh pr merge <N> --rebase`, never `--merge`.
 Do not infer the method from older history — releases before `cacc724f` are merge commits.
 This holds for releases cut outside `/ship-issue` (e.g. an extended review session), where the ship-prompt guidance is not loaded.
 

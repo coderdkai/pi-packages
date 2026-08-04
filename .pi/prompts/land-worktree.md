@@ -65,9 +65,9 @@ Releasing is the root's serialized responsibility — only the root merges the s
    Otherwise release now.
 2. To release: `release_pr_find` → check the **full** PR body for which packages it bumps (release-please collapses each in a `<details>` block) → `release_pr_merge` (rebase).
    - Print the body explicitly with `gh pr view <N> --json body -q .body` — a `--jq` that drops `body` skips the check silently and an unexpected sibling-package bump slips through.
-   - On an `UNSTABLE`-no-checks refusal (the `GITHUB_TOKEN` case — empty `statusCheckRollup`), fall back to `gh pr merge <N> --rebase`, then `git pull --ff-only`.
-   - A non-empty rollup with a check still `IN_PROGRESS` is neither case — wait for it (`ci_watch`), then retry `release_pr_merge`; do not fall back to `gh pr merge` while a check is running (Refs #546).
-   - Never `--merge`; never merge a genuinely blocked PR (`CONFLICTING`/`DIRTY`/`BEHIND` or a failing check).
+   - `release_pr_merge` waits out an in-progress check or an undecided (`UNKNOWN`) mergeability state on its own — do not add a manual wait loop.
+   - On a `reason: no checks reported (statusCheckRollup is empty)` refusal (the `GITHUB_TOKEN` case), fall back to `gh pr merge <N> --rebase`, then `git pull --ff-only`.
+   - Never `--merge`; never merge a genuinely blocked PR (any other `reason:`, or a `timeout:` result).
 3. `release_watch` for the tag.
 
 ## 7. Tear down the worktree
@@ -94,4 +94,4 @@ Do **not** recommend the next issue to plan here — `/retro` surfaces the next 
 - Never force-push.
 - If the ff-merge is not a fast-forward, stop — the peer re-rebases; the root never merges non-linearly.
 - If CI fails, the issue stays open and nothing is released or torn down.
-- Never merge a genuinely blocked release-please PR; `UNSTABLE` from no checks is the expected `GITHUB_TOKEN` case.
+- Never merge a genuinely blocked release-please PR; a `reason: no checks reported` refusal is the expected `GITHUB_TOKEN` case.

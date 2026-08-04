@@ -81,11 +81,13 @@ Returns PR number, title, head branch, mergeable status, and URL.
 
 Merge a release-please PR after confirming it is clean.
 Checks `MERGEABLE` + `CLEAN` status, merges, and runs `git pull --ff-only`.
+Waits out an in-progress check or an undecided (`UNKNOWN`) mergeability state, polling every 10 s up to `timeout`, and streams a progress line per poll.
 
-| Parameter   | Type   | Required | Description                                          |
-| ----------- | ------ | -------- | ---------------------------------------------------- |
-| `pr_number` | number | yes      | The PR number to merge                               |
-| `method`    | string | no       | Merge strategy: `"rebase"`, `"squash"`, or `"merge"` |
+| Parameter   | Type   | Required | Description                                                       |
+| ----------- | ------ | -------- | ----------------------------------------------------------------- |
+| `pr_number` | number | yes      | The PR number to merge                                            |
+| `method`    | string | no       | Merge strategy: `"rebase"`, `"squash"`, or `"merge"`              |
+| `timeout`   | number | no       | Seconds to wait for checks/mergeability to resolve (default: 300) |
 
 Merge method precedence (highest to lowest):
 
@@ -93,7 +95,14 @@ Merge method precedence (highest to lowest):
 2. `defaultMergeMethod` from [configuration](#configuration)
 3. `"merge"` (hardcoded fallback)
 
-Returns merge confirmation with new HEAD SHA, or a structured error if not mergeable.
+Returns merge confirmation with new HEAD SHA on success.
+On failure, returns a structured error with a `reason:` line naming the specific cause:
+
+- `no checks reported (statusCheckRollup is empty)` — the PR has no CI runs at all (the legacy `GITHUB_TOKEN`-does-not-trigger-workflows case); merge manually if appropriate.
+- `check failed: <names>` — one or more checks concluded with a failure.
+- `mergeable is <value>` / `merge state is <value>` — the PR is genuinely blocked (conflicting, dirty, behind, etc.).
+
+A `timeout:` result (also an error) means checks or mergeability did not resolve within `timeout`; retry or investigate.
 
 #### `release_watch`
 
