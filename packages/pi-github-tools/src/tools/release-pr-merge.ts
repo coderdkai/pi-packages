@@ -8,6 +8,7 @@ import {
   loadConfig,
 } from "#src/lib/config";
 import { mergeReleasePR } from "#src/lib/release";
+import { createProgressCallback } from "#src/progress";
 import { err, ok } from "#src/tool-result";
 
 export function registerReleasePrMerge(pi: ExtensionAPI): void {
@@ -17,9 +18,12 @@ export function registerReleasePrMerge(pi: ExtensionAPI): void {
     description:
       "Merge a release-please PR after confirming it is clean. " +
       "Checks MERGEABLE + CLEAN status, merges, and runs git pull --ff-only. " +
+      "Waits out an in-progress check or an undecided mergeability state, streaming progress, " +
+      "up to the timeout. " +
       "Returns merge confirmation with new HEAD SHA, or a structured error if not mergeable.",
     promptSnippet:
-      "release_pr_merge: Merge a release-please PR after confirming it's clean.",
+      "release_pr_merge: Merge a release-please PR after confirming it's clean, " +
+      "waiting out any in-progress checks.",
     parameters: Type.Object({
       pr_number: Type.Number({
         description: "The PR number to merge.",
@@ -37,8 +41,15 @@ export function registerReleasePrMerge(pi: ExtensionAPI): void {
           },
         ),
       ),
+      timeout: Type.Optional(
+        Type.Number({
+          description:
+            "How long to wait for an in-progress check or undecided mergeability " +
+            "to resolve, in seconds (default: 300).",
+        }),
+      ),
     }),
-    async execute(_toolCallId, params, signal) {
+    async execute(_toolCallId, params, signal, onUpdate) {
       try {
         const config = loadConfig({
           globalConfigPath: getGlobalConfigPath(
@@ -49,6 +60,8 @@ export function registerReleasePrMerge(pi: ExtensionAPI): void {
         const result = await mergeReleasePR({
           prNumber: params.pr_number,
           method: params.method ?? config.defaultMergeMethod,
+          timeout: params.timeout,
+          onProgress: createProgressCallback(onUpdate),
           signal,
         });
         return result.isError ? err(result.content) : ok(result.content);
