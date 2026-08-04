@@ -166,6 +166,16 @@ export async function mergeReleasePR(
   }
 
   const method = args.method ?? "merge";
+  return performMerge(prNumber, method, pr.title, signal);
+}
+
+/** Merge the PR, pull the result, and report the new HEAD SHA. */
+async function performMerge(
+  prNumber: number,
+  method: MergeMethod,
+  title: string,
+  signal: AbortSignal | undefined,
+): Promise<ToolResult> {
   await gh(["pr", "merge", String(prNumber), `--${method}`], signal);
 
   await git(["pull", "--ff-only"], signal);
@@ -174,7 +184,7 @@ export async function mergeReleasePR(
 
   return {
     content: [
-      `Merged PR #${prNumber}: ${pr.title}`,
+      `Merged PR #${prNumber}: ${title}`,
       `head_sha: ${headSha}`,
       `short_sha: ${headSha.substring(0, 7)}`,
     ].join("\n"),
