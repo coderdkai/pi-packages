@@ -40,7 +40,34 @@ Call `set_session_name` with `Backlog triage — <YYYY-MM-DD>` (append `(<pkg>)`
 - `markdown-conventions` — for the output document.
 - `package-<PKG>` — for each package with items in scope; load the one for `$1` when filtered.
 
-## Step 1: Gather the raw state
+## Step 1: Read the prior triage and decision artifacts
+
+Start here, before touching the tracker.
+Ranking without the prior record re-derives settled decisions, silently re-defers the same items, and re-litigates directions already agreed with a contributor.
+
+Read, in this order:
+
+1. **The most recent prior triage** — `ls -1 docs/triage/*.md | tail -3`, then read the newest.
+   Carry forward four things specifically: its **Deferred** list, its **Keystones**, its **Blocked on others** entries, and the ranks it assigned.
+   You are accountable for what it deferred; see the repeat-deferral rule below.
+2. **PR-review triage notes** — `docs/retro/` and `packages/*/docs/retro/`, whose `## Stage: PR Review` entries record the direction already chosen for a PR (adopt as-is, adopt with simplified design, decline, or await reporter).
+   A direction recorded there is **settled**: rank the follow-through, do not re-open the decision.
+3. **Active improvement roadmaps** — the `## Improvement roadmap` section of each `packages/*/docs/architecture/architecture.md`.
+   An issue already sequenced in a phase belongs to that phase and stays out of this list, unless it is a keystone (see the promotion rule above).
+4. **Existing plans** — `docs/plans/` and `packages/*/docs/plans/`.
+   An issue with a committed plan is already planned; note its `**Release:**` marker and rank the execution, not the planning.
+5. **What closed since the last triage** — issues and PRs closed after the prior triage's date, including PRs closed **unmerged**, which usually means the capability was adopted and reimplemented rather than rejected.
+
+This material feeds the "Since the last triage" section of the output and constrains the ranking that follows.
+
+### Repeat deferrals
+
+An item deferred across two or more consecutive triages gets an explicit decision this run — schedule it, defer it with a recorded rationale, or recommend closing it as not-planned.
+Never silently re-defer.
+Surface these as an `ask_user` decision rather than deciding yourself; they are preference-sensitive judgments the user should own.
+Bundle them into a single call rather than one round-trip per item.
+
+## Step 2: Gather the raw state
 
 Collect issues and PRs together; a backlog that ignores open PRs understates the real queue and hides the contributor-facing cost.
 
@@ -59,7 +86,7 @@ gh pr view <N> --json number,author,mergeable,mergeStateStatus,additions,deletio
 
 Also record, for each item: the author, whether they are a third party (compare to `gh api user --jq .login`), the age since creation, and the age since the **last maintainer response**.
 
-## Step 2: Establish real CI state (do not infer it)
+## Step 3: Establish real CI state (do not infer it)
 
 An empty `statusCheckRollup` means **not run**, never **passed**.
 Fork PRs from first-time contributors sit at `completed/action_required` until a maintainer approves the workflow, so a PR can look healthy while nothing has ever executed.
@@ -88,7 +115,7 @@ Approve only after it passes:
 gh api -X POST repos/gotgenes/pi-packages/actions/runs/<id>/approve
 ```
 
-## Step 3: Interpret failures before ranking them
+## Step 4: Interpret failures before ranking them
 
 A red check is evidence about *something*, but not always about the PR.
 
@@ -104,7 +131,7 @@ A red check is evidence about *something*, but not always about the PR.
   CI has no opinion about whether a design widens a security boundary, introduces an ungated configuration channel, or contradicts an ADR.
   Never let a passing check raise a security-relevant PR's rank.
 
-## Step 4: Verify claims that drive priority
+## Step 5: Verify claims that drive priority
 
 Rank on what is true now, not on what an issue or PR body asserts.
 Two checks pay for themselves repeatedly:
@@ -119,7 +146,7 @@ Two checks pay for themselves repeatedly:
 
 The full verification protocol lives in `/pr-review`; do only as much here as the ranking requires, and defer the rest.
 
-## Step 5: Score each item
+## Step 6: Score each item
 
 Score on four axes; keep them separate rather than collapsing them into one number too early.
 
@@ -135,7 +162,7 @@ Hold **merit** and **urgency of response** apart, and label which one is driving
 A PR whose design you intend to decline can still be the most urgent thing to *answer*.
 Say "this is ranked high to respond, not to merge" in the rationale when that is the case, so the list is not misread as an endorsement.
 
-## Step 6: Keystone detection
+## Step 7: Keystone detection
 
 Before ordering, look for convergence: several open items that are all really asking one unanswered question.
 
@@ -148,7 +175,7 @@ Deciding a keystone converts N separate judgment calls into N answers by referen
 Also flag the inverse: a third-party PR implementing a blunter version of a design you have already specified.
 The existing issue is the answer to that PR; note the pairing rather than reviewing the PR on its own terms.
 
-## Step 7: Interleave
+## Step 8: Interleave
 
 Produce one list, not separate ours/theirs lists.
 Group by theme where our issues and third-party work converge, then order across themes.
@@ -162,7 +189,7 @@ Only these, and only with the stated confirmation:
 
 - **Apply missing labels** (`bug`, `enhancement`, `pkg:<name>`) — do this directly when the correct label is objectively determined by the issue template or body.
   Report what you changed.
-- **Approve fork CI runs** — only after the Step 2 audit passes.
+- **Approve fork CI runs** — only after the Step 3 audit passes.
   Report the audit result.
 - **Post contributor comments** (holding replies, change requests, version requests) — draft with the `github-voice` skill and confirm through `ask_user` before posting.
   A holding reply should say plainly that the item is parked and why, name the issue it is parked on, and avoid committing to a design shape the maintainer has not decided.
@@ -188,7 +215,7 @@ open_prs: 9
 
 The document contains:
 
-1. **Since the last triage** — read the most recent prior `docs/triage/*.md` when one exists, and note what closed, what landed, and what changed rank.
+1. **Since the last triage** — from the Step 1 artifacts: what closed, what landed, what changed rank, and the disposition of every item the prior run deferred.
    Skip on the first run.
 2. **The prioritized table** — the deliverable:
 
@@ -198,8 +225,8 @@ The document contains:
 
    Use `#N` bare (they auto-link on GitHub), mark third-party items, and keep `Why now` to one sentence.
 3. **Keystones** — each keystone with its dependants listed by number.
-4. **Findings that changed a rank** — the verification results from Steps 3 and 4: stale greens, defects already fixed, flakes masking real failures, green-but-misaligned PRs.
-5. **CI and security audit** — the Step 2 audit outcome, and which runs were approved.
+4. **Findings that changed a rank** — the verification results from Steps 4 and 5: stale greens, defects already fixed, flakes masking real failures, green-but-misaligned PRs.
+5. **CI and security audit** — the Step 3 audit outcome, and which runs were approved.
 6. **Blocked on others** — items waiting on a contributor (rebase, version confirmation, change requests) with how long they have waited.
 7. **Deferred** — what you consciously did not rank, and why, so the next run does not silently re-derive it.
 
