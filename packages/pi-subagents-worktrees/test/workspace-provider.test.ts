@@ -4,24 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorktreeWorkspaceProvider } from "#src/workspace-provider";
-
-/** Create a temporary git repo with an initial commit. */
-function initGitRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "pi-wt-prov-"));
-  execFileSync("git", ["init"], { cwd: dir, stdio: "pipe" });
-  execFileSync("git", ["config", "user.email", "test@test.com"], {
-    cwd: dir,
-    stdio: "pipe",
-  });
-  execFileSync("git", ["config", "user.name", "Test"], {
-    cwd: dir,
-    stdio: "pipe",
-  });
-  writeFileSync(join(dir, "README.md"), "# Test repo");
-  execFileSync("git", ["add", "README.md"], { cwd: dir, stdio: "pipe" });
-  execFileSync("git", ["commit", "-m", "initial"], { cwd: dir, stdio: "pipe" });
-  return dir;
-}
+import { initGitRepo } from "#test/support/git-fixture";
 
 /** Build a prepare context with sensible defaults. */
 function ctx(overrides: {
@@ -36,7 +19,7 @@ describe("WorktreeWorkspaceProvider", () => {
   let repoDir: string;
 
   beforeEach(() => {
-    repoDir = initGitRepo();
+    repoDir = initGitRepo("pi-wt-prov-");
   });
 
   afterEach(() => {
