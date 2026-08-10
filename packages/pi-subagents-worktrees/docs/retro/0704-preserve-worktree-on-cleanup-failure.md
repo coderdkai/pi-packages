@@ -152,6 +152,86 @@ Package test count went from 26 to 31; the pre-completion reviewer returned **PA
 - Pre-completion reviewer: **PASS**, no WARN findings.
   It independently re-verified the attribution trailer on all seven implementation commits, the non-breaking `fix:` classification against the `exports` map, and that [#714] is filed and open.
 
+## Stage: Final Retrospective (2026-08-10T18:38:38Z)
+
+### Session summary
+
+All five stages — PR review, planning, TDD, ship, and this retrospective — ran in a single session, taking third-party PR [#705] from triage through to a released `pi-subagents-worktrees` v0.2.4.
+The shipped fix preserves the worktree when cleanup fails and retries the rescue commit past rejecting hooks, going beyond what the contributed PR proposed.
+One self-caught instruction violation (fabricated commit SHAs in the PR close comment) is the session's main actionable finding.
+
+### Observations
+
+#### What went well
+
+- **Disproving the report's severity claim changed the artifacts.**
+  The issue and the contributor's plan both asserted "no dangling commit, no dangling blob, `git fsck` finds nothing."
+  Recovering the file via `git cat-file -p` on the dangling tree showed that is false for the hook case, because our own `git add -A` writes blobs before the commit fails.
+  Had this gone unchecked, the false claim would have been copied into our own plan — the contributor's plan had already copied it.
+  Verifying a third-party report's *mechanism*, not just its conclusion, is what made the difference.
+- **Finding that this repository triggers the bug reframed the whole fix.**
+  `committed` rejects the rescue commit's `pi-agent:` subject (`Disallowed type`), so every worktree subagent here that produced changes was losing that work.
+  This turned an abstract third-party report into a locally reproducible, self-affecting bug, and it is what justified `--no-verify` (which skips `commit-msg`) over any narrower remedy.
+  It also exposed that PR [#705] as written would have left this repo leaking a worktree per run rather than fixing it.
+- **The `tidy-first-assessor` found a real flaw in a plan written minutes earlier in the same session.**
+  It caught that the plan deferred `commitStaged`'s *existence* to step 4, which would have forced that commit to both introduce the helper and add its retry body.
+  A fresh-context reviewer beating the author on a plan that recent is a strong argument for the bracket being mandatory rather than discretionary.
+- **The cross-step invariant trap was predicted, mitigated, and independently confirmed.**
+  Planning identified that step 3's preservation test would be silently inverted by step 4's `--no-verify` retry, and chose a locked-index failure mode that no later step can bypass.
+  The `pre-completion-reviewer` verified that reasoning independently rather than taking the plan's word for it.
+- **Measuring test mechanisms at planning time paid off twice.**
+  `user.useConfigOnly` was assumed to force a commit failure and did not — global config still supplied the identity.
+  Probing it at planning time rather than during TDD meant the plan shipped with a mechanism (`index.lock`) that was already known to work, and the same habit confirmed `git worktree remove --force` tolerates a stale lock before the sweep was written.
+
+#### What caused friction (agent side)
+
+1. `instruction-violation` (self-identified) — **Fabricated two commit SHAs in the PR [#705] close comment.**
+   `AGENTS.md` and `.pi/prompts/ship-issue.md` both require running `git rev-parse` and pasting the result exactly, never hand-extending a short hash.
+   That rule was followed correctly for the issue close comment, then broken minutes later in the PR close comment, where five SHAs were listed and two (`7411088c…`, `e1baca45…`) were hand-extended into hashes that do not exist.
+   Impact: the wrong SHAs were live on a public PR until a `git rev-parse` check caught them; recovery took one verification call plus a `gh api … PATCH` edit.
+   Root cause is placement, not salience: the SHA rule lives under the *issue* close comment's bullet list, and the third-party-PR close path is a separate branch of the prompt that does not restate it.
+   Multi-SHA credit lists are exactly where the shortcut is tempting, and that is the one place the prompt goes quiet.
+2. `other` — **The `/ship-issue` prompt does not describe this session's actual shape.**
+   Its third-party branch handles the case where the shipped argument *is* the PR.
+   Here the argument was the issue (`704`) and the adopted PR ([#705]) was a second, separate close target.
+   Nothing in the prompt says to close it; that only happened because the PR Review stage of this retro had recorded the obligation.
+   Impact: no rework, but the correct behavior depended on a breadcrumb rather than the prompt, which will not hold when the retro is longer or the stages are split across sessions.
+3. `other` — **A README line was joined with the sentence after it, breaking one-sentence-per-line while still passing `rumdl`.**
+   `AGENTS.md` documents the autoformatter joining a line that ends in `:`; the affected line ended in a code span.
+   Attempting to attribute the mechanism afterwards, neither `rumdl fmt` nor `prettier --write` reproduced the join in isolation, so the trigger remains unidentified.
+   Impact: one restructuring edit, no rework.
+   Deliberately proposing no `AGENTS.md` change for this — documenting an unverified mechanism would repeat the assert-instead-of-measure failure the rest of the session avoided.
+
+#### What caused friction (user side)
+
+- Nothing blocking.
+  The operator answered four decision gates (PR direction, then three planning design questions) and made no corrections across five stages.
+- The handoff contract written by `/review-third-party-pr` — "the direction is already decided here, so its Decide gate is satisfied" — worked exactly as intended: planning honored the recorded decision instead of re-litigating it, while still surfacing the genuinely *new* ambiguities that only became visible after reading the code.
+  This is worth preserving; the temptation when splitting a decision across two gates is to either re-ask everything or ask nothing.
+- One opportunity: the hook-bypass safety question (a `gitleaks`-style hook being skipped) is a security-posture decision that surfaced only at planning.
+  Surfacing it during PR review, where the security implications of the adopted design were already being weighed, would have consolidated it with the direction decision.
+
+### Diagnostic details
+
+- **Model-performance correlation** — both subagents ran `anthropic/claude-sonnet-5` per their frontmatter: `tidy-first-assessor` on preparatory-refactor design and `pre-completion-reviewer` on the quality gate.
+  Both are judgment-heavy, so the assignment is appropriate and no mismatch was found.
+  The parent session switched models several times across stages; the ship stage, where the SHA fabrication occurred, ran on `claude-sonnet-5`, and this retrospective on `claude-opus-5`.
+  SHA fabrication is a model-independent failure mode, so the correlation carries no signal beyond the prompt-placement gap already recorded above.
+- **Escalation-delay tracking** — no `rabbit-hole` friction points.
+  The longest same-approach probe sequence was three tool calls (`user.useConfigOnly` → `index.lock`), and the approach was abandoned after the second, well inside the five-call threshold.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check` and the package suite ran after each of the seven implementation commits, root `pnpm run lint` before each commit, and the full suite plus `pnpm fallow dead-code` at the end.
+  The green baseline was verified before the tidy-first dispatch, per the skill.
+
+### Changes made
+
+1. `.pi/prompts/ship-issue.md` — extended the third-party-PR close block with two sentences.
+   The first makes an adopted PR and the issue it addresses mutually-implied close targets, so shipping either one closes the other; the operator raised this during the retro, noting the direction the session actually exercised (shipping the issue, closing the PR) is only half the case, since a `/review-third-party-pr` PR may itself carry an associated issue.
+   The second carries the existing `git rev-parse` full-SHA rule into that branch, which is where this session fabricated two hashes.
+
+Proposed and deliberately rejected: an `AGENTS.md` note about the autoformatter joining a line ending in a code span.
+The join could not be reproduced with `rumdl fmt` or `prettier --write` standalone, so the mechanism is unattributed and documenting it would assert rather than measure.
+
 [#705]: https://github.com/gotgenes/pi-packages/pull/705
 [#707]: https://github.com/gotgenes/pi-packages/issues/707
 [#714]: https://github.com/gotgenes/pi-packages/issues/714
