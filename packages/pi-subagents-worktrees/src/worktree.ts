@@ -4,6 +4,8 @@
  * Creates a temporary git worktree so an agent works on an isolated copy of the repo.
  * On completion, if no changes were made, the worktree is cleaned up.
  * If changes exist, a branch is created and returned in the result.
+ * A worktree is only ever removed once its outcome is certain: when cleanup
+ * fails partway, it is left on disk so the agent's work stays recoverable.
  *
  * Lifted from the pi-subagents core (Phase 16 Step 3, ADR 0002): git plumbing is
  * a workspace strategy, not core behavior, and now lives behind the
@@ -81,8 +83,10 @@ export function createWorktree(
 
 /**
  * Clean up a worktree after agent completion.
- * - If no changes: remove worktree entirely.
- * - If changes exist: create a branch, commit changes, return branch info.
+ * - If no changes: remove the worktree entirely.
+ * - If changes exist: commit them to a branch, then remove the worktree.
+ *   A commit hook that rejects the commit is retried past with `--no-verify`.
+ * - If any of that fails: leave the worktree in place and report the error.
  */
 export function cleanupWorktree(
   cwd: string,
