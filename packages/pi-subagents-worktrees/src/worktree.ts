@@ -19,6 +19,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { debugLog } from "#src/debug";
 
+/** Name prefix shared by every worktree and branch this package creates. */
+export const AGENT_WORKTREE_PREFIX = "pi-agent-";
+
 export interface WorktreeInfo {
   /** Absolute path to the worktree directory. */
   path: string;
@@ -63,9 +66,9 @@ export function createWorktree(
     return undefined;
   }
 
-  const branch = `pi-agent-${agentId}`;
+  const branch = `${AGENT_WORKTREE_PREFIX}${agentId}`;
   const suffix = randomUUID().slice(0, 8);
-  const worktreePath = join(tmpdir(), `pi-agent-${agentId}-${suffix}`);
+  const worktreePath = join(tmpdir(), `${branch}-${suffix}`);
 
   try {
     // Create detached worktree at HEAD
@@ -126,6 +129,14 @@ export function cleanupWorktree(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/** Paths of every worktree registered with the repository, as git resolves them. */
+export function listWorktreePaths(cwd: string): string[] {
+  return runGit(cwd, ["worktree", "list", "--porcelain"])
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.slice("worktree ".length).trim());
 }
 
 /** Porcelain status of a worktree, trimmed. An empty string means a clean tree. */
