@@ -6,6 +6,7 @@ import type { SessionMessage } from "#src/types";
 import type { TranscriptSource } from "#src/ui/session-navigation";
 import { SessionNavigatorHandler, TranscriptOverlay } from "#src/ui/session-navigator";
 import { makeNavigable } from "#test/helpers/make-navigable";
+import { fakeSource, mockTui } from "#test/helpers/transcript-fixtures";
 
 const registry = new AgentTypeRegistry(() => new Map());
 
@@ -13,24 +14,10 @@ const registry = new AgentTypeRegistry(() => new Map());
 // at startup before any command runs. Tests must initialize it explicitly.
 beforeAll(() => initTheme(undefined, false));
 
-function mockTui(rows = 40, columns = 80): TUI {
-  return { terminal: { rows, columns }, requestRender: vi.fn() } as unknown as TUI;
-}
-
 function ansiTheme() {
   return {
     fg: (_color: string, text: string) => text,
     bold: (text: string) => text,
-  };
-}
-
-function fakeSource(overrides: Partial<TranscriptSource> = {}): TranscriptSource {
-  return {
-    getMessages: () => [{ role: "user", content: "Hello world" }] as unknown as SessionMessage[],
-    subscribe: () => () => {},
-    streaming: () => undefined,
-    getToolDefinition: () => undefined,
-    ...overrides,
   };
 }
 
