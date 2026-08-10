@@ -19,6 +19,11 @@ function ctx(overrides: {
   return { agentId: "agent-1", invocation: undefined, ...overrides };
 }
 
+/** Build a provider that isolates the given agent types. */
+function makeProvider(worktreeAgents = ["Explore"]) {
+  return new WorktreeWorkspaceProvider({ worktreeAgents });
+}
+
 describe("WorktreeWorkspaceProvider", () => {
   let repoDir: string;
 
@@ -39,9 +44,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("returns undefined for an agent type not in worktreeAgents (no opt-in)", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "general-purpose", baseCwd: repoDir }),
     );
@@ -49,9 +52,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("prepares a born-complete worktree for an opted-in agent type", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "Explore", baseCwd: repoDir }),
     );
@@ -65,9 +66,7 @@ describe("WorktreeWorkspaceProvider", () => {
 
   it("throws for an opted-in agent when the base dir is not a git repo", async () => {
     const nonRepo = mkdtempSync(join(tmpdir(), "pi-wt-nonrepo-"));
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     await expect(
       provider.prepare(ctx({ agentType: "Explore", baseCwd: nonRepo })),
     ).rejects.toThrow(/worktree isolation/);
@@ -75,9 +74,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("dispose returns undefined and removes the worktree when there are no changes", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "Explore", baseCwd: repoDir }),
     );
@@ -91,9 +88,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("dispose returns a branch addendum and removes the worktree when changes exist", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "Explore", baseCwd: repoDir, agentId: "abc123" }),
     );
@@ -117,9 +112,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("dispose notes when hooks were bypassed to save the work", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "Explore", baseCwd: repoDir, agentId: "bypass-1" }),
     );
@@ -136,9 +129,7 @@ describe("WorktreeWorkspaceProvider", () => {
   });
 
   it("dispose reports the preserved worktree when cleanup fails", async () => {
-    const provider = new WorktreeWorkspaceProvider({
-      worktreeAgents: ["Explore"],
-    });
+    const provider = makeProvider();
     const workspace = await provider.prepare(
       ctx({ agentType: "Explore", baseCwd: repoDir, agentId: "fail-1" }),
     );
