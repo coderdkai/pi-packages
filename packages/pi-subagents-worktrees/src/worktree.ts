@@ -91,63 +91,25 @@ export function cleanupWorktree(
   }
 
   try {
-    // Check for uncommitted changes in the worktree
-    const status = execFileSync("git", ["status", "--porcelain"], {
-      cwd: worktree.path,
-      stdio: "pipe",
-      timeout: 10000,
-    })
-      .toString()
-      .trim();
-
-    if (!status) {
+    if (!statusPorcelain(worktree.path)) {
       // No changes — remove worktree
       removeWorktree(cwd, worktree.path);
       return { hasChanges: false };
     }
 
     // Changes exist — stage, commit, and create a branch
-    execFileSync("git", ["add", "-A"], {
-      cwd: worktree.path,
-      stdio: "pipe",
-      timeout: 10000,
-    });
+    stageAll(worktree.path);
     // Truncate description for commit message (no shell sanitization needed — execFileSync uses argv)
     const safeDesc = agentDescription.slice(0, 200);
-    const commitMsg = `pi-agent: ${safeDesc}`;
-    execFileSync("git", ["commit", "-m", commitMsg], {
-      cwd: worktree.path,
-      stdio: "pipe",
-      timeout: 10000,
-    });
-
-    // Create a branch pointing to the worktree's HEAD.
-    // If the branch already exists, append a suffix to avoid overwriting previous work.
-    let branchName = worktree.branch;
-    try {
-      execFileSync("git", ["branch", branchName], {
-        cwd: worktree.path,
-        stdio: "pipe",
-        timeout: 5000,
-      });
-    } catch (err) {
-      debugLog("git branch", err);
-      branchName = `${worktree.branch}-${Date.now()}`;
-      execFileSync("git", ["branch", branchName], {
-        cwd: worktree.path,
-        stdio: "pipe",
-        timeout: 5000,
-      });
-    }
-    // Update branch name in worktree info for the caller
-    worktree.branch = branchName;
+    commitStaged(worktree.path, `pi-agent: ${safeDesc}`);
+    const branch = createBranch(worktree.path, worktree.branch);
 
     // Remove the worktree (branch persists in main repo)
     removeWorktree(cwd, worktree.path);
 
     return {
       hasChanges: true,
-      branch: worktree.branch,
+      branch,
       path: worktree.path,
     };
   } catch (err) {
@@ -159,6 +121,42 @@ export function cleanupWorktree(
     }
     return { hasChanges: false };
   }
+}
+
+/** Porcelain status of a worktree, trimmed. An empty string means a clean tree. */
+function statusPorcelain(worktreePath: string): string {
+  return runGit(worktreePath, ["status", "--porcelain"]).trim();
+}
+
+/** Stage every change in the worktree, including untracked files. */
+function stageAll(worktreePath: string): void {
+  runGit(worktreePath, ["add", "-A"]);
+}
+
+/** Commit the staged snapshot. */
+function commitStaged(worktreePath: string, message: string): void {
+  runGit(worktreePath, ["commit", "-m", message]);
+}
+
+/**
+ * Create a branch at the worktree's HEAD, returning the name actually used.
+ * If the preferred name is taken, a timestamp suffix avoids overwriting previous work.
+ */
+function createBranch(worktreePath: string, preferred: string): string {
+  try {
+    runGit(worktreePath, ["branch", preferred], 5000);
+    return preferred;
+  } catch (err) {
+    debugLog("git branch", err);
+    const fallback = `${preferred}-${Date.now()}`;
+    runGit(worktreePath, ["branch", fallback], 5000);
+    return fallback;
+  }
+}
+
+/** Run a git command, returning its captured stdout. */
+function runGit(cwd: string, args: string[], timeout = 10000): string {
+  return execFileSync("git", args, { cwd, stdio: "pipe", timeout }).toString();
 }
 
 /**
