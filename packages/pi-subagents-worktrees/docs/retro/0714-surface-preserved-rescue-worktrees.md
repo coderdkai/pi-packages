@@ -37,4 +37,35 @@ Every non-obvious mechanism in the design was measured in this session rather th
   It asserts `pi.on` is never called, so the new notice and command must register *after* the service check — recorded as invariant 1 rather than discovered during implementation.
 - Session-start cost measured at ~9 ms for one `git worktree list --porcelain`, so no caching or debouncing is planned.
 
+## Stage: Implementation — TDD (2026-08-10T19:51:35Z)
+
+### Session summary
+
+Landed the plan's six steps plus two `test:` commits — the tidy-first `makeProvider` extraction and one fallow fixup — for eight commits in all.
+A session with a UI now warns at startup about rescue worktrees still on disk, and `/subagents-worktrees` lists them on demand and removes one behind an explicit confirmation.
+Package test count went from 31 to 62; the pre-completion reviewer returned **PASS** with no warnings.
+
+### Observations
+
+- **The tidy-first assessor corrected the plan's own count.**
+  The plan said six inline `new WorktreeWorkspaceProvider(...)` constructions would break when the constructor gained a registry argument; the assessor counted seven.
+  Extracting `makeProvider` first meant step 3 changed one signature instead of seven.
+- **fallow loses a reference through a destructured object-literal property.**
+  `makeProvider` initially returned `{ provider, live }`, and `pnpm fallow dead-code` then reported `WorktreeWorkspaceProvider.prepare` as an unused class member — a finding bisected to that exact commit and absent at the pre-change baseline.
+  Returning the instance directly and taking the registry as a parameter restored the reference.
+  Worth remembering: a test helper that wraps a class instance in an object literal can manufacture a dead-code finding for a method that is plainly called.
+- **Rule 3 ("under the resolved temp root") needed a test location outside `tmpdir()`.**
+  Every fixture in this package lives under `tmpdir()`, so the exclusion half of that rule had nowhere to be exercised.
+  The test creates its scratch worktree under `node_modules/.pi-wt-outside` — outside the temp root on every platform, and gitignored, so a leftover from a failed run never reaches the working tree.
+- **The inclusion half of the realpath rule is pinned by an ordinary test.**
+  "Reports the rescue worktrees left on disk" asserts the resolved paths; comparing against an unresolved `tmpdir()` makes it return `[]` on macOS, so the planning measurement is now a regression test rather than a note.
+- **`formatPreservedNotice` was written in step 2 and immediately removed.**
+  It arrived with the module but belonged to step 4, where its tests live; deleting it and re-adding it one step later kept every export consumed and tested in the commit that introduced it.
+- **Deviations from the plan.**
+  `AGENT_WORKTREE_PREFIX` is now exported from `src/worktree.ts` so `createWorktree` and the scan share one `pi-agent-` literal — the plan did not list it.
+  `test/support/git-fixture.ts` was left untouched; the existing `initGitRepo`/`installPreCommitHook`/`lockGitIndex` helpers covered the new suites.
+  Two `test:` commits were added beyond the plan's six steps.
+- Pre-completion reviewer: **PASS**, no WARN findings.
+  It independently verified all four Goals against the code, the commit grammar, and that the two Open Questions were deliberately-deferred alternatives rather than unfiled follow-ups.
+
 [#704]: https://github.com/gotgenes/pi-packages/issues/704
