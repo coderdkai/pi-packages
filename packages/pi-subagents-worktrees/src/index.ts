@@ -21,8 +21,9 @@ import { ActiveWorktrees } from "#src/active-worktrees";
 import { loadWorktreesConfig } from "#src/config";
 import { debugLog } from "#src/debug";
 import { findPreservedWorktrees, formatPreservedNotice } from "#src/preserved";
+import { registerPreservedWorktreesCommand } from "#src/preserved-command";
 import { WorktreeWorkspaceProvider } from "#src/workspace-provider";
-import { pruneWorktrees } from "#src/worktree";
+import { discardWorktree, pruneWorktrees } from "#src/worktree";
 
 export default function piSubagentsWorktrees(pi: ExtensionAPI): void {
   const config = loadWorktreesConfig(getAgentDir(), process.cwd());
@@ -43,15 +44,23 @@ export default function piSubagentsWorktrees(pi: ExtensionAPI): void {
   const unregister = service.registerWorkspaceProvider(
     new WorktreeWorkspaceProvider(config, live),
   );
+  const repoCwd = process.cwd();
+  const findPreserved = () => findPreservedWorktrees(repoCwd, live);
+
   // The rescue worktrees a failed cleanup left behind are reported once per
   // session start. A session with no UI (every subagent child) has nowhere to
   // show them, so it does not even look.
   pi.on("session_start", (_event, ctx) => {
     if (!ctx.hasUI) return;
-    const preserved = findPreservedWorktrees(process.cwd(), live);
+    const preserved = findPreserved();
     if (preserved.length > 0) {
       ctx.ui.notify(formatPreservedNotice(preserved), "warning");
     }
+  });
+
+  registerPreservedWorktreesCommand(pi, {
+    findPreserved,
+    discard: (path) => discardWorktree(repoCwd, path),
   });
 
   pi.on("session_shutdown", () => unregister());

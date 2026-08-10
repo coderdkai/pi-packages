@@ -191,15 +191,21 @@ function runGit(cwd: string, args: string[], timeout = 10000): string {
 }
 
 /**
- * Force-remove a worktree.
+ * Force-remove a worktree, discarding anything uncommitted in it.
+ *
+ * Throws when git refuses, so a caller acting on a user's instruction can say
+ * why — unlike the internal best-effort removal below.
+ */
+export function discardWorktree(cwd: string, worktreePath: string): void {
+  runGit(cwd, ["worktree", "remove", "--force", worktreePath]);
+}
+
+/**
+ * Force-remove a worktree as part of cleanup, where failure is not actionable.
  */
 function removeWorktree(cwd: string, worktreePath: string): void {
   try {
-    execFileSync("git", ["worktree", "remove", "--force", worktreePath], {
-      cwd,
-      stdio: "pipe",
-      timeout: 10000,
-    });
+    discardWorktree(cwd, worktreePath);
   } catch (err) {
     debugLog("git worktree remove", err);
     try {

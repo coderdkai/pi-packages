@@ -36,6 +36,7 @@ function fakePi() {
   return {
     pi: {
       on: vi.fn((event: string, cb: SessionHandler) => handlers.set(event, cb)),
+      registerCommand: vi.fn(),
     },
     handlers,
   };
@@ -92,6 +93,16 @@ describe("piSubagentsWorktrees extension entry", () => {
     const { pi } = fakePi();
     expect(() => piSubagentsWorktrees(pi as never)).not.toThrow();
     expect(pi.on).not.toHaveBeenCalled();
+    expect(pi.registerCommand).not.toHaveBeenCalled();
+  });
+
+  it("registers the preserved-worktree command", () => {
+    const { pi } = startWithService();
+
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "subagents-worktrees",
+      expect.any(Object),
+    );
   });
 
   it("unregisters the provider on session_shutdown", () => {

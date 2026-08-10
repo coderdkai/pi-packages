@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanupWorktree,
   createWorktree,
+  discardWorktree,
   pruneWorktrees,
   type WorktreeCleanupResult,
 } from "#src/worktree";
@@ -310,6 +311,23 @@ describe("worktree", () => {
         .trim();
       // "pi-agent: " prefix (10 chars) + 200 chars of x = 210 total max
       expect(log.length).toBeLessThanOrEqual(220); // some slack for hash prefix
+    });
+  });
+
+  describe("discardWorktree", () => {
+    it("removes a worktree along with its uncommitted work", () => {
+      const wt = createWorktree(repoDir, "discard-1")!;
+      writeFileSync(join(wt.path, "unwanted.txt"), "abandoned work");
+
+      discardWorktree(repoDir, wt.path);
+
+      expect(existsSync(wt.path)).toBe(false);
+    });
+
+    it("reports failure instead of swallowing it", () => {
+      expect(() =>
+        discardWorktree(repoDir, join(tmpdir(), "pi-agent-never-registered")),
+      ).toThrow();
     });
   });
 
