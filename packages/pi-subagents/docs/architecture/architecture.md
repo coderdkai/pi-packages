@@ -356,7 +356,8 @@ src/
 │   ├── glyphs.ts                   semantic display-glyph vocabulary (monospace-coverage constraint, #669)
 │   ├── subagents-settings.ts       /subagents:settings command handler
 │   ├── session-navigation.ts       pure session-selection and transcript-source logic
-│   └── session-navigator.ts        /subagents:sessions command handler
+│   ├── session-navigator.ts        /subagents:sessions command handler
+│   └── transcript-content.ts       transcript rows: per-message component blocks, width-cached (settles incrementally against Pi's state-before-listeners ordering, #689)
 │
 └── handlers/                       event handlers
     ├── index.ts                    barrel re-export
@@ -658,7 +659,7 @@ That method — testability friction as a boundary probe, with its limits — is
 | Metric                     | Value                                                                   |
 | -------------------------- | ----------------------------------------------------------------------- |
 | Health score               | 78/100 (B), end of Phase 21                                             |
-| Total LOC                  | 7,432 (58 files)                                                        |
+| Total LOC                  | 8,025 (59 files)                                                        |
 | Dead code                  | 0 files, 0 exports                                                      |
 | Maintainability index      | 91.0 (good)                                                             |
 | Avg cyclomatic complexity  | 1.3                                                                     |
