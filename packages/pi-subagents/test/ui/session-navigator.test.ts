@@ -81,21 +81,6 @@ describe("TranscriptOverlay", () => {
     expect(tui.requestRender).not.toHaveBeenCalled();
   });
 
-  it("renders a tool call through Pi's tool-execution component", () => {
-    const messages = [
-      {
-        role: "assistant",
-        content: [{ type: "toolCall", id: "tc-1", name: "read", arguments: { path: "/x.ts" } }],
-        stopReason: "toolUse",
-      },
-      { role: "toolResult", toolCallId: "tc-1", toolName: "read", content: [{ type: "text", text: "file body" }], isError: false },
-    ] as unknown as SessionMessage[];
-    const out = makeOverlay({ source: fakeSource({ getMessages: () => messages }) })
-      .render(80)
-      .join("\n");
-    expect(out).toContain("read");
-  });
-
   it("appends the streaming-activity indicator while running", () => {
     const source = fakeSource({
       streaming: () => ({ activeTools: new Map([["k", "read"]]), responseText: "" }),
@@ -138,7 +123,7 @@ describe("TranscriptOverlay", () => {
     });
   });
 
-  it("rebuilds the component tree when the source changes", () => {
+  it("refreshes its content when the source changes", () => {
     let messages = [{ role: "user", content: "first" }] as unknown as SessionMessage[];
     let captured: (() => void) | undefined;
     const source = fakeSource({

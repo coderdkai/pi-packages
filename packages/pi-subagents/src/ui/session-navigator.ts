@@ -15,32 +15,19 @@
  * snapshot (`fileSnapshotSource`) swaps in without touching the renderer or the overlay.
  */
 
-import {
-  AssistantMessageComponent,
-  BashExecutionComponent,
-  BranchSummaryMessageComponent,
-  CompactionSummaryMessageComponent,
-  getMarkdownTheme,
-  parseSkillBlock,
-  SkillInvocationMessageComponent,
-  ToolExecutionComponent,
-  UserMessageComponent,
-} from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
-  Container,
   type MarkdownTheme,
   matchesKey,
-  Spacer,
   type TUI,
   truncateToWidth,
   visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { AgentConfigLookup } from "#src/config/agent-types";
-import type { SessionMessage } from "#src/types";
-import { describeActivity, type Theme } from "#src/ui/display";
-import { GLYPHS } from "#src/ui/glyphs";
+import type { Theme } from "#src/ui/display";
 import { fileSnapshotSource, listNavigableAgents, liveSource, type NavigableSubagent, type TranscriptSource } from "#src/ui/session-navigation";
+import { TranscriptContent } from "#src/ui/transcript-content";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -135,11 +122,9 @@ export class SessionNavigatorHandler {
 /**
  * Read-only scrollable transcript overlay.
  *
- * Caches a `Container` of Pi's per-entry components and rebuilds it only when the
- * source changes (live agents) — each paint reuses the cached tree, so markdown
- * highlighting does not re-run per frame. This class owns scroll state, chrome,
- * and the running-agent streaming indicator; the component mapping lives in
- * `buildTranscriptComponents`.
+ * Owns scroll state, chrome, and key handling; the rows it paints come from a
+ * `TranscriptContent` collaborator, which holds the transcript's components and
+ * refreshes them when the source changes (live agents).
  */
 export class TranscriptOverlay implements Component {
   private scrollOffset = 0;
@@ -149,25 +134,19 @@ export class TranscriptOverlay implements Component {
 
   private readonly tui: TUI;
   private readonly theme: Theme;
-  private readonly source: TranscriptSource;
   private readonly done: (result: undefined) => void;
-  private readonly cwd: string;
-  private readonly markdownTheme: MarkdownTheme;
-  private content: Container;
+  private readonly content: TranscriptContent;
   /** Inner width the compositor last rendered at; input must use the same layout. */
   private renderedInnerWidth: number | undefined;
 
   constructor({ tui, theme, source, done, cwd, markdownTheme }: TranscriptOverlayOptions) {
     this.tui = tui;
     this.theme = theme;
-    this.source = source;
     this.done = done;
-    this.cwd = cwd;
-    this.markdownTheme = markdownTheme;
-    this.content = this.rebuild();
+    this.content = new TranscriptContent({ tui, cwd, markdownTheme, source });
     this.unsubscribe = source.subscribe(() => {
       if (this.closed) return;
-      this.content = this.rebuild();
+      this.content.apply();
       this.tui.requestRender();
     });
   }
@@ -179,7 +158,7 @@ export class TranscriptOverlay implements Component {
       return;
     }
 
-    const totalLines = this.buildContentLines(this.inputWidth()).length;
+    const totalLines = this.content.lines(this.inputWidth()).length;
     const viewportHeight = this.viewportHeight();
     const maxScroll = Math.max(0, totalLines - viewportHeight);
 
@@ -222,7 +201,7 @@ export class TranscriptOverlay implements Component {
     lines.push(row(th.bold("Subagent session")));
     lines.push(hrMid);
 
-    const contentLines = this.buildContentLines(innerW);
+    const contentLines = this.content.lines(innerW);
     const viewportHeight = this.viewportHeight();
     const maxScroll = Math.max(0, contentLines.length - viewportHeight);
     if (this.autoScroll) this.scrollOffset = maxScroll;
@@ -275,145 +254,4 @@ export class TranscriptOverlay implements Component {
     const maxRows = Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100);
     return Math.max(MIN_VIEWPORT, maxRows - CHROME_LINES);
   }
-
-  private buildContentLines(innerW: number): string[] {
-    if (innerW <= 0) return [];
-    const lines = this.content.render(innerW);
-    const streaming = this.source.streaming();
-    if (streaming) {
-      lines.push(
-        "",
-        `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`,
-      );
-    }
-    return lines.map((l) => truncateToWidth(l, innerW));
-  }
-
-  private rebuild(): Container {
-    return buildTranscriptComponents(this.source.getMessages(), {
-      tui: this.tui,
-      cwd: this.cwd,
-      markdownTheme: this.markdownTheme,
-      source: this.source,
-    });
-  }
-}
-
-/** Dependencies the per-entry component tree needs from the SDK/TUI environment. */
-interface TranscriptRenderOptions {
-  tui: TUI;
-  cwd: string;
-  markdownTheme: MarkdownTheme;
-  source: TranscriptSource;
-}
-
-/**
- * Build a `Container` of Pi's per-entry components from a message snapshot,
- * mirroring Pi's own interactive-mode `renderSessionContext` mapping. Tool
- * results are matched to their tool-call components by id, exactly as Pi does.
- * `custom`-role messages are skipped — rendering them needs the child session's
- * message-renderer registry, which the navigator does not hold.
- */
-function buildTranscriptComponents(
-  messages: readonly SessionMessage[],
-  opts: TranscriptRenderOptions,
-): Container {
-  const container = new Container();
-  const pendingTools = new Map<string, ToolExecutionComponent>();
-  for (const message of messages) {
-    addMessageComponents(container, message, pendingTools, opts);
-  }
-  return container;
-}
-
-function addMessageComponents(
-  container: Container,
-  message: SessionMessage,
-  pendingTools: Map<string, ToolExecutionComponent>,
-  opts: TranscriptRenderOptions,
-): void {
-  switch (message.role) {
-    case "assistant": {
-      container.addChild(new AssistantMessageComponent(message, false, opts.markdownTheme));
-      for (const content of message.content) {
-        if (content.type !== "toolCall") continue;
-        const tool = new ToolExecutionComponent(
-          content.name,
-          content.id,
-          content.arguments,
-          { showImages: false },
-          opts.source.getToolDefinition(content.name),
-          opts.tui,
-          opts.cwd,
-        );
-        tool.setExpanded(true);
-        container.addChild(tool);
-        pendingTools.set(content.id, tool);
-      }
-      break;
-    }
-    case "toolResult": {
-      pendingTools.get(message.toolCallId)?.updateResult(message);
-      pendingTools.delete(message.toolCallId);
-      break;
-    }
-    case "user": {
-      addUserComponents(container, message.content, opts.markdownTheme);
-      break;
-    }
-    case "bashExecution": {
-      const bash = new BashExecutionComponent(message.command, opts.tui, message.excludeFromContext);
-      if (message.output) bash.appendOutput(message.output);
-      bash.setComplete(message.exitCode, message.cancelled, undefined, message.fullOutputPath);
-      container.addChild(bash);
-      break;
-    }
-    case "compactionSummary": {
-      container.addChild(new Spacer(1));
-      const summary = new CompactionSummaryMessageComponent(message, opts.markdownTheme);
-      summary.setExpanded(true);
-      container.addChild(summary);
-      break;
-    }
-    case "branchSummary": {
-      container.addChild(new Spacer(1));
-      const summary = new BranchSummaryMessageComponent(message, opts.markdownTheme);
-      summary.setExpanded(true);
-      container.addChild(summary);
-      break;
-    }
-  }
-}
-
-/** Render a user message (skill block + text) into the container, mirroring Pi. */
-function addUserComponents(
-  container: Container,
-  content: string | readonly { type: string; text?: string }[],
-  markdownTheme: MarkdownTheme,
-): void {
-  const text = userMessageText(content);
-  if (!text) return;
-  if (container.children.length > 0) container.addChild(new Spacer(1));
-
-  const skillBlock = parseSkillBlock(text);
-  if (!skillBlock) {
-    container.addChild(new UserMessageComponent(text, markdownTheme));
-    return;
-  }
-  const skill = new SkillInvocationMessageComponent(skillBlock, markdownTheme);
-  skill.setExpanded(true);
-  container.addChild(skill);
-  if (skillBlock.userMessage) {
-    container.addChild(new Spacer(1));
-    container.addChild(new UserMessageComponent(skillBlock.userMessage, markdownTheme));
-  }
-}
-
-/** Concatenate the text blocks of a user message's content (mirrors Pi). */
-function userMessageText(content: string | readonly { type: string; text?: string }[]): string {
-  if (typeof content === "string") return content;
-  return content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text ?? "")
-    .join("");
 }
