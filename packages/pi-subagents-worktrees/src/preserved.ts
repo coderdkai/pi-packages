@@ -15,6 +15,9 @@ import type { LiveWorktrees } from "#src/active-worktrees";
 import { debugLog } from "#src/debug";
 import { AGENT_WORKTREE_PREFIX, listWorktreePaths } from "#src/worktree";
 
+/** How many paths the notice spells out before summarizing the rest. */
+const NOTICE_PATH_LIMIT = 5;
+
 /** What separates a preserved rescue worktree from a live or unrelated one. */
 interface Scope {
   /** Resolved temp root that rescue worktrees live under. */
@@ -48,6 +51,25 @@ export function findPreservedWorktrees(
     live,
   };
   return registered.filter((path) => isPreserved(path, scope));
+}
+
+/** The startup warning naming preserved worktrees and what to do about them. */
+export function formatPreservedNotice(paths: readonly string[]): string {
+  const subject =
+    paths.length === 1
+      ? "1 rescue worktree from a failed cleanup is"
+      : `${paths.length} rescue worktrees from a failed cleanup are`;
+  const listed = paths
+    .slice(0, NOTICE_PATH_LIMIT)
+    .map((path) => `  ${path}`)
+    .join("\n");
+  const hidden = paths.length - NOTICE_PATH_LIMIT;
+  const tail = hidden > 0 ? `\n  …and ${hidden} more` : "";
+  return (
+    `${subject} still on disk:\n${listed}${tail}\n` +
+    "They hold subagent work that was never merged, and the temp directory is cleared periodically.\n" +
+    "Run /subagents-worktrees to inspect or remove them."
+  );
 }
 
 function isPreserved(path: string, scope: Scope): boolean {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LiveWorktrees } from "#src/active-worktrees";
-import { findPreservedWorktrees } from "#src/preserved";
+import { findPreservedWorktrees, formatPreservedNotice } from "#src/preserved";
 import { createWorktree, pruneWorktrees } from "#src/worktree";
 import { initGitRepo } from "#test/support/git-fixture";
 
@@ -118,5 +118,42 @@ describe("findPreservedWorktrees", () => {
     } finally {
       rmSync(nonRepo, { recursive: true, force: true });
     }
+  });
+});
+
+describe("formatPreservedNotice", () => {
+  it("names the single worktree and points at the command", () => {
+    const notice = formatPreservedNotice(["/tmp/pi-agent-abc123-1f2e9c04"]);
+
+    expect(notice).toBe(
+      "1 rescue worktree from a failed cleanup is still on disk:\n" +
+        "  /tmp/pi-agent-abc123-1f2e9c04\n" +
+        "They hold subagent work that was never merged, and the temp directory is cleared periodically.\n" +
+        "Run /subagents-worktrees to inspect or remove them.",
+    );
+  });
+
+  it("names every worktree when there are several", () => {
+    const notice = formatPreservedNotice([
+      "/tmp/pi-agent-abc123-1f2e9c04",
+      "/tmp/pi-agent-def456-90ab77e1",
+    ]);
+
+    expect(notice).toContain("2 rescue worktrees");
+    expect(notice).toContain("  /tmp/pi-agent-abc123-1f2e9c04");
+    expect(notice).toContain("  /tmp/pi-agent-def456-90ab77e1");
+  });
+
+  it("summarizes the tail of a long list", () => {
+    const paths = Array.from(
+      { length: 7 },
+      (_unused, index) => `/tmp/pi-agent-${index}-1f2e9c04`,
+    );
+
+    const notice = formatPreservedNotice(paths);
+
+    expect(notice).toContain("  /tmp/pi-agent-4-1f2e9c04");
+    expect(notice).not.toContain("  /tmp/pi-agent-5-1f2e9c04");
+    expect(notice).toContain("…and 2 more");
   });
 });
