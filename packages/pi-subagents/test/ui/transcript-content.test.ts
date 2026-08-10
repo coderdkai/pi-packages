@@ -103,6 +103,42 @@ describe("TranscriptContent", () => {
     });
   });
 
+  // The leading-spacer decision is a whole-transcript property that per-message
+  // blocks cannot read off their own container, so it is hoisted onto the
+  // content object. The equivalence test cannot catch a bug here — both of its
+  // sides run this same code — so assert the rows directly.
+  describe("user-message separation", () => {
+    it("does not lead the transcript with a blank separator row", () => {
+      const rows = allRows(contentFrom([userMessage("first question")]));
+
+      expect(rows[0]).not.toBe("");
+    });
+
+    it("costs exactly one extra row when a user message follows other content", () => {
+      const alone = allRows(contentFrom([userMessage("a question")])).length;
+      const assistantOnly = allRows(contentFrom([assistantText("an answer")])).length;
+
+      const together = allRows(contentFrom([assistantText("an answer"), userMessage("a question")])).length;
+
+      expect(together).toBe(assistantOnly + alone + 1);
+    });
+
+    it("still separates a user message that settles in a later batch", () => {
+      const alone = allRows(contentFrom([userMessage("a question")])).length;
+      const history = [assistantText("an answer")];
+      const content = makeContent(fakeSource({ getMessages: () => history }));
+      const assistantOnly = allRows(content).length;
+
+      history.push(userMessage("a question"));
+      content.apply(settled());
+
+      // Compared against the arithmetic, not against a freshly built transcript:
+      // the hoisted flag has to survive the batch boundary, and a fresh build
+      // would carry the same bug on both sides of that comparison.
+      expect(allRows(content).length).toBe(assistantOnly + alone + 1);
+    });
+  });
+
   describe("live tail", () => {
     it("appends the streaming-activity row while the agent is running", () => {
       const source = fakeSource({
@@ -454,6 +490,19 @@ function thinkingAssistant(thinking: string): AgentSessionEvent {
  */
 function settled(): AgentSessionEvent {
   return { type: "message_end" } as AgentSessionEvent;
+}
+
+function userMessage(text: string): SessionMessage {
+  return { role: "user", content: text } as unknown as SessionMessage;
+}
+
+function assistantText(text: string): SessionMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text }],
+    stopReason: "stop",
+    timestamp: 1,
+  } as unknown as SessionMessage;
 }
 
 function toolCallMessage(id: string): SessionMessage {
