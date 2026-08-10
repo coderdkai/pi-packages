@@ -23,7 +23,6 @@ import {
   getMarkdownTheme,
   parseSkillBlock,
   SkillInvocationMessageComponent,
-  type ToolDefinition,
   ToolExecutionComponent,
   UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
@@ -278,7 +277,7 @@ export class TranscriptOverlay implements Component {
       tui: this.tui,
       cwd: this.cwd,
       markdownTheme: this.markdownTheme,
-      getToolDefinition: (name) => this.source.getToolDefinition(name),
+      source: this.source,
     });
   }
 }
@@ -288,7 +287,7 @@ interface TranscriptRenderOptions {
   tui: TUI;
   cwd: string;
   markdownTheme: MarkdownTheme;
-  getToolDefinition: (name: string) => ToolDefinition | undefined;
+  source: TranscriptSource;
 }
 
 /**
@@ -326,7 +325,7 @@ function addMessageComponents(
           content.id,
           content.arguments,
           { showImages: false },
-          opts.getToolDefinition(content.name),
+          opts.source.getToolDefinition(content.name),
           opts.tui,
           opts.cwd,
         );
