@@ -16,6 +16,7 @@ import type {
   WorkspacePrepareContext,
   WorkspaceProvider,
 } from "@gotgenes/pi-subagents";
+import type { ActiveWorktrees } from "#src/active-worktrees";
 import type { WorktreesConfig } from "#src/config";
 import {
   cleanupWorktree,
@@ -28,6 +29,7 @@ class WorktreeWorkspace implements Workspace {
   constructor(
     private readonly repoCwd: string,
     private readonly info: WorktreeInfo,
+    private readonly live: ActiveWorktrees,
   ) {}
 
   /** The worktree directory — already exists when this workspace is handed back. */
@@ -43,6 +45,9 @@ class WorktreeWorkspace implements Workspace {
       this.info,
       outcome.description,
     );
+    // No child is running here any more — a worktree cleanup left behind is a
+    // preserved one from this point on, and the scan may report it.
+    this.live.remove(this.info.path);
     switch (result.outcome) {
       case "clean":
         return undefined;
@@ -64,7 +69,10 @@ class WorktreeWorkspace implements Workspace {
 
 /** Registers a git worktree per opted-in agent type; runs others in the parent cwd. */
 export class WorktreeWorkspaceProvider implements WorkspaceProvider {
-  constructor(private readonly config: WorktreesConfig) {}
+  constructor(
+    private readonly config: WorktreesConfig,
+    private readonly live: ActiveWorktrees,
+  ) {}
 
   // eslint-disable-next-line @typescript-eslint/require-await -- the seam contract is async; worktree creation is synchronous, but staying async ensures failures reject the returned promise rather than throwing synchronously at the call site
   async prepare(ctx: WorkspacePrepareContext): Promise<Workspace | undefined> {
@@ -78,6 +86,7 @@ export class WorktreeWorkspaceProvider implements WorkspaceProvider {
           "Initialize git and commit at least once, or remove the agent from worktreeAgents.",
       );
     }
-    return new WorktreeWorkspace(ctx.baseCwd, info);
+    this.live.add(info.path);
+    return new WorktreeWorkspace(ctx.baseCwd, info, this.live);
   }
 }

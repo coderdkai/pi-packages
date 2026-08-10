@@ -17,6 +17,7 @@ import {
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
 import { getSubagentsService } from "@gotgenes/pi-subagents";
+import { ActiveWorktrees } from "#src/active-worktrees";
 import { loadWorktreesConfig } from "#src/config";
 import { debugLog } from "#src/debug";
 import { WorktreeWorkspaceProvider } from "#src/workspace-provider";
@@ -37,8 +38,9 @@ export default function piSubagentsWorktrees(pi: ExtensionAPI): void {
     return;
   }
 
+  const live = new ActiveWorktrees();
   const unregister = service.registerWorkspaceProvider(
-    new WorktreeWorkspaceProvider(config),
+    new WorktreeWorkspaceProvider(config, live),
   );
   pi.on("session_shutdown", () => unregister());
 }
