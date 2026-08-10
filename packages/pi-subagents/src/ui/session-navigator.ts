@@ -48,6 +48,8 @@ import { fileSnapshotSource, listNavigableAgents, liveSource, type NavigableSuba
 const CHROME_LINES = 6;
 const MIN_VIEWPORT = 3;
 const VIEWPORT_HEIGHT_PCT = 70;
+/** Overlay width as a share of the terminal, as handed to Pi's overlay compositor. */
+const OVERLAY_WIDTH_PCT = 90;
 
 /** Component factory shape Pi's `ui.custom` invokes to mount an overlay. */
 export type OverlayComponentFactory<R> = (
@@ -120,7 +122,11 @@ export class SessionNavigatorHandler {
         new TranscriptOverlay({ tui, theme, source, done, cwd, markdownTheme }),
       {
         overlay: true,
-        overlayOptions: { anchor: "center", width: "90%", maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
+        overlayOptions: {
+          anchor: "center",
+          width: `${OVERLAY_WIDTH_PCT}%`,
+          maxHeight: `${VIEWPORT_HEIGHT_PCT}%`,
+        },
       },
     );
   }
@@ -148,6 +154,8 @@ export class TranscriptOverlay implements Component {
   private readonly cwd: string;
   private readonly markdownTheme: MarkdownTheme;
   private content: Container;
+  /** Inner width the compositor last rendered at; input must use the same layout. */
+  private renderedInnerWidth: number | undefined;
 
   constructor({ tui, theme, source, done, cwd, markdownTheme }: TranscriptOverlayOptions) {
     this.tui = tui;
@@ -171,7 +179,7 @@ export class TranscriptOverlay implements Component {
       return;
     }
 
-    const totalLines = this.buildContentLines(this.innerWidth()).length;
+    const totalLines = this.buildContentLines(this.inputWidth()).length;
     const viewportHeight = this.viewportHeight();
     const maxScroll = Math.max(0, totalLines - viewportHeight);
 
@@ -200,6 +208,7 @@ export class TranscriptOverlay implements Component {
     if (width < 6) return [];
     const th = this.theme;
     const innerW = width - 4;
+    this.renderedInnerWidth = innerW;
     const lines: string[] = [];
 
     const pad = (s: string, len: number): string => s + " ".repeat(Math.max(0, len - visibleWidth(s)));
@@ -250,8 +259,16 @@ export class TranscriptOverlay implements Component {
 
   // ---- Private ----
 
-  private innerWidth(): number {
-    return Math.max(0, this.tui.terminal.columns - 4);
+  /**
+   * The width `handleInput` must lay out at: the one the compositor actually
+   * supplied, so scroll bounds match the layout on screen. Before the first
+   * paint there is none, so fall back to the overlay's share of the terminal.
+   */
+  private inputWidth(): number {
+    return (
+      this.renderedInnerWidth ??
+      Math.max(0, Math.floor((this.tui.terminal.columns * OVERLAY_WIDTH_PCT) / 100) - 4)
+    );
   }
 
   private viewportHeight(): number {

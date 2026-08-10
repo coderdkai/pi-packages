@@ -104,6 +104,40 @@ describe("TranscriptOverlay", () => {
     expect(out).toContain("◍");
   });
 
+  describe("scroll bounds", () => {
+    // A 200-column terminal renders the overlay at 90% (180 columns, inner 176)
+    // while the full terminal would be inner 196. Text sized between the two
+    // wraps to two rows at the overlay width and one row at the terminal width,
+    // so a layout computed at the wrong width yields the wrong maxScroll.
+    const OVERLAY_WIDTH = 180;
+    const wrappingMessages = Array.from({ length: 30 }, (_, i) => ({
+      role: "user",
+      content: `${String(i).padStart(3, "0")} ${"wrap".repeat(46)}`,
+    })) as unknown as SessionMessage[];
+
+    function overlayAtBottom() {
+      const overlay = makeOverlay({
+        tui: mockTui(40, 200),
+        source: fakeSource({ getMessages: () => wrappingMessages }),
+      });
+      const atBottom = overlay.render(OVERLAY_WIDTH);
+      return { overlay, atBottom };
+    }
+
+    it("scrolls up from the bottom on a terminal wider than the overlay", () => {
+      const { overlay, atBottom } = overlayAtBottom();
+      overlay.handleInput("\x1b[A");
+      expect(overlay.render(OVERLAY_WIDTH)).not.toEqual(atBottom);
+    });
+
+    it("returns to the bottom when scrolling back down", () => {
+      const { overlay, atBottom } = overlayAtBottom();
+      overlay.handleInput("\x1b[A");
+      overlay.handleInput("\x1b[B");
+      expect(overlay.render(OVERLAY_WIDTH)).toEqual(atBottom);
+    });
+  });
+
   it("rebuilds the component tree when the source changes", () => {
     let messages = [{ role: "user", content: "first" }] as unknown as SessionMessage[];
     let captured: (() => void) | undefined;
