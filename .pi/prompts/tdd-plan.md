@@ -62,6 +62,8 @@ Before writing any code, confirm the starting state is clean:
 2. `pnpm run lint` **from the repo root** — must pass.
    Package-scoped lint (`pnpm --filter …`) silently passes on `MD051` cross-file fragment links and cross-package issues that CI's root lint catches.
 3. `pnpm run test` — must pass.
+4. `pnpm fallow dead-code` **from the repo root** — must pass.
+   CI gates it on every `main` push, so a finding at the end is only actionable if you know whether the baseline was clean (Refs #714).
 
 If a check fails on an issue your change will not touch (e.g. a pre-existing lint warning in an unrelated doc), fix it as a separate cleanup commit (`docs:`, `style:`, or `fix:` as appropriate) to establish a green baseline, then proceed.
 If the failure is non-trivial, or you cannot quickly establish why it is failing, stop and report to the user.

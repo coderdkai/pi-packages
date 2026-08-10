@@ -89,3 +89,4 @@ pnpm fallow dead-code        # verify
 6. Class-member liveness is keyed off `implements` clauses: a member reached only through a structural type the class does not explicitly `implements` reads as dead once the last `implements` is removed.
    Prefer re-declaring the genuine contract (`implements ThatInterface`) over a suppression.
    If the consumer is wired via an object-literal property (which fallow cannot trace), prefer moving the read into a traced closure body at the composition root (e.g. `getX: () => owner.member`) over a suppression; suppress only when neither is practical.
+   A test helper that returns the instance inside an object literal (`return { provider, live }`) hides its call sites the same way — return the instance directly and pass collaborators in as parameters.
