@@ -28,3 +28,20 @@ export function initGitRepo(prefix: string): string {
   execFileSync("git", ["commit", "-m", "initial"], { cwd: dir, stdio: "pipe" });
   return dir;
 }
+
+/**
+ * Lock a worktree's git index so the next `git add` fails.
+ *
+ * This drives cleanup into its failure path *after* `git status` has already
+ * reported changes, and before anything reaches the object database — the
+ * genuinely unrecoverable case, where the work exists only in the worktree.
+ */
+export function lockGitIndex(worktreePath: string): void {
+  const gitDir = execFileSync("git", ["rev-parse", "--absolute-git-dir"], {
+    cwd: worktreePath,
+    stdio: "pipe",
+  })
+    .toString()
+    .trim();
+  writeFileSync(join(gitDir, "index.lock"), "");
+}

@@ -29,7 +29,9 @@ export type WorktreeCleanupResult =
   /** Nothing to save; the worktree was removed. */
   | { outcome: "clean" }
   /** Changes were committed to `branch`; the worktree was removed. */
-  | { outcome: "committed"; branch: string };
+  | { outcome: "committed"; branch: string }
+  /** Cleanup failed partway; the worktree was left at `path` for recovery. */
+  | { outcome: "failed"; path: string; error: string };
 
 /**
  * Create a temporary git worktree for an agent.
@@ -107,13 +109,15 @@ export function cleanupWorktree(
 
     return { outcome: "committed", branch };
   } catch (err) {
+    // Never remove a worktree whose fate is uncertain: it can hold work that
+    // was never written to the object database, which no `git fsck` recovers.
+    // Leave it on disk and report where, so the caller can surface it.
     debugLog("cleanupWorktree", err);
-    try {
-      removeWorktree(cwd, worktree.path);
-    } catch (removeErr) {
-      debugLog("removeWorktree on cleanup error", removeErr);
-    }
-    return { outcome: "clean" };
+    return {
+      outcome: "failed",
+      path: worktree.path,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

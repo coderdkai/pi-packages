@@ -50,6 +50,10 @@ class WorktreeWorkspace implements Workspace {
         return {
           resultAddendum: `\n\n---\nChanges saved to branch \`${result.branch}\`. Merge with: \`git merge ${result.branch}\``,
         };
+      case "failed":
+        return {
+          resultAddendum: `\n\n---\nWorktree cleanup failed; the worktree was left in place at \`${result.path}\` for manual recovery: ${result.error}`,
+        };
     }
   }
 }

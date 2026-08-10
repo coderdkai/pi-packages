@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +15,7 @@ import {
   pruneWorktrees,
   type WorktreeCleanupResult,
 } from "#src/worktree";
-import { initGitRepo } from "#test/support/git-fixture";
+import { initGitRepo, lockGitIndex } from "#test/support/git-fixture";
 
 /** Narrow a cleanup result to the expected outcome, failing the test otherwise. */
 function assertOutcome<T extends WorktreeCleanupResult["outcome"]>(
@@ -226,6 +232,22 @@ describe("worktree", () => {
 
       const result = cleanupWorktree(repoDir, wt, "already gone");
       expect(result).toEqual({ outcome: "clean" });
+    });
+
+    it("preserves the worktree and reports the error when cleanup fails", () => {
+      const wt = worktreeFor("locked-1");
+      writeFileSync(join(wt.path, "precious.txt"), "agent work");
+      lockGitIndex(wt.path);
+
+      const result = cleanupWorktree(repoDir, wt, "work that must survive");
+
+      assertOutcome(result, "failed");
+      expect(result.path).toBe(wt.path);
+      expect(result.error).toBeTruthy();
+      // The point of preserving: the work is still there to recover.
+      expect(readFileSync(join(wt.path, "precious.txt"), "utf8")).toBe(
+        "agent work",
+      );
     });
 
     it("truncates commit message at 200 chars", () => {

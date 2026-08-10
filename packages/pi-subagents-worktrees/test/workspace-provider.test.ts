@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorktreeWorkspaceProvider } from "#src/workspace-provider";
-import { initGitRepo } from "#test/support/git-fixture";
+import { initGitRepo, lockGitIndex } from "#test/support/git-fixture";
 
 /** Build a prepare context with sensible defaults. */
 function ctx(overrides: {
@@ -110,5 +110,33 @@ describe("WorktreeWorkspaceProvider", () => {
       cwd: repoDir,
     }).toString();
     expect(branches).toContain("pi-agent-abc123");
+  });
+
+  it("dispose reports the preserved worktree when cleanup fails", async () => {
+    const provider = new WorktreeWorkspaceProvider({
+      worktreeAgents: ["Explore"],
+    });
+    const workspace = await provider.prepare(
+      ctx({ agentType: "Explore", baseCwd: repoDir, agentId: "fail-1" }),
+    );
+    const wtPath = workspace!.cwd;
+    writeFileSync(join(wtPath, "agent-output.txt"), "agent output");
+    lockGitIndex(wtPath);
+
+    const result = workspace!.dispose({
+      status: "completed",
+      description: "did work",
+    });
+
+    expect(result?.resultAddendum).toContain("left in place");
+    expect(result?.resultAddendum).toContain(wtPath);
+    expect(existsSync(wtPath)).toBe(true);
+
+    // This test deliberately leaves a worktree behind; remove it here since
+    // the shared afterEach only prunes administrative entries.
+    execFileSync("git", ["worktree", "remove", "--force", wtPath], {
+      cwd: repoDir,
+      stdio: "pipe",
+    });
   });
 });
