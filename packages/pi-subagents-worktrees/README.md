@@ -50,6 +50,18 @@ An agent type not in `worktreeAgents` runs in the parent working directory, exac
 - If cleanup fails for any other reason, the worktree is **left in place** rather than removed, and the child's result gains a note: `Worktree cleanup failed; the worktree was left in place at \`<path>\` for manual recovery: <error>`.
   Nothing is deleted while its state is uncertain, so the work stays recoverable.
 - If worktree creation fails for an opted-in agent (not a git repo, no commits yet, or `git worktree add` fails), the child run **fails** with an explanatory error rather than silently running unisolated.
+- At the start of every session with a UI, any rescue worktrees still on disk are named in a warning, so a preserved worktree is not forgotten once the child's result scrolls out of view.
+
+## Recovering preserved worktrees
+
+A preserved worktree is a plain git worktree with the agent's work still in it.
+Inspect it with `git -C <path> status`, and recover the work however you normally would — commit it on a branch, or copy the files out.
+
+Run `/subagents-worktrees` at any time to list the preserved worktrees for the current repository.
+Selecting one offers to remove it, and removal happens only after you confirm — nothing here is ever deleted automatically, because a failed cleanup is exactly the case where the content is not safe to discard on the extension's judgment.
+
+A worktree is listed when it is registered with the repository, named with this package's `pi-agent-` prefix, still on disk, and not currently in use by a child of this session.
+A worktree belonging to a **different** Pi process running against the same repository cannot be told apart from an abandoned one, so it is listed too — check the path before removing anything.
 
 ## Migrating from `isolation: "worktree"`
 
