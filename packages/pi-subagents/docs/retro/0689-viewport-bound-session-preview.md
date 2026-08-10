@@ -40,6 +40,51 @@ Both Open Questions are deliberately unfiled: the streaming-activity row's owner
 Note for the implementation session: the two performance pins (`vi.spyOn(Container.prototype, "render")` call counts, and a zero `getMessages` call count across paints and scrolls) are deliberately white-box.
 They are the only assertions that can catch a silent return to per-frame rebuilding, and they should stay isolated in their own `describe`.
 
+## Stage: Implementation — TDD (2026-08-10T22:20:21Z)
+
+### Session summary
+
+Landed all six planned TDD steps plus two Tidy-First preparatory commits and one follow-up test commit — nine commits in all.
+`/subagents:sessions` now scrolls at the width it renders at, and its paint, scroll, settle, and streaming-delta paths are all O(viewport) rather than O(total transcript).
+The `pi-subagents` suite went from 1,135 to 1,175 tests (+40), with a new `TranscriptContent` collaborator (`src/ui/transcript-content.ts`) carrying its own 34-test suite.
+
+### Observations
+
+The Tidy-First assessor earned its keep.
+It proposed two small preparatory commits — extracting `mockTui`/`fakeSource` into `test/helpers/transcript-fixtures.ts`, and reshaping `TranscriptRenderOptions` to carry `source: TranscriptSource` instead of a projected `getToolDefinition` callback.
+The second in particular turned step 2's extraction into a literal cut-and-paste rather than a move-plus-reshape.
+It also corrected the dispatch brief: I had claimed four test helpers would be shared, and it determined only two actually would be, because `TranscriptContentOptions` has no `theme` field.
+
+Measurement caught two tests that were green for the wrong reason and would otherwise have shipped as decoration.
+The first: the incremental-settling render-count pins called a `fullRebuildRenderCount` helper that installed a `vi.spyOn` while an outer spy on the same method was still active, so the baseline double-counted and `toBeLessThan` could never discriminate.
+Measuring the baseline *before* installing the spy made both tests genuinely red (22 vs 22, 24 vs 24) and then genuinely green.
+The second was surfaced by the pre-completion reviewer and is the more interesting one — see below.
+
+The reviewer's one substantive WARN was correct and worth acting on.
+The hoisted `hasVisibleContent` flag (the leading-spacer decision that used to read `container.children.length`) was, per the plan, supposedly pinned by the incremental-vs-fresh equivalence test.
+It was not: both sides of that comparison run the same `consumeMessage` path, so the test pins self-consistency, not correctness.
+The fix was an arithmetic assertion instead — a user message following other content costs exactly one extra row — asserted both in a single build and across a batch boundary.
+Both were then verified non-vacuous by forcing the flag to `false` and confirming both fail.
+The lesson generalizes: an A-vs-B equivalence test where A and B share the code under test proves nothing about that code.
+
+Plan deviations, all minor:
+
+- The plan's baseline table predicted 2.8 ms for streaming deltas "after step 3".
+  That figure came from PR [#690]'s commit 1, which bundled the live-assistant split that our step 4 does separately, so deltas correctly stayed at ~45 ms after step 3 and dropped to 0.45 ms after step 4.
+  Final measurements otherwise matched the plan's prediction closely — scroll 0.50 ms (predicted 0.46), settle 0.79 ms (0.81), delta 0.45 ms (0.42), against a `main` baseline of 90.5 / 44.7 / 44.0 ms.
+- Two files beyond the plan's Module-Level Changes table: `test/helpers/transcript-fixtures.ts` and its test, both from the Tidy-First step.
+- Step 2 exposed a transitional `lines(width)` accessor rather than the plan's final `lineCount`/`slice` pair, so the pure-move step neither regressed performance nor smuggled in the caching that step 3 was supposed to introduce.
+  Step 3 replaced it.
+- The plan's Test Impact Analysis said the skill-block spacing cases would "move" from the overlay suite; the reviewer noted no such test existed there, so it is new rather than relocated.
+
+Two simplifications over PR [#690] survived implementation, both grounded in the planning session's read of Pi's source.
+The `isLiveMessage`/timestamp-matching guard is absent, because a partial assistant message is never in `state.messages`.
+And `message_end` clears the in-flight component unconditionally rather than matching it, because an assistant message always settles before its tool calls execute, so nothing is ever in flight at another role's `message_end`.
+
+Pre-completion reviewer: WARN (no FAILs).
+The one substantive finding — the `hasVisibleContent` equivalence-test gap — was fixed in `52e535b8` before shipping.
+The reviewer's other finding was a historical-accuracy nit in the plan document itself, left as-is.
+
 [#661]: https://github.com/gotgenes/pi-packages/issues/661
 [#662]: https://github.com/gotgenes/pi-packages/issues/662
 [#670]: https://github.com/gotgenes/pi-packages/issues/670
