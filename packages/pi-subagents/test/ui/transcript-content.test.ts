@@ -1,7 +1,7 @@
 import { getMarkdownTheme, initTheme } from "@earendil-works/pi-coding-agent";
 import { Container, visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SessionMessage } from "#src/types";
+import type { AgentSessionEvent, SessionMessage } from "#src/types";
 import type { TranscriptSource } from "#src/ui/session-navigation";
 import { TranscriptContent } from "#src/ui/transcript-content";
 import { fakeSource, mockTui } from "#test/helpers/transcript-fixtures";
@@ -130,6 +130,101 @@ describe("TranscriptContent", () => {
     });
   });
 
+  describe("in-flight message", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("renders streaming text before it settles into the history", () => {
+      const content = contentFrom(manyMessages(2));
+
+      content.apply(partialAssistant("partial answer so far"));
+
+      expect(rendered(content)).toContain("partial answer so far");
+    });
+
+    it("renders streaming thinking traces", () => {
+      const content = contentFrom(manyMessages(2));
+
+      content.apply(thinkingAssistant("weighing the options"));
+
+      expect(rendered(content)).toContain("weighing the options");
+    });
+
+    it("replaces the in-flight rows on each delta rather than appending them", () => {
+      const content = contentFrom(manyMessages(2));
+
+      content.apply(partialAssistant("first chunk"));
+      content.apply(partialAssistant("first chunk and second chunk"));
+      const out = rendered(content);
+
+      expect(out).toContain("first chunk and second chunk");
+      expect(out.match(/first chunk/g)).toHaveLength(1);
+    });
+
+    it("does not re-read the message history on a streaming delta", () => {
+      const messages = manyMessages(5);
+      const getMessages = vi.fn(() => messages);
+      const content = makeContent(fakeSource({ getMessages }));
+      allRows(content);
+      getMessages.mockClear();
+
+      content.apply(partialAssistant("streaming"));
+      allRows(content);
+
+      expect(getMessages).not.toHaveBeenCalled();
+    });
+
+    it("re-renders far less than a full rebuild on a streaming delta", () => {
+      const content = contentFrom(manyMessages(20));
+      allRows(content);
+      const render = vi.spyOn(Container.prototype, "render");
+      content.apply();
+      allRows(content);
+      const fullRebuild = render.mock.calls.length;
+      render.mockClear();
+
+      content.apply(partialAssistant("streaming"));
+      allRows(content);
+
+      expect(render.mock.calls.length).toBeLessThan(fullRebuild);
+    });
+
+    it("drops the in-flight rows once the message settles", () => {
+      let messages = manyMessages(2);
+      const content = makeContent(fakeSource({ getMessages: () => messages }));
+      content.apply(partialAssistant("settling answer"));
+
+      messages = [
+        ...messages,
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "settling answer" }],
+          stopReason: "stop",
+          timestamp: 1,
+        } as unknown as SessionMessage,
+      ];
+      content.apply({ type: "message_end" } as AgentSessionEvent);
+      const out = rendered(content);
+
+      expect(out).toContain("settling answer");
+      expect(out.match(/settling answer/g)).toHaveLength(1);
+    });
+
+    it("keeps the activity row below the in-flight message", () => {
+      const source = fakeSource({
+        getMessages: () => manyMessages(2),
+        streaming: () => ({ activeTools: new Map(), responseText: "partial answer" }),
+      });
+      const content = makeContent(source);
+      content.apply(partialAssistant("partial answer"));
+
+      const rows = allRows(content);
+
+      expect(rows.findIndex((row) => row.includes("partial answer"))).toBeLessThan(
+        rows.findIndex((row) => row.includes("◍")),
+      );
+    });
+  });
+
   describe("width handling", () => {
     it("returns no rows at a non-positive width", () => {
       expect(makeContent().lineCount(0)).toBe(0);
@@ -233,3 +328,19 @@ describe("TranscriptContent", () => {
     });
   });
 });
+
+/** A `message_update` carrying an in-flight assistant message with text. */
+function partialAssistant(text: string): AgentSessionEvent {
+  return {
+    type: "message_update",
+    message: { role: "assistant", content: [{ type: "text", text }], stopReason: "stop", timestamp: 1 },
+  } as unknown as AgentSessionEvent;
+}
+
+/** A `message_start` carrying an in-flight assistant message with a thinking trace. */
+function thinkingAssistant(thinking: string): AgentSessionEvent {
+  return {
+    type: "message_start",
+    message: { role: "assistant", content: [{ type: "thinking", thinking }], stopReason: "stop", timestamp: 1 },
+  } as unknown as AgentSessionEvent;
+}

@@ -144,9 +144,9 @@ export class TranscriptOverlay implements Component {
     this.theme = theme;
     this.done = done;
     this.content = new TranscriptContent({ tui, cwd, markdownTheme, source });
-    this.unsubscribe = source.subscribe(() => {
+    this.unsubscribe = source.subscribe((event) => {
       if (this.closed) return;
-      this.content.apply();
+      this.content.apply(event);
       this.tui.requestRender();
     });
   }

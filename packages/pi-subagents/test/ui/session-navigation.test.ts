@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AgentTypeRegistry } from "#src/config/agent-types";
-import type { SessionMessage } from "#src/types";
+import type { AgentSessionEvent, SessionMessage } from "#src/types";
 import { fileSnapshotSource, listNavigableAgents, liveSource, type NavigableSubagent, type TranscriptSource } from "#src/ui/session-navigation";
 import { makeNavigable } from "#test/helpers/make-navigable";
 
@@ -80,8 +80,11 @@ describe("liveSource", () => {
     const onChange = vi.fn();
     const returned = liveSource(record).subscribe(onChange);
     expect(record.subscribeToUpdates).toHaveBeenCalledOnce();
-    captured?.({ type: "turn_end" });
-    expect(onChange).toHaveBeenCalledOnce();
+    const event = { type: "turn_end" } as AgentSessionEvent;
+    captured?.(event);
+    // The event is forwarded, not merely counted: the consumer routes on its
+    // type to decide whether a streaming delta or a settled message arrived.
+    expect(onChange).toHaveBeenCalledWith(event);
     expect(returned).toBe(unsub);
   });
 

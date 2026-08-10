@@ -70,8 +70,12 @@ export interface StreamingState {
 export interface TranscriptSource {
   /** Current message history. */
   getMessages(): readonly SessionMessage[];
-  /** Subscribe to changes; returns an unsubscribe, or undefined for a static snapshot. */
-  subscribe(onChange: () => void): (() => void) | undefined;
+  /**
+   * Subscribe to changes; returns an unsubscribe, or undefined for a static
+   * snapshot. The session event is forwarded so a consumer can route on it —
+   * a streaming delta and a settled message warrant very different work.
+   */
+  subscribe(onChange: (event?: AgentSessionEvent) => void): (() => void) | undefined;
   /** Running-agent streaming state, or undefined when not streaming. */
   streaming(): StreamingState | undefined;
   /** Resolve a registered tool definition by name, for Pi's tool-execution components. */
@@ -129,7 +133,7 @@ export function fileSnapshotSource(
 export function liveSource(record: NavigableSubagent): TranscriptSource {
   return {
     getMessages: () => record.agentMessages,
-    subscribe: (onChange) => record.subscribeToUpdates(() => onChange()),
+    subscribe: (onChange) => record.subscribeToUpdates(onChange),
     streaming: () =>
       isRunningStatus(record.status)
         ? { activeTools: record.activeTools, responseText: record.responseText }

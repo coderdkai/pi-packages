@@ -22,7 +22,7 @@ import {
   UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
 import { Container, type MarkdownTheme, Spacer, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
-import type { SessionMessage } from "#src/types";
+import type { AgentSessionEvent, SessionMessage } from "#src/types";
 import { describeActivity } from "#src/ui/display";
 import { GLYPHS } from "#src/ui/glyphs";
 import type { TranscriptSource } from "#src/ui/session-navigation";
@@ -45,6 +45,11 @@ export interface TranscriptContentOptions {
  * costs a slice rather than a walk of the whole component tree. The activity
  * row is recomputed per call — it is two rows, and it tracks live state the
  * source updates without a rebuild.
+ *
+ * The message currently being streamed is held as its own component, updated
+ * per delta exactly as Pi's interactive mode does, so a token never touches
+ * settled history. The two provably cannot overlap: the agent core keeps the
+ * in-flight message outside its message array until it settles.
  */
 export class TranscriptContent {
   private readonly options: TranscriptContentOptions;
@@ -53,6 +58,11 @@ export class TranscriptContent {
   private settledWidth: number | undefined;
   /** Settled rows at `settledWidth`, or undefined when the cache is cold. */
   private settledRows: readonly string[] | undefined;
+  /** The message being streamed right now, rendered below settled history. */
+  private inFlight: AssistantMessageComponent | undefined;
+  /** Width `inFlightRows` was rendered at. */
+  private inFlightWidth: number | undefined;
+  private inFlightRows: readonly string[] | undefined;
 
   constructor(options: TranscriptContentOptions) {
     this.options = options;
@@ -62,7 +72,7 @@ export class TranscriptContent {
   /** Total content rows at `width`: settled history plus the live tail. */
   lineCount(width: number): number {
     if (width <= 0) return 0;
-    return this.settled(width).length + this.liveRows(width).length;
+    return this.settled(width).length + this.tail(width).length;
   }
 
   /** Rows `[start, start + count)` at `width`, clamped to what exists. */
@@ -72,22 +82,32 @@ export class TranscriptContent {
     const end = start + count;
     const rows = settled.slice(start, Math.min(end, settled.length));
     if (end > settled.length) {
-      const live = this.liveRows(width);
-      rows.push(...live.slice(Math.max(0, start - settled.length), end - settled.length));
+      const tail = this.tail(width);
+      rows.push(...tail.slice(Math.max(0, start - settled.length), end - settled.length));
     }
     return rows;
   }
 
-  /** Take up the source's current message history. */
-  apply(): void {
-    this.container = this.build();
-    this.settledRows = undefined;
+  /**
+   * Route one session event. A delta on the in-flight message updates only that
+   * component; anything else takes up the source's current message history,
+   * which by then already contains every message that has settled.
+   */
+  apply(event?: AgentSessionEvent): void {
+    const partial = inFlightAssistantMessage(event);
+    if (partial) {
+      this.updateInFlight(partial);
+      return;
+    }
+    this.rebuild();
   }
 
   /** Drop cached rendering held by the mounted components and by this object. */
   invalidate(): void {
     this.container.invalidate();
     this.settledRows = undefined;
+    this.inFlight?.invalidate();
+    this.inFlightRows = undefined;
   }
 
   // ---- Private ----
@@ -102,12 +122,39 @@ export class TranscriptContent {
     return this.settledRows;
   }
 
-  /** The running agent's activity row, or nothing when it is not running. */
-  private liveRows(width: number): readonly string[] {
+  /** Rows below settled history: the in-flight message, then the activity row. */
+  private tail(width: number): readonly string[] {
+    const rows = [...this.inFlightRendered(width)];
     const streaming = this.options.source.streaming();
-    if (!streaming) return [];
-    const activity = `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`;
-    return ["", truncateToWidth(activity, width)];
+    if (streaming) {
+      const activity = `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`;
+      rows.push("", truncateToWidth(activity, width));
+    }
+    return rows;
+  }
+
+  /** The in-flight message's rows, re-rendered independently of settled history. */
+  private inFlightRendered(width: number): readonly string[] {
+    if (!this.inFlight) return [];
+    if (this.inFlightWidth !== width) {
+      this.inFlightWidth = width;
+      this.inFlightRows = undefined;
+    }
+    this.inFlightRows ??= this.inFlight.render(width).map((row) => truncateToWidth(row, width));
+    return this.inFlightRows;
+  }
+
+  private updateInFlight(message: AssistantSessionMessage): void {
+    if (this.inFlight) this.inFlight.updateContent(message);
+    else this.inFlight = new AssistantMessageComponent(message, false, this.options.markdownTheme);
+    this.inFlightRows = undefined;
+  }
+
+  private rebuild(): void {
+    this.container = this.build();
+    this.settledRows = undefined;
+    this.inFlight = undefined;
+    this.inFlightRows = undefined;
   }
 
   private build(): Container {
@@ -118,6 +165,19 @@ export class TranscriptContent {
     }
     return container;
   }
+}
+
+/** The assistant variant of a session message, as Pi's components consume it. */
+type AssistantSessionMessage = Extract<SessionMessage, { role: "assistant" }>;
+
+/**
+ * The in-flight assistant message a partial event carries, or undefined when the
+ * event is anything else. A partial for another role means a message settled
+ * elsewhere in the history, which only a rebuild can pick up.
+ */
+function inFlightAssistantMessage(event?: AgentSessionEvent): AssistantSessionMessage | undefined {
+  if (event?.type !== "message_start" && event?.type !== "message_update") return undefined;
+  return event.message.role === "assistant" ? event.message : undefined;
 }
 
 /**
