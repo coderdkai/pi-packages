@@ -24,14 +24,12 @@ export interface WorktreeInfo {
   branch: string;
 }
 
-export interface WorktreeCleanupResult {
-  /** Whether changes were found in the worktree. */
-  hasChanges: boolean;
-  /** Branch name if changes were committed. */
-  branch?: string;
-  /** Worktree path if it was kept. */
-  path?: string;
-}
+/** How a worktree's cleanup ended. Each outcome carries only its own data. */
+export type WorktreeCleanupResult =
+  /** Nothing to save; the worktree was removed. */
+  | { outcome: "clean" }
+  /** Changes were committed to `branch`; the worktree was removed. */
+  | { outcome: "committed"; branch: string };
 
 /**
  * Create a temporary git worktree for an agent.
@@ -87,14 +85,14 @@ export function cleanupWorktree(
   agentDescription: string,
 ): WorktreeCleanupResult {
   if (!existsSync(worktree.path)) {
-    return { hasChanges: false };
+    return { outcome: "clean" };
   }
 
   try {
     if (!statusPorcelain(worktree.path)) {
       // No changes — remove worktree
       removeWorktree(cwd, worktree.path);
-      return { hasChanges: false };
+      return { outcome: "clean" };
     }
 
     // Changes exist — stage, commit, and create a branch
@@ -107,11 +105,7 @@ export function cleanupWorktree(
     // Remove the worktree (branch persists in main repo)
     removeWorktree(cwd, worktree.path);
 
-    return {
-      hasChanges: true,
-      branch,
-      path: worktree.path,
-    };
+    return { outcome: "committed", branch };
   } catch (err) {
     debugLog("cleanupWorktree", err);
     try {
@@ -119,7 +113,7 @@ export function cleanupWorktree(
     } catch (removeErr) {
       debugLog("removeWorktree on cleanup error", removeErr);
     }
-    return { hasChanges: false };
+    return { outcome: "clean" };
   }
 }
 

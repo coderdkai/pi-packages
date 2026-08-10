@@ -43,12 +43,14 @@ class WorktreeWorkspace implements Workspace {
       this.info,
       outcome.description,
     );
-    if (result.hasChanges && result.branch) {
-      return {
-        resultAddendum: `\n\n---\nChanges saved to branch \`${result.branch}\`. Merge with: \`git merge ${result.branch}\``,
-      };
+    switch (result.outcome) {
+      case "clean":
+        return undefined;
+      case "committed":
+        return {
+          resultAddendum: `\n\n---\nChanges saved to branch \`${result.branch}\`. Merge with: \`git merge ${result.branch}\``,
+        };
     }
-    return undefined;
   }
 }
 

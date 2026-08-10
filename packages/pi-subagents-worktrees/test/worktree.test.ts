@@ -3,8 +3,25 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWorktree, createWorktree, pruneWorktrees } from "#src/worktree";
+import {
+  cleanupWorktree,
+  createWorktree,
+  pruneWorktrees,
+  type WorktreeCleanupResult,
+} from "#src/worktree";
 import { initGitRepo } from "#test/support/git-fixture";
+
+/** Narrow a cleanup result to the expected outcome, failing the test otherwise. */
+function assertOutcome<T extends WorktreeCleanupResult["outcome"]>(
+  result: WorktreeCleanupResult,
+  outcome: T,
+): asserts result is Extract<WorktreeCleanupResult, { outcome: T }> {
+  if (result.outcome !== outcome) {
+    throw new Error(
+      `expected outcome "${outcome}", got "${result.outcome}": ${JSON.stringify(result)}`,
+    );
+  }
+}
 
 describe("worktree", () => {
   let repoDir: string;
@@ -129,8 +146,7 @@ describe("worktree", () => {
       const wt = worktreeFor("clean-1");
 
       const result = cleanupWorktree(repoDir, wt, "test cleanup");
-      expect(result.hasChanges).toBe(false);
-      expect(result.branch).toBeUndefined();
+      expect(result).toEqual({ outcome: "clean" });
     });
 
     it("commits changes and creates branch when changes exist", () => {
@@ -140,14 +156,13 @@ describe("worktree", () => {
       writeFileSync(join(wt.path, "new-file.txt"), "agent wrote this");
 
       const result = cleanupWorktree(repoDir, wt, "added new file");
-      expect(result.hasChanges).toBe(true);
-      expect(result.branch).toBeDefined();
+      assertOutcome(result, "committed");
       expect(result.branch).toContain("pi-agent-dirty-1");
 
       // Verify the branch exists in the main repo
       const branches = execFileSync(
         "git",
-        ["branch", "--list", result.branch!],
+        ["branch", "--list", result.branch],
         {
           cwd: repoDir,
           stdio: "pipe",
@@ -155,12 +170,12 @@ describe("worktree", () => {
       )
         .toString()
         .trim();
-      expect(branches).toContain(result.branch!);
+      expect(branches).toContain(result.branch);
 
       // Verify the commit message
       const log = execFileSync(
         "git",
-        ["log", "--oneline", "-1", result.branch!],
+        ["log", "--oneline", "-1", result.branch],
         {
           cwd: repoDir,
           stdio: "pipe",
@@ -176,6 +191,7 @@ describe("worktree", () => {
       const wt1 = worktreeFor("conflict-1");
       writeFileSync(join(wt1.path, "file1.txt"), "first run");
       const result1 = cleanupWorktree(repoDir, wt1, "first");
+      assertOutcome(result1, "committed");
       expect(result1.branch).toBe("pi-agent-conflict-1");
 
       // Create second worktree with same agent ID, make changes
@@ -184,8 +200,7 @@ describe("worktree", () => {
       const result2 = cleanupWorktree(repoDir, wt2, "second");
 
       // Should use a different branch name (timestamp suffix)
-      expect(result2.hasChanges).toBe(true);
-      expect(result2.branch).toBeDefined();
+      assertOutcome(result2, "committed");
       expect(result2.branch).not.toBe("pi-agent-conflict-1");
       expect(result2.branch).toContain("pi-agent-conflict-1-");
 
@@ -201,7 +216,7 @@ describe("worktree", () => {
         .toString()
         .trim();
       expect(branches).toContain("pi-agent-conflict-1");
-      expect(branches).toContain(result2.branch!);
+      expect(branches).toContain(result2.branch);
     });
 
     it("handles already-deleted worktree gracefully", () => {
@@ -210,7 +225,7 @@ describe("worktree", () => {
       rmSync(wt.path, { recursive: true, force: true });
 
       const result = cleanupWorktree(repoDir, wt, "already gone");
-      expect(result.hasChanges).toBe(false);
+      expect(result).toEqual({ outcome: "clean" });
     });
 
     it("truncates commit message at 200 chars", () => {
@@ -218,11 +233,11 @@ describe("worktree", () => {
       writeFileSync(join(wt.path, "change.txt"), "something");
       const longDesc = "x".repeat(300);
       const result = cleanupWorktree(repoDir, wt, longDesc);
-      expect(result.hasChanges).toBe(true);
+      assertOutcome(result, "committed");
 
       const log = execFileSync(
         "git",
-        ["log", "--oneline", "-1", result.branch!],
+        ["log", "--oneline", "-1", result.branch],
         {
           cwd: repoDir,
           stdio: "pipe",
