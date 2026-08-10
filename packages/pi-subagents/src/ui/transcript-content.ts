@@ -40,38 +40,75 @@ export interface TranscriptContentOptions {
 /**
  * The transcript's renderable rows: settled history rendered through Pi's
  * per-entry components, followed by the running agent's activity row.
+ *
+ * Settled rows are rendered once per width and cached, so a paint or a scroll
+ * costs a slice rather than a walk of the whole component tree. The activity
+ * row is recomputed per call — it is two rows, and it tracks live state the
+ * source updates without a rebuild.
  */
 export class TranscriptContent {
   private readonly options: TranscriptContentOptions;
   private container: Container;
+  /** Width `settledRows` was rendered at. */
+  private settledWidth: number | undefined;
+  /** Settled rows at `settledWidth`, or undefined when the cache is cold. */
+  private settledRows: readonly string[] | undefined;
 
   constructor(options: TranscriptContentOptions) {
     this.options = options;
     this.container = this.build();
   }
 
-  /** Every content row at `width`, truncated to it. */
-  lines(width: number): readonly string[] {
+  /** Total content rows at `width`: settled history plus the live tail. */
+  lineCount(width: number): number {
+    if (width <= 0) return 0;
+    return this.settled(width).length + this.liveRows(width).length;
+  }
+
+  /** Rows `[start, start + count)` at `width`, clamped to what exists. */
+  slice(width: number, start: number, count: number): string[] {
     if (width <= 0) return [];
-    const rows = this.container.render(width);
-    const streaming = this.options.source.streaming();
-    if (streaming) {
-      rows.push("", `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`);
+    const settled = this.settled(width);
+    const end = start + count;
+    const rows = settled.slice(start, Math.min(end, settled.length));
+    if (end > settled.length) {
+      const live = this.liveRows(width);
+      rows.push(...live.slice(Math.max(0, start - settled.length), end - settled.length));
     }
-    return rows.map((row) => truncateToWidth(row, width));
+    return rows;
   }
 
   /** Take up the source's current message history. */
   apply(): void {
     this.container = this.build();
+    this.settledRows = undefined;
   }
 
-  /** Drop cached rendering held by the mounted components. */
+  /** Drop cached rendering held by the mounted components and by this object. */
   invalidate(): void {
     this.container.invalidate();
+    this.settledRows = undefined;
   }
 
   // ---- Private ----
+
+  /** Settled rows at `width`, rendered once per width/content generation. */
+  private settled(width: number): readonly string[] {
+    if (this.settledWidth !== width) {
+      this.settledWidth = width;
+      this.settledRows = undefined;
+    }
+    this.settledRows ??= this.container.render(width).map((row) => truncateToWidth(row, width));
+    return this.settledRows;
+  }
+
+  /** The running agent's activity row, or nothing when it is not running. */
+  private liveRows(width: number): readonly string[] {
+    const streaming = this.options.source.streaming();
+    if (!streaming) return [];
+    const activity = `${GLYPHS.streaming} ${describeActivity(streaming.activeTools, streaming.responseText)}`;
+    return ["", truncateToWidth(activity, width)];
+  }
 
   private build(): Container {
     const container = new Container();

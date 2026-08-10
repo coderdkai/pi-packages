@@ -158,7 +158,7 @@ export class TranscriptOverlay implements Component {
       return;
     }
 
-    const totalLines = this.content.lines(this.inputWidth()).length;
+    const totalLines = this.content.lineCount(this.inputWidth());
     const viewportHeight = this.viewportHeight();
     const maxScroll = Math.max(0, totalLines - viewportHeight);
 
@@ -201,20 +201,20 @@ export class TranscriptOverlay implements Component {
     lines.push(row(th.bold("Subagent session")));
     lines.push(hrMid);
 
-    const contentLines = this.content.lines(innerW);
+    const totalLines = this.content.lineCount(innerW);
     const viewportHeight = this.viewportHeight();
-    const maxScroll = Math.max(0, contentLines.length - viewportHeight);
+    const maxScroll = Math.max(0, totalLines - viewportHeight);
     if (this.autoScroll) this.scrollOffset = maxScroll;
     const visibleStart = Math.min(this.scrollOffset, maxScroll);
-    const visible = contentLines.slice(visibleStart, visibleStart + viewportHeight);
+    const visible = this.content.slice(innerW, visibleStart, viewportHeight);
     for (let i = 0; i < viewportHeight; i++) lines.push(row(visible[i] ?? ""));
 
     lines.push(hrMid);
     const scrollPct =
-      contentLines.length <= viewportHeight
+      totalLines <= viewportHeight
         ? "100%"
-        : `${Math.round(((visibleStart + viewportHeight) / contentLines.length) * 100)}%`;
-    const footerLeft = th.fg("dim", `${contentLines.length} lines · ${scrollPct}`);
+        : `${Math.round(((visibleStart + viewportHeight) / totalLines) * 100)}%`;
+    const footerLeft = th.fg("dim", `${totalLines} lines · ${scrollPct}`);
     const footerRight = th.fg("dim", "↑↓ scroll · PgUp/PgDn · Esc close");
     const footerGap = Math.max(1, innerW - visibleWidth(footerLeft) - visibleWidth(footerRight));
     lines.push(row(footerLeft + " ".repeat(footerGap) + footerRight));

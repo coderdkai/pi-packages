@@ -1,6 +1,6 @@
 import { getMarkdownTheme, initTheme } from "@earendil-works/pi-coding-agent";
-import { visibleWidth } from "@earendil-works/pi-tui";
-import { beforeAll, describe, expect, it } from "vitest";
+import { Container, visibleWidth } from "@earendil-works/pi-tui";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SessionMessage } from "#src/types";
 import type { TranscriptSource } from "#src/ui/session-navigation";
 import { TranscriptContent } from "#src/ui/transcript-content";
@@ -25,8 +25,19 @@ function contentFrom(messages: SessionMessage[]): TranscriptContent {
   return makeContent(fakeSource({ getMessages: () => messages }));
 }
 
+function allRows(content: TranscriptContent, width = WIDTH): string[] {
+  return content.slice(width, 0, content.lineCount(width));
+}
+
 function rendered(content: TranscriptContent, width = WIDTH): string {
-  return content.lines(width).join("\n");
+  return allRows(content, width).join("\n");
+}
+
+function manyMessages(count: number): SessionMessage[] {
+  return Array.from({ length: count }, (_, i) => ({
+    role: "user",
+    content: `message ${i}\n\nA paragraph long enough to wrap at the test width and produce several rows.`,
+  })) as unknown as SessionMessage[];
 }
 
 describe("TranscriptContent", () => {
@@ -121,7 +132,8 @@ describe("TranscriptContent", () => {
 
   describe("width handling", () => {
     it("returns no rows at a non-positive width", () => {
-      expect(makeContent().lines(0)).toEqual([]);
+      expect(makeContent().lineCount(0)).toBe(0);
+      expect(makeContent().slice(0, 0, 10)).toEqual([]);
     });
 
     it("truncates every row to the requested width", () => {
@@ -129,9 +141,95 @@ describe("TranscriptContent", () => {
         { role: "user", content: "x".repeat(500) },
       ] as unknown as SessionMessage[];
 
-      const lines = contentFrom(messages).lines(40);
+      const lines = allRows(contentFrom(messages), 40);
 
       expect(lines.every((line) => visibleWidth(line) <= 40)).toBe(true);
+    });
+  });
+
+  describe("viewport slicing", () => {
+    it("returns only the requested window", () => {
+      const content = contentFrom(manyMessages(20));
+      const all = allRows(content);
+
+      expect(content.slice(WIDTH, 4, 3)).toEqual(all.slice(4, 7));
+    });
+
+    it("clamps a window that runs past the last row", () => {
+      const content = contentFrom(manyMessages(3));
+      const total = content.lineCount(WIDTH);
+
+      expect(content.slice(WIDTH, total - 1, 10)).toEqual(allRows(content).slice(total - 1));
+    });
+
+    it("includes the live activity row in the last window", () => {
+      const source = fakeSource({
+        getMessages: () => manyMessages(3),
+        streaming: () => ({ activeTools: new Map([["k", "read"]]), responseText: "" }),
+      });
+      const content = makeContent(source);
+      const total = content.lineCount(WIDTH);
+
+      expect(content.slice(WIDTH, total - 2, 2).join("\n")).toContain("◍");
+    });
+  });
+
+  // White-box pins: these are the only assertions that catch a silent return to
+  // re-rendering the whole transcript on every paint and keypress.
+  describe("render accounting", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("renders the component tree once across repeated paints and scrolls", () => {
+      const content = contentFrom(manyMessages(20));
+      const render = vi.spyOn(Container.prototype, "render");
+
+      content.slice(WIDTH, 0, 10);
+      const afterFirstPaint = render.mock.calls.length;
+      content.slice(WIDTH, 0, 10);
+      content.slice(WIDTH, 5, 10);
+      content.lineCount(WIDTH);
+
+      expect(afterFirstPaint).toBeGreaterThan(0);
+      expect(render.mock.calls.length).toBe(afterFirstPaint);
+    });
+
+    it("does not consult the source's message history while painting", () => {
+      const messages = manyMessages(5);
+      const getMessages = vi.fn(() => messages);
+      const content = makeContent(fakeSource({ getMessages }));
+      getMessages.mockClear();
+
+      content.lineCount(WIDTH);
+      content.slice(WIDTH, 0, 10);
+      content.slice(WIDTH, 3, 10);
+
+      expect(getMessages).not.toHaveBeenCalled();
+    });
+
+    it("re-renders at a new width, then caches that width too", () => {
+      const content = contentFrom(manyMessages(20));
+      content.slice(WIDTH, 0, 10);
+      const render = vi.spyOn(Container.prototype, "render");
+
+      content.slice(WIDTH + 20, 0, 10);
+      const afterWidthChange = render.mock.calls.length;
+      content.slice(WIDTH + 20, 0, 10);
+
+      expect(afterWidthChange).toBeGreaterThan(0);
+      expect(render.mock.calls.length).toBe(afterWidthChange);
+    });
+
+    it("re-renders after the source changes", () => {
+      let messages = manyMessages(5);
+      const content = makeContent(fakeSource({ getMessages: () => messages }));
+      content.slice(WIDTH, 0, 10);
+      const render = vi.spyOn(Container.prototype, "render");
+
+      messages = manyMessages(6);
+      content.apply();
+      content.slice(WIDTH, 0, 10);
+
+      expect(render.mock.calls.length).toBeGreaterThan(0);
     });
   });
 });
