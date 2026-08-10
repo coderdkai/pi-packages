@@ -114,6 +114,44 @@ Filed [#714] for the one deferral the plan concretely names.
   Rejected a config key in favor of an unconditional bypass plus an explicit addendum notice, on the reasoning that the alternative leaves the same content sitting in `tmpdir` with less visibility, not more safety.
 - Sibling issue [#707] (wildcards in `worktreeAgents`) touches `src/config.ts` only and does not overlap this change.
 
+## Stage: Implementation — TDD (2026-08-10T18:18:25Z)
+
+### Session summary
+
+Landed the plan's five steps plus three preparatory tidying commits recommended by the `tidy-first-assessor`, for seven implementation commits in all.
+`cleanupWorktree` now retries a rejected rescue commit once with `--no-verify` (re-staging first), preserves the worktree whenever cleanup fails, and reports both through a discriminated-union result that `dispose` surfaces in the agent's addendum.
+Package test count went from 26 to 31; the pre-completion reviewer returned **PASS**.
+
+### Observations
+
+- **The tidy-first assessment paid for itself.**
+  It caught that the plan deferred `commitStaged`'s *existence* to step 4, which would have made that commit both introduce the helper and add its retry body.
+  Extracting a bare non-retrying `commitStaged` in step 1 meant step 4 edited exactly one function's internals and never touched `cleanupWorktree`'s call site.
+  It also spotted that `initGitRepo` was duplicated verbatim across both suites right before both were about to gain failure-path cases.
+- **The planned cross-step trap was real and the mitigation held.**
+  Step 3's preservation test uses `lockGitIndex`, which fails at `git add -A` before any hook runs.
+  The reviewer independently confirmed step 4's `--no-verify` retry cannot reach it, since the retry only fires from inside `commitStaged`, downstream of a successful `stageAll`.
+  Had step 3 used a failing hook instead, step 4 would have silently inverted its meaning while leaving it green.
+- **A planned test helper improved during implementation.**
+  The plan called for exposing `worktreeGitDir` so tests could construct the lock path themselves.
+  Encapsulating the whole operation as `lockGitIndex(worktreePath)` reads better at the call site and keeps the git-dir lookup out of the test bodies.
+- **`git worktree remove --force` tolerates a stale `index.lock`.**
+  Verified before writing the sweep, since the preservation test deliberately leaves one behind.
+  The `afterEach` sweep needed no special handling.
+- **Dropping the per-test `git branch -D` blocks was pure subtraction.**
+  The outer `afterEach` already deletes the whole repository, so those cleanups had never done anything.
+  Removing them took roughly 30 lines out of the tests that step 2 had to migrate anyway.
+- **The autoformatter joined two sentences in the README.**
+  Writing an explanatory sentence after a line ending in a code span produced a two-sentence line, violating one-sentence-per-line while still passing `rumdl`.
+  Restructuring the bullet so each sentence stands alone fixed it; worth re-reading any README bullet the formatter touches.
+- **Deviations from the plan.**
+  Three preparatory commits were added ahead of the five planned steps.
+  `test/support/git-fixture.ts` is a new file the plan's Module-Level Changes did not list; the reviewer confirmed it is a pure extraction rather than scope creep.
+  Stale JSDoc on `cleanupWorktree` and the module header was updated and amended into the `docs:` commit.
+  A `hooksBypassed: false` assertion was added to the existing happy-path test so both sides of the flag are pinned.
+- Pre-completion reviewer: **PASS**, no WARN findings.
+  It independently re-verified the attribution trailer on all seven implementation commits, the non-breaking `fix:` classification against the `exports` map, and that [#714] is filed and open.
+
 [#705]: https://github.com/gotgenes/pi-packages/pull/705
 [#707]: https://github.com/gotgenes/pi-packages/issues/707
 [#714]: https://github.com/gotgenes/pi-packages/issues/714
