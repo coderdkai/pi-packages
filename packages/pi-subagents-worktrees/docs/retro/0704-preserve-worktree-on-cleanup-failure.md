@@ -83,4 +83,37 @@ Co-authored-by: Anders Bjørnkjær Bennedsgaard <abbennedsgaard@gmail.com>
 The ship-stage close comment on [#705] must thank @AndersBennedsgaard by name, link the implementing SHA(s), and note that the `--no-verify` retry was added on top of their diagnosis.
 Reference the PR as `Refs #705`, never `Closes #705`.
 
+## Stage: Planning (2026-08-10T17:59:13Z)
+
+### Session summary
+
+Produced `docs/plans/0704-preserve-worktree-on-cleanup-failure.md`, planning the fix in five steps: two preparatory tidying commits (extract git helpers and drop an output-argument mutation, then convert `WorktreeCleanupResult` to a discriminated union), then the preserve-on-failure fix, then the `--no-verify` retry with re-staging, then the README update.
+The direction was already settled in the PR Review stage above, so this session resolved only the three design questions that surfaced while working out the mechanics.
+Filed [#714] for the one deferral the plan concretely names.
+
+### Observations
+
+- **This repository is itself affected.**
+  The `committed` `commit-msg` hook rejects the rescue commit's `pi-agent: <description>` subject — `Disallowed type \`pi-agent\`` — so every subagent that runs in a worktree here and produces changes currently loses that work.
+  This turned out to be a stronger motivating example than the reporter's formatter-hook scenario, and it also confirms the retry must use `--no-verify` rather than something narrower, since `--no-verify` is what skips `commit-msg` as well as `pre-commit`.
+- **Not breaking, and this was worth verifying rather than assuming.**
+  `WorktreeCleanupResult` looked like a public type, but the package's `exports` map is `{ ".": "./src/index.ts" }`, `index.ts` exports only the default extension function, and no file outside the package references `cleanupWorktree`, `WorktreeCleanupResult`, or `WorktreeInfo`.
+  Deep imports are blocked by the `exports` map, so the union is an internal change and the commits are `fix:`, not `fix!:`.
+- **A cross-step trap was caught at planning time.**
+  The obvious way to test preservation is a failing pre-commit hook, but step 4's `--no-verify` retry makes that exact scenario *succeed* — step 3's test would have silently inverted meaning while staying green.
+  The plan instead triggers step 3's failure by pre-creating the worktree's `index.lock`, which no later step bypasses.
+  Verified: `git status --porcelain` still reports the change, `git add -A` fails with `fatal: Unable to create '<gitdir>/index.lock': File exists`, the file survives on disk, and nothing reaches the object database.
+- **Re-staging before the retry was the non-obvious design detail.**
+  A formatter hook rewrites files and then exits non-zero; without a second `git add -A`, the retry would commit the pre-formatting snapshot and the hook's corrections would be destroyed along with the worktree.
+  The operator confirmed re-staging.
+- **Preparatory tidying found an existing output-argument smell.**
+  `cleanupWorktree` assigns `worktree.branch = branchName`, mutating the `WorktreeInfo` it was handed, but nothing reads the mutated field — `dispose` reads `result.branch`.
+  Having `createBranch` return the name removes the mutation and makes the union conversion in step 2 mechanical.
+- **Hook-bypass safety was the one genuine judgment call.**
+  A `gitleaks`-style hook exists to block content, and bypassing it commits that content to a local branch.
+  Rejected a config key in favor of an unconditional bypass plus an explicit addendum notice, on the reasoning that the alternative leaves the same content sitting in `tmpdir` with less visibility, not more safety.
+- Sibling issue [#707] (wildcards in `worktreeAgents`) touches `src/config.ts` only and does not overlap this change.
+
 [#705]: https://github.com/gotgenes/pi-packages/pull/705
+[#707]: https://github.com/gotgenes/pi-packages/issues/707
+[#714]: https://github.com/gotgenes/pi-packages/issues/714
