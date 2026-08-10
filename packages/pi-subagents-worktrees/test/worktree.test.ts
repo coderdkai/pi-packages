@@ -93,9 +93,40 @@ describe("worktree", () => {
   });
 
   describe("cleanupWorktree", () => {
-    it("removes worktree when no changes made", () => {
-      const wt = createWorktree(repoDir, "clean-1")!;
+    /**
+     * Worktrees a test created. Cleanup normally removes them itself, but a
+     * failure path deliberately leaves one on disk — and worktrees live under
+     * `tmpdir`, so deleting `repoDir` does not reclaim them.
+     */
+    let created: string[];
+
+    beforeEach(() => {
+      created = [];
+    });
+
+    afterEach(() => {
+      for (const path of created) {
+        try {
+          execFileSync("git", ["worktree", "remove", "--force", path], {
+            cwd: repoDir,
+            stdio: "pipe",
+          });
+        } catch {
+          /* already removed by the code under test */
+        }
+      }
+    });
+
+    /** Create a worktree and register it for post-test cleanup. */
+    function worktreeFor(agentId: string) {
+      const wt = createWorktree(repoDir, agentId);
       expect(wt).toBeDefined();
+      created.push(wt!.path);
+      return wt!;
+    }
+
+    it("removes worktree when no changes made", () => {
+      const wt = worktreeFor("clean-1");
 
       const result = cleanupWorktree(repoDir, wt, "test cleanup");
       expect(result.hasChanges).toBe(false);
@@ -103,8 +134,7 @@ describe("worktree", () => {
     });
 
     it("commits changes and creates branch when changes exist", () => {
-      const wt = createWorktree(repoDir, "dirty-1")!;
-      expect(wt).toBeDefined();
+      const wt = worktreeFor("dirty-1");
 
       // Make a change in the worktree
       writeFileSync(join(wt.path, "new-file.txt"), "agent wrote this");
@@ -139,27 +169,17 @@ describe("worktree", () => {
         .toString()
         .trim();
       expect(log).toContain("pi-agent: added new file");
-
-      // Cleanup branch
-      try {
-        execFileSync("git", ["branch", "-D", result.branch!], {
-          cwd: repoDir,
-          stdio: "pipe",
-        });
-      } catch {
-        /* ignore */
-      }
     });
 
     it("does not force-overwrite existing branch", () => {
       // Create first worktree, make changes, cleanup → creates branch
-      const wt1 = createWorktree(repoDir, "conflict-1")!;
+      const wt1 = worktreeFor("conflict-1");
       writeFileSync(join(wt1.path, "file1.txt"), "first run");
       const result1 = cleanupWorktree(repoDir, wt1, "first");
       expect(result1.branch).toBe("pi-agent-conflict-1");
 
       // Create second worktree with same agent ID, make changes
-      const wt2 = createWorktree(repoDir, "conflict-1")!;
+      const wt2 = worktreeFor("conflict-1");
       writeFileSync(join(wt2.path, "file2.txt"), "second run");
       const result2 = cleanupWorktree(repoDir, wt2, "second");
 
@@ -182,28 +202,10 @@ describe("worktree", () => {
         .trim();
       expect(branches).toContain("pi-agent-conflict-1");
       expect(branches).toContain(result2.branch!);
-
-      // Cleanup
-      try {
-        execFileSync("git", ["branch", "-D", result1.branch!], {
-          cwd: repoDir,
-          stdio: "pipe",
-        });
-      } catch {
-        /* ignore */
-      }
-      try {
-        execFileSync("git", ["branch", "-D", result2.branch!], {
-          cwd: repoDir,
-          stdio: "pipe",
-        });
-      } catch {
-        /* ignore */
-      }
     });
 
     it("handles already-deleted worktree gracefully", () => {
-      const wt = createWorktree(repoDir, "gone-1")!;
+      const wt = worktreeFor("gone-1");
       // Manually delete the worktree directory
       rmSync(wt.path, { recursive: true, force: true });
 
@@ -212,7 +214,7 @@ describe("worktree", () => {
     });
 
     it("truncates commit message at 200 chars", () => {
-      const wt = createWorktree(repoDir, "long-msg")!;
+      const wt = worktreeFor("long-msg");
       writeFileSync(join(wt.path, "change.txt"), "something");
       const longDesc = "x".repeat(300);
       const result = cleanupWorktree(repoDir, wt, longDesc);
@@ -230,16 +232,6 @@ describe("worktree", () => {
         .trim();
       // "pi-agent: " prefix (10 chars) + 200 chars of x = 210 total max
       expect(log.length).toBeLessThanOrEqual(220); // some slack for hash prefix
-
-      // Cleanup
-      try {
-        execFileSync("git", ["branch", "-D", result.branch!], {
-          cwd: repoDir,
-          stdio: "pipe",
-        });
-      } catch {
-        /* ignore */
-      }
     });
   });
 
