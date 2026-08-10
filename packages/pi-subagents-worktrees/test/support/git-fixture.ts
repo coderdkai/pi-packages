@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,18 @@ export function initGitRepo(prefix: string): string {
   execFileSync("git", ["add", "README.md"], { cwd: dir, stdio: "pipe" });
   execFileSync("git", ["commit", "-m", "initial"], { cwd: dir, stdio: "pipe" });
   return dir;
+}
+
+/**
+ * Install a `pre-commit` hook in the repository shared by all its worktrees.
+ *
+ * A worktree's `.git` is a file pointing back at the main repository, so hooks
+ * live under the main repo's `.git/hooks` — never under the worktree path.
+ */
+export function installPreCommitHook(repoDir: string, body: string): void {
+  const hookPath = join(repoDir, ".git", "hooks", "pre-commit");
+  writeFileSync(hookPath, `#!/bin/sh\n${body}\n`);
+  chmodSync(hookPath, 0o755);
 }
 
 /**

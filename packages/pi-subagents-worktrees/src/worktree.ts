@@ -28,8 +28,11 @@ export interface WorktreeInfo {
 export type WorktreeCleanupResult =
   /** Nothing to save; the worktree was removed. */
   | { outcome: "clean" }
-  /** Changes were committed to `branch`; the worktree was removed. */
-  | { outcome: "committed"; branch: string }
+  /**
+   * Changes were committed to `branch`; the worktree was removed.
+   * `hooksBypassed` records whether the commit hooks had to be skipped.
+   */
+  | { outcome: "committed"; branch: string; hooksBypassed: boolean }
   /** Cleanup failed partway; the worktree was left at `path` for recovery. */
   | { outcome: "failed"; path: string; error: string };
 
@@ -101,13 +104,13 @@ export function cleanupWorktree(
     stageAll(worktree.path);
     // Truncate description for commit message (no shell sanitization needed — execFileSync uses argv)
     const safeDesc = agentDescription.slice(0, 200);
-    commitStaged(worktree.path, `pi-agent: ${safeDesc}`);
+    const hooksBypassed = commitStaged(worktree.path, `pi-agent: ${safeDesc}`);
     const branch = createBranch(worktree.path, worktree.branch);
 
     // Remove the worktree (branch persists in main repo)
     removeWorktree(cwd, worktree.path);
 
-    return { outcome: "committed", branch };
+    return { outcome: "committed", branch, hooksBypassed };
   } catch (err) {
     // Never remove a worktree whose fate is uncertain: it can hold work that
     // was never written to the object database, which no `git fsck` recovers.
@@ -131,9 +134,24 @@ function stageAll(worktreePath: string): void {
   runGit(worktreePath, ["add", "-A"]);
 }
 
-/** Commit the staged snapshot. */
-function commitStaged(worktreePath: string, message: string): void {
-  runGit(worktreePath, ["commit", "-m", message]);
+/**
+ * Commit the staged snapshot, returning whether hooks had to be bypassed.
+ *
+ * This commit exists solely to rescue an agent's work, so a hook that rejects
+ * it costs the user that work. Retry once past the hooks rather than lose it.
+ */
+function commitStaged(worktreePath: string, message: string): boolean {
+  try {
+    runGit(worktreePath, ["commit", "-m", message]);
+    return false;
+  } catch (err) {
+    debugLog("git commit rejected — retrying with --no-verify", err);
+    // A hook may have rewritten files (prettier --write, rumdl fmt) before
+    // failing; re-stage so those rewrites ride along instead of being lost.
+    stageAll(worktreePath);
+    runGit(worktreePath, ["commit", "--no-verify", "-m", message]);
+    return true;
+  }
 }
 
 /**

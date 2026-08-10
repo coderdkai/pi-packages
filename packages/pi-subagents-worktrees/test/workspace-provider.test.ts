@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WorktreeWorkspaceProvider } from "#src/workspace-provider";
-import { initGitRepo, lockGitIndex } from "#test/support/git-fixture";
+import {
+  initGitRepo,
+  installPreCommitHook,
+  lockGitIndex,
+} from "#test/support/git-fixture";
 
 /** Build a prepare context with sensible defaults. */
 function ctx(overrides: {
@@ -110,6 +114,25 @@ describe("WorktreeWorkspaceProvider", () => {
       cwd: repoDir,
     }).toString();
     expect(branches).toContain("pi-agent-abc123");
+  });
+
+  it("dispose notes when hooks were bypassed to save the work", async () => {
+    const provider = new WorktreeWorkspaceProvider({
+      worktreeAgents: ["Explore"],
+    });
+    const workspace = await provider.prepare(
+      ctx({ agentType: "Explore", baseCwd: repoDir, agentId: "bypass-1" }),
+    );
+    writeFileSync(join(workspace!.cwd, "agent-output.txt"), "agent output");
+    installPreCommitHook(repoDir, "exit 1");
+
+    const result = workspace!.dispose({
+      status: "completed",
+      description: "did work",
+    });
+
+    expect(result?.resultAddendum).toContain("Changes saved to branch");
+    expect(result?.resultAddendum).toContain("hooks were bypassed");
   });
 
   it("dispose reports the preserved worktree when cleanup fails", async () => {

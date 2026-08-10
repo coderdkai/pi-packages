@@ -15,7 +15,11 @@ import {
   pruneWorktrees,
   type WorktreeCleanupResult,
 } from "#src/worktree";
-import { initGitRepo, lockGitIndex } from "#test/support/git-fixture";
+import {
+  initGitRepo,
+  installPreCommitHook,
+  lockGitIndex,
+} from "#test/support/git-fixture";
 
 /** Narrow a cleanup result to the expected outcome, failing the test otherwise. */
 function assertOutcome<T extends WorktreeCleanupResult["outcome"]>(
@@ -163,6 +167,7 @@ describe("worktree", () => {
 
       const result = cleanupWorktree(repoDir, wt, "added new file");
       assertOutcome(result, "committed");
+      expect(result.hooksBypassed).toBe(false);
       expect(result.branch).toContain("pi-agent-dirty-1");
 
       // Verify the branch exists in the main repo
@@ -232,6 +237,42 @@ describe("worktree", () => {
 
       const result = cleanupWorktree(repoDir, wt, "already gone");
       expect(result).toEqual({ outcome: "clean" });
+    });
+
+    it("bypasses hooks to save the work when the rescue commit is rejected", () => {
+      const wt = worktreeFor("hooked-1");
+      writeFileSync(join(wt.path, "new-file.txt"), "agent wrote this");
+      installPreCommitHook(repoDir, "exit 1");
+
+      const result = cleanupWorktree(repoDir, wt, "rejected by hook");
+
+      assertOutcome(result, "committed");
+      expect(result.hooksBypassed).toBe(true);
+      expect(existsSync(wt.path)).toBe(false);
+
+      const committed = execFileSync(
+        "git",
+        ["show", `${result.branch}:new-file.txt`],
+        { cwd: repoDir, stdio: "pipe" },
+      ).toString();
+      expect(committed).toBe("agent wrote this");
+    });
+
+    it("includes files a rejecting hook rewrote in the rescue commit", () => {
+      const wt = worktreeFor("formatter-1");
+      writeFileSync(join(wt.path, "new-file.txt"), "unformatted");
+      // The formatter pattern: rewrite the file, then fail the commit anyway.
+      installPreCommitHook(repoDir, "echo formatted > new-file.txt\nexit 1");
+
+      const result = cleanupWorktree(repoDir, wt, "formatter rewrote the file");
+
+      assertOutcome(result, "committed");
+      const committed = execFileSync(
+        "git",
+        ["show", `${result.branch}:new-file.txt`],
+        { cwd: repoDir, stdio: "pipe" },
+      ).toString();
+      expect(committed).toBe("formatted\n");
     });
 
     it("preserves the worktree and reports the error when cleanup fails", () => {

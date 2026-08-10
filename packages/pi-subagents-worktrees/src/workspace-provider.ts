@@ -46,10 +46,14 @@ class WorktreeWorkspace implements Workspace {
     switch (result.outcome) {
       case "clean":
         return undefined;
-      case "committed":
+      case "committed": {
+        const bypassNote = result.hooksBypassed
+          ? "\nCommit hooks were bypassed to save this work — review the commit before merging."
+          : "";
         return {
-          resultAddendum: `\n\n---\nChanges saved to branch \`${result.branch}\`. Merge with: \`git merge ${result.branch}\``,
+          resultAddendum: `\n\n---\nChanges saved to branch \`${result.branch}\`. Merge with: \`git merge ${result.branch}\`${bypassNote}`,
         };
+      }
       case "failed":
         return {
           resultAddendum: `\n\n---\nWorktree cleanup failed; the worktree was left in place at \`${result.path}\` for manual recovery: ${result.error}`,
