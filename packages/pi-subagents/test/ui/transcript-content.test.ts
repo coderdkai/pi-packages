@@ -174,14 +174,12 @@ describe("TranscriptContent", () => {
     });
 
     it("re-renders far less than a full rebuild on a streaming delta", () => {
-      const content = contentFrom(manyMessages(20));
+      const history = manyMessages(20);
+      const content = makeContent(fakeSource({ getMessages: () => history }));
       allRows(content);
-      const render = vi.spyOn(Container.prototype, "render");
-      content.apply();
-      allRows(content);
-      const fullRebuild = render.mock.calls.length;
-      render.mockClear();
+      const fullRebuild = fullRebuildRenderCount(history);
 
+      const render = vi.spyOn(Container.prototype, "render");
       content.apply(partialAssistant("streaming"));
       allRows(content);
 
@@ -269,6 +267,110 @@ describe("TranscriptContent", () => {
     });
   });
 
+  describe("incremental settling", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    /** A source over a mutable array, as a live record's history behaves. */
+    function growingSource(messages: SessionMessage[]) {
+      return fakeSource({ getMessages: () => messages });
+    }
+
+    it("matches a freshly built transcript line for line", () => {
+      const history: SessionMessage[] = [];
+      const content = makeContent(growingSource(history));
+
+      for (const message of richTranscript()) {
+        history.push(message);
+        content.apply(settled());
+      }
+
+      expect(allRows(content)).toEqual(allRows(contentFrom(richTranscript())));
+    });
+
+    it("renders only the newly settled message when one arrives", () => {
+      const history = manyMessages(20);
+      const content = makeContent(growingSource(history));
+      allRows(content);
+      history.push(...manyMessages(1));
+      // Measured before any spy is installed — a spy nested inside another
+      // inflates the baseline and the comparison stops discriminating.
+      const fullRebuild = fullRebuildRenderCount(history);
+
+      const render = vi.spyOn(Container.prototype, "render");
+      content.apply(settled());
+      allRows(content);
+
+      expect(render.mock.calls.length).toBeGreaterThan(0);
+      expect(render.mock.calls.length).toBeLessThan(fullRebuild);
+    });
+
+    it("re-renders only the affected block when a tool result lands", () => {
+      const history: SessionMessage[] = [...manyMessages(20), toolCallMessage("tc-1")];
+      const content = makeContent(growingSource(history));
+      content.apply(settled());
+      allRows(content);
+      history.push(toolResultMessage("tc-1", "tool output body"));
+      const fullRebuild = fullRebuildRenderCount(history);
+
+      const render = vi.spyOn(Container.prototype, "render");
+      content.apply(settled());
+      const rows = allRows(content).join("\n");
+
+      expect(rows).toContain("tool output body");
+      expect(render.mock.calls.length).toBeLessThan(fullRebuild);
+    });
+
+    it("keeps consumed messages aligned across a skipped custom message", () => {
+      const history: SessionMessage[] = [];
+      const content = makeContent(growingSource(history));
+
+      history.push({ role: "custom", customType: "note", content: "invisible" } as unknown as SessionMessage);
+      content.apply(settled());
+      history.push({ role: "user", content: "after the custom message" } as unknown as SessionMessage);
+      content.apply(settled());
+
+      expect(rendered(content)).toContain("after the custom message");
+      expect(rendered(content)).not.toContain("invisible");
+    });
+
+    it("rebuilds when history is replaced wholesale", () => {
+      let history = manyMessages(5);
+      const content = makeContent(fakeSource({ getMessages: () => history }));
+      allRows(content);
+
+      // Compaction and branching swap the array for a new one rather than
+      // appending, so the consumed prefix no longer mirrors the source.
+      history = [{ role: "user", content: "post-compaction history" } as unknown as SessionMessage];
+      content.apply(settled());
+
+      const out = rendered(content);
+      expect(out).toContain("post-compaction history");
+      expect(out).not.toContain("message 0");
+    });
+
+    it("rebuilds on agent_end to pick up in-place message mutations", () => {
+      const history = manyMessages(3);
+      const content = makeContent(growingSource(history));
+      allRows(content);
+
+      (history[1] as unknown as { content: string }).content = "mutated in place";
+      content.apply({ type: "agent_end" } as AgentSessionEvent);
+
+      expect(rendered(content)).toContain("mutated in place");
+    });
+
+    it("rebuilds on compaction_end", () => {
+      const history = manyMessages(3);
+      const content = makeContent(growingSource(history));
+      allRows(content);
+
+      (history[1] as unknown as { content: string }).content = "replaced by compaction";
+      content.apply({ type: "compaction_end" } as AgentSessionEvent);
+
+      expect(rendered(content)).toContain("replaced by compaction");
+    });
+  });
+
   // White-box pins: these are the only assertions that catch a silent return to
   // re-rendering the whole transcript on every paint and keypress.
   describe("render accounting", () => {
@@ -343,4 +445,63 @@ function thinkingAssistant(thinking: string): AgentSessionEvent {
     type: "message_start",
     message: { role: "assistant", content: [{ type: "thinking", thinking }], stopReason: "stop", timestamp: 1 },
   } as unknown as AgentSessionEvent;
+}
+
+/**
+ * A settle notification. Pi pushes the finished message into its message array
+ * before notifying listeners, so the event body carries nothing the consumer
+ * needs beyond its type.
+ */
+function settled(): AgentSessionEvent {
+  return { type: "message_end" } as AgentSessionEvent;
+}
+
+function toolCallMessage(id: string): SessionMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "toolCall", id, name: "read", arguments: { path: "/x.ts" } }],
+    stopReason: "toolUse",
+    timestamp: 1,
+  } as unknown as SessionMessage;
+}
+
+function toolResultMessage(toolCallId: string, text: string): SessionMessage {
+  return {
+    role: "toolResult",
+    toolCallId,
+    toolName: "read",
+    content: [{ type: "text", text }],
+    isError: false,
+  } as unknown as SessionMessage;
+}
+
+/** One of each role the mapping handles, in a plausible agent-run order. */
+function richTranscript(): SessionMessage[] {
+  return [
+    { role: "user", content: "read the file and summarize it" },
+    toolCallMessage("tc-1"),
+    toolResultMessage("tc-1", "the file body"),
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "Here is the **summary** you asked for." }],
+      stopReason: "stop",
+      timestamp: 2,
+    },
+    { role: "custom", customType: "note", content: "skipped" },
+    { role: "bashExecution", command: "ls -la", output: "total 0", exitCode: 0 },
+    { role: "user", content: "thanks" },
+  ] as unknown as SessionMessage[];
+}
+
+/**
+ * How many `Container.render` calls a from-scratch build of `messages` costs.
+ * Call with no spy installed: `vi.spyOn` over an existing spy double-counts.
+ */
+function fullRebuildRenderCount(messages: SessionMessage[]): number {
+  const fresh = contentFrom([...messages]);
+  const render = vi.spyOn(Container.prototype, "render");
+  allRows(fresh);
+  const count = render.mock.calls.length;
+  render.mockRestore();
+  return count;
 }

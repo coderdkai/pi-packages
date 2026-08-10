@@ -46,6 +46,12 @@ export interface TranscriptContentOptions {
  * row is recomputed per call — it is two rows, and it tracks live state the
  * source updates without a rebuild.
  *
+ * Settled history is held as one block of components per message, so a message
+ * that settles appends a block and a tool result touches only its own — neither
+ * discards the rest of the transcript's rendering. This is sound because the
+ * agent core pushes a finished message into its message array before notifying
+ * listeners, so at event time the settled prefix is already visible.
+ *
  * The message currently being streamed is held as its own component, updated
  * per delta exactly as Pi's interactive mode does, so a token never touches
  * settled history. The two provably cannot overlap: the agent core keeps the
@@ -53,10 +59,19 @@ export interface TranscriptContentOptions {
  */
 export class TranscriptContent {
   private readonly options: TranscriptContentOptions;
-  private container: Container;
-  /** Width `settledRows` was rendered at. */
+  /** Settled history, one block per message that produced components. */
+  private blocks: SettledBlock[] = [];
+  /** How many source messages have been consumed into `blocks`. */
+  private consumedCount = 0;
+  /** The last consumed message; a mismatch means history was rewritten. */
+  private lastConsumed: SessionMessage | undefined;
+  /** Whether any consumed block holds components, driving user-message spacing. */
+  private hasVisibleContent = false;
+  /** In-flight tool components by tool-call id, pairing a later result to its block. */
+  private readonly pendingTools = new Map<string, PendingTool>();
+  /** Width `blocks` and `settledRows` were rendered at. */
   private settledWidth: number | undefined;
-  /** Settled rows at `settledWidth`, or undefined when the cache is cold. */
+  /** Concatenation of every block's rows, or undefined when the cache is cold. */
   private settledRows: readonly string[] | undefined;
   /** The message being streamed right now, rendered below settled history. */
   private inFlight: AssistantMessageComponent | undefined;
@@ -66,7 +81,7 @@ export class TranscriptContent {
 
   constructor(options: TranscriptContentOptions) {
     this.options = options;
-    this.container = this.build();
+    this.consumeSettled();
   }
 
   /** Total content rows at `width`: settled history plus the live tail. */
@@ -89,9 +104,10 @@ export class TranscriptContent {
   }
 
   /**
-   * Route one session event. A delta on the in-flight message updates only that
-   * component; anything else takes up the source's current message history,
-   * which by then already contains every message that has settled.
+   * Route one session event to the narrowest update it allows. A delta on the
+   * in-flight message touches only that component. A run or compaction boundary
+   * may have rewritten or mutated history in place, so it rebuilds wholesale.
+   * Everything else consumes whatever settled since the last check.
    */
   apply(event?: AgentSessionEvent): void {
     const partial = inFlightAssistantMessage(event);
@@ -99,12 +115,20 @@ export class TranscriptContent {
       this.updateInFlight(partial);
       return;
     }
-    this.rebuild();
+    if (event?.type === "agent_end" || event?.type === "compaction_end") {
+      this.reset();
+    } else if (event?.type === "message_end") {
+      this.clearInFlight();
+    }
+    this.consumeSettled();
   }
 
   /** Drop cached rendering held by the mounted components and by this object. */
   invalidate(): void {
-    this.container.invalidate();
+    for (const block of this.blocks) {
+      block.container.invalidate();
+      block.rows = undefined;
+    }
     this.settledRows = undefined;
     this.inFlight?.invalidate();
     this.inFlightRows = undefined;
@@ -112,14 +136,21 @@ export class TranscriptContent {
 
   // ---- Private ----
 
-  /** Settled rows at `width`, rendered once per width/content generation. */
+  /** Settled rows at `width`; each block renders once per width and content change. */
   private settled(width: number): readonly string[] {
     if (this.settledWidth !== width) {
       this.settledWidth = width;
+      for (const block of this.blocks) block.rows = undefined;
       this.settledRows = undefined;
     }
-    this.settledRows ??= this.container.render(width).map((row) => truncateToWidth(row, width));
-    return this.settledRows;
+    if (this.settledRows) return this.settledRows;
+    const rows: string[] = [];
+    for (const block of this.blocks) {
+      block.rows ??= block.container.render(width).map((row) => truncateToWidth(row, width));
+      rows.push(...block.rows);
+    }
+    this.settledRows = rows;
+    return rows;
   }
 
   /** Rows below settled history: the in-flight message, then the activity row. */
@@ -150,21 +181,145 @@ export class TranscriptContent {
     this.inFlightRows = undefined;
   }
 
-  private rebuild(): void {
-    this.container = this.build();
-    this.settledRows = undefined;
+  private clearInFlight(): void {
     this.inFlight = undefined;
     this.inFlightRows = undefined;
   }
 
-  private build(): Container {
-    const container = new Container();
-    const pendingTools = new Map<string, ToolExecutionComponent>();
-    for (const message of this.options.source.getMessages()) {
-      addMessageComponents(container, message, pendingTools, this.options);
-    }
-    return container;
+  /** Discard all settled state, so the next consume rebuilds from scratch. */
+  private reset(): void {
+    this.blocks = [];
+    this.consumedCount = 0;
+    this.lastConsumed = undefined;
+    this.hasVisibleContent = false;
+    this.pendingTools.clear();
+    this.settledRows = undefined;
+    this.clearInFlight();
   }
+
+  /**
+   * Append blocks for every message that settled since the last check. When the
+   * consumed prefix no longer mirrors the source — history replaced wholesale by
+   * compaction or branching — start over rather than appending onto stale blocks.
+   */
+  private consumeSettled(): void {
+    const messages = this.options.source.getMessages();
+    if (this.hasRewrittenHistory(messages)) this.reset();
+    if (messages.length === this.consumedCount) return;
+    for (let i = this.consumedCount; i < messages.length; i++) this.consumeMessage(messages[i]);
+    this.consumedCount = messages.length;
+    this.lastConsumed = messages.at(-1);
+    this.settledRows = undefined;
+  }
+
+  private hasRewrittenHistory(messages: readonly SessionMessage[]): boolean {
+    if (messages.length < this.consumedCount) return true;
+    return this.consumedCount > 0 && messages[this.consumedCount - 1] !== this.lastConsumed;
+  }
+
+  /**
+   * Map one settled message onto its own block of Pi's per-entry components,
+   * mirroring Pi's own interactive-mode `renderSessionContext` mapping.
+   * `custom`-role messages produce no block — rendering them needs the child
+   * session's message-renderer registry, which the navigator does not hold.
+   */
+  private consumeMessage(message: SessionMessage): void {
+    switch (message.role) {
+      case "assistant":
+        this.consumeAssistant(message);
+        break;
+      case "toolResult":
+        this.consumeToolResult(message);
+        break;
+      case "user":
+        this.consumeUser(message);
+        break;
+      case "bashExecution":
+        this.consumeBashExecution(message);
+        break;
+      case "compactionSummary":
+        this.consumeSummary(new CompactionSummaryMessageComponent(message, this.options.markdownTheme));
+        break;
+      case "branchSummary":
+        this.consumeSummary(new BranchSummaryMessageComponent(message, this.options.markdownTheme));
+        break;
+    }
+  }
+
+  private consumeAssistant(message: AssistantSessionMessage): void {
+    const block = this.appendBlock();
+    block.container.addChild(new AssistantMessageComponent(message, false, this.options.markdownTheme));
+    for (const content of message.content) {
+      if (content.type !== "toolCall") continue;
+      const tool = new ToolExecutionComponent(
+        content.name,
+        content.id,
+        content.arguments,
+        { showImages: false },
+        this.options.source.getToolDefinition(content.name),
+        this.options.tui,
+        this.options.cwd,
+      );
+      tool.setExpanded(true);
+      block.container.addChild(tool);
+      this.pendingTools.set(content.id, { component: tool, block });
+    }
+    this.hasVisibleContent = true;
+  }
+
+  /** A tool result mutates the block holding its call; no other block changes. */
+  private consumeToolResult(message: Extract<SessionMessage, { role: "toolResult" }>): void {
+    const pending = this.pendingTools.get(message.toolCallId);
+    if (!pending) return;
+    pending.component.updateResult(message);
+    pending.block.rows = undefined;
+    this.settledRows = undefined;
+    this.pendingTools.delete(message.toolCallId);
+  }
+
+  private consumeUser(message: Extract<SessionMessage, { role: "user" }>): void {
+    const block = this.appendBlock();
+    addUserComponents(block.container, message.content, this.options.markdownTheme, this.hasVisibleContent);
+    if (block.container.children.length > 0) this.hasVisibleContent = true;
+  }
+
+  private consumeBashExecution(message: Extract<SessionMessage, { role: "bashExecution" }>): void {
+    const block = this.appendBlock();
+    const bash = new BashExecutionComponent(message.command, this.options.tui, message.excludeFromContext);
+    if (message.output) bash.appendOutput(message.output);
+    bash.setComplete(message.exitCode, message.cancelled, undefined, message.fullOutputPath);
+    block.container.addChild(bash);
+    this.hasVisibleContent = true;
+  }
+
+  /** Compaction and branch summaries share the same spacer-plus-expanded shape. */
+  private consumeSummary(
+    summary: CompactionSummaryMessageComponent | BranchSummaryMessageComponent,
+  ): void {
+    const block = this.appendBlock();
+    block.container.addChild(new Spacer(1));
+    summary.setExpanded(true);
+    block.container.addChild(summary);
+    this.hasVisibleContent = true;
+  }
+
+  private appendBlock(): SettledBlock {
+    const block: SettledBlock = { container: new Container(), rows: undefined };
+    this.blocks.push(block);
+    return block;
+  }
+}
+
+/** One settled message's components plus its rows at the current width. */
+interface SettledBlock {
+  readonly container: Container;
+  rows: readonly string[] | undefined;
+}
+
+/** A tool call awaiting its result, and the block whose rows it will invalidate. */
+interface PendingTool {
+  readonly component: ToolExecutionComponent;
+  readonly block: SettledBlock;
 }
 
 /** The assistant variant of a session message, as Pi's components consume it. */
@@ -181,80 +336,19 @@ function inFlightAssistantMessage(event?: AgentSessionEvent): AssistantSessionMe
 }
 
 /**
- * Map one message onto Pi's per-entry components, mirroring Pi's own
- * interactive-mode `renderSessionContext` mapping. Tool results are matched to
- * their tool-call components by id, exactly as Pi does. `custom`-role messages
- * are skipped — rendering them needs the child session's message-renderer
- * registry, which the navigator does not hold.
+ * Render a user message (skill block + text) into the block, mirroring Pi.
+ * Whether a leading spacer is needed is a whole-transcript property, so the
+ * caller — which alone knows what precedes this block — supplies it.
  */
-function addMessageComponents(
-  container: Container,
-  message: SessionMessage,
-  pendingTools: Map<string, ToolExecutionComponent>,
-  opts: TranscriptContentOptions,
-): void {
-  switch (message.role) {
-    case "assistant": {
-      container.addChild(new AssistantMessageComponent(message, false, opts.markdownTheme));
-      for (const content of message.content) {
-        if (content.type !== "toolCall") continue;
-        const tool = new ToolExecutionComponent(
-          content.name,
-          content.id,
-          content.arguments,
-          { showImages: false },
-          opts.source.getToolDefinition(content.name),
-          opts.tui,
-          opts.cwd,
-        );
-        tool.setExpanded(true);
-        container.addChild(tool);
-        pendingTools.set(content.id, tool);
-      }
-      break;
-    }
-    case "toolResult": {
-      pendingTools.get(message.toolCallId)?.updateResult(message);
-      pendingTools.delete(message.toolCallId);
-      break;
-    }
-    case "user": {
-      addUserComponents(container, message.content, opts.markdownTheme);
-      break;
-    }
-    case "bashExecution": {
-      const bash = new BashExecutionComponent(message.command, opts.tui, message.excludeFromContext);
-      if (message.output) bash.appendOutput(message.output);
-      bash.setComplete(message.exitCode, message.cancelled, undefined, message.fullOutputPath);
-      container.addChild(bash);
-      break;
-    }
-    case "compactionSummary": {
-      container.addChild(new Spacer(1));
-      const summary = new CompactionSummaryMessageComponent(message, opts.markdownTheme);
-      summary.setExpanded(true);
-      container.addChild(summary);
-      break;
-    }
-    case "branchSummary": {
-      container.addChild(new Spacer(1));
-      const summary = new BranchSummaryMessageComponent(message, opts.markdownTheme);
-      summary.setExpanded(true);
-      container.addChild(summary);
-      break;
-    }
-  }
-}
-
-/** Render a user message (skill block + text) into the container, mirroring Pi. */
 function addUserComponents(
   container: Container,
   content: string | readonly { type: string; text?: string }[],
   markdownTheme: MarkdownTheme,
+  hasPrecedingContent: boolean,
 ): void {
   const text = userMessageText(content);
   if (!text) return;
-  if (container.children.length > 0) container.addChild(new Spacer(1));
+  if (hasPrecedingContent) container.addChild(new Spacer(1));
 
   const skillBlock = parseSkillBlock(text);
   if (!skillBlock) {
