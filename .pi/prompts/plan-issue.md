@@ -53,6 +53,7 @@ Before investigating the issue, load skills relevant to the change:
 4. Read every issue the body references as a prerequisite or related (`gh issue view <n>`).
    Note whether each is implemented yet — your plan must say what it depends on vs. defers.
    Then search for open issues the body does **not** reference but that touch the same module or symbol (`gh issue list --state open --search "<symbol>"`) — a sibling issue on the same file changes the framing, and the operator should not have to supply it (Refs #635).
+   Sweep open PRs the same way (`gh pr list --state open`) — a third-party PR on the same module often carries a diagnosis the issue omits, and it becomes a close target at ship time (Refs #670, #690).
 5. Open the source files most relevant to the change and skim them before writing.
 6. When the plan introduces a public API pattern (package `exports`, `Symbol.for()` accessor, service interface) or agent-facing message formatting (attribution tags, error prefixes, log labels), use colgrep or grep to search sibling packages for the established convention and follow it unless there is a documented reason to diverge.
    When a config key or public field names an SDK/domain concept (a tool-call part, event, or content type), use the SDK's own term for it — verify against the SDK types — rather than adopting a term from the issue body verbatim (Refs #580: `commandField` shipped, then needed renaming to `commandArgument` to match `ToolCall.arguments`).

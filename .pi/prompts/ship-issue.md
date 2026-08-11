@@ -102,6 +102,9 @@ Close it with `gh pr comment` then `gh pr close` — never merge — crediting t
 An adopted PR and the issue it addresses are both close targets: shipping either one closes the other too — read the retro's PR Review stage for the counterpart number.
 Apply the `git rev-parse` rule above to every SHA in either comment; a multi-SHA credit list is where hand-extended short hashes slip in (Refs #704).
 
+A shipped issue can also supersede open third-party PRs without either being the close target — this repo reimplements rather than merges.
+Close each PR the plan names with `gh pr comment` then `gh pr close`, never merge, crediting the author by `@login` (Refs #670, #690).
+
 Then check whether this push shipped work for **other** issues (a stacked refactor/enabler, other `(#M)` commit refs, or sibling `docs/plans/`/`docs/retro/` files in the `<pkg-tag>..HEAD` range).
 A mid-batch sibling that shipped on its own `/ship-issue` is already closed by that ship — this scan is for stacked work that never had a ship of its own.
 Close each with its own short summary — release-please omits `refactor:` commits from the changelog, so a stacked refactor issue leaves no reminder.

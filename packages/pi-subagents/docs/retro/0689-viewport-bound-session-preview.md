@@ -85,6 +85,82 @@ Pre-completion reviewer: WARN (no FAILs).
 The one substantive finding — the `hasVisibleContent` equivalence-test gap — was fixed in `52e535b8` before shipping.
 The reviewer's other finding was a historical-accuracy nit in the plan document itself, left as-is.
 
+## Stage: Final Retrospective (2026-08-10T23:01:22Z)
+
+### Session summary
+
+Planned, implemented, and shipped the `/subagents:sessions` performance fix in a single continuous session: nine commits, `pi-subagents` 19.2.2 released, issue #689 closed, and the two superseded third-party PRs ([#690], [#670]) closed with credit.
+The overlay's paint, scroll, settle, and streaming-delta paths went from O(total transcript) to O(viewport) — measured 90.5 → 0.50 ms per scroll and 44.7 → 0.79 ms per settle on a 200-message fixture.
+The defining characteristic of the session was that every consequential claim was measured rather than argued, including two tests that turned out to be measuring nothing.
+
+### Observations
+
+#### What went well
+
+- Measuring **both sides** before the `ask_user` gate turned a preference question into an evidence question.
+  Applying [#690]'s two commits to a scratch tree and re-running the same fixture produced the after-column directly, so the plan's table compared like with like instead of quoting the PR's numbers.
+  This also caught that the PR's own "after commit 1" delta figure did not transfer to our step boundaries — a discrepancy that would have been invisible without re-measuring.
+- Two independent false-green tests were caught **before** shipping, by two different mechanisms.
+  The `fullRebuildRenderCount` helper nested a `vi.spyOn` inside an active spy on the same method, inflating the baseline so `toBeLessThan` could never discriminate; noticing that the new tests passed on the first run — when they were supposed to be red — exposed it.
+  The `hasVisibleContent` equivalence gap was caught by the `pre-completion-reviewer`, and is the subtler of the two: an incremental-vs-freshly-built comparison cannot pin the code both of its sides run.
+- The `tidy-first-assessor` did more than propose tidying — it **corrected the dispatch brief**.
+  I asserted four test helpers would be shared post-split; it determined only two would be, because `TranscriptContentOptions` carries no `theme` field.
+  Its second proposal (reshaping `TranscriptRenderOptions` to hold `source` rather than a projected `getToolDefinition` callback) turned the extraction commit into a literal cut-and-paste.
+- Reading Pi's own source at `../pi` rather than reasoning from the PR body produced two simplifications the PR does not have, and closed a risk the PR never addresses (in-place `message_end` replacement is applied before session listeners are notified).
+
+#### What caused friction (agent side)
+
+- `instruction-violation` (self-identified late) — recovering the corrupted retro file, I rebuilt it with a shell heredoc (`cat > /tmp/retro-tail.md <<'MARKER'` plus `cat` concatenation and a `python3` repair).
+  `AGENTS.md`, the `markdown-conventions` skill, and the `/tdd-plan` prompt all say to append retro files with `Edit`/`Write`, never a heredoc; `Write` with the full content was the correct recovery and is named in the prompt.
+  Impact: 4 extra tool calls; no rework, and `rumdl` happened to pass — but the rule exists precisely because heredocs make one-sentence-per-line and escape slips easy, so this was luck rather than safety.
+  The rule is already stated in three places, so the gap is adherence, not documentation.
+- `other` (tool misuse) — the first `Edit` appending the TDD stage notes emitted a `newText` that terminated mid-sentence (`installed a \`vi.spyOn(Container.prototype, `), and the autoformatter then joined the fragment to the following `[#661]:` link-reference definition, corrupting it into a bare autolink.
+  Impact: file corruption requiring a 4-call repair, and it is what prompted the heredoc violation above.
+- `other` (stale measurement) — the scratch benchmark wrote to a fixed `/tmp/perf.json`.
+  Trying to restore it after step 5 via `git show <commit>^:<path>` produced an empty file (it had never been committed), the run silently no-opped, and I read and reported the **step-3** numbers as if they were final.
+  Impact: one wrong measurement stated mid-session, self-caught within 2 tool calls by noticing the numbers were identical to the earlier run; recreating the benchmark properly cost ~3 more calls.
+  A fixed output path plus a run that can no-op is a false-freshness trap.
+- `other` (scratch-file churn) — the same disposable benchmark was written, run, and deleted four times across planning and implementation (`scratch-perf.test.ts` ×3, `scratch-scale.test.ts`, plus a `/tmp/dbg.test.ts` copied into `test/ui/`).
+  Impact: no rework, but it is the mechanism behind the stale-measurement error above.
+
+#### What caused friction (user side)
+
+- The operator's redirect at the depth gate was the highest-leverage intervention of the session, and worth naming as a pattern rather than a friction point.
+  Rather than picking an option or correcting me, they asked a question — "45 ms isn't bad, but 0.42 ms is pretty impressive.
+  Do we need to research Pi itself to answer some questions?"
+  That bounced an under-evidenced `ask_user` back for grounding, and the research inverted the risk assessment: the deeper option turned out to be the *safer* one, because it mirrors Pi's own interactive-mode model rather than inventing one.
+  A flat answer to the original ask would have shipped the shallower fix.
+- PR [#690] was supplied as a follow-up message after `/plan-issue` had already begun.
+  Impact: negligible directly (~2 tool calls), but it exposed a real prompt gap — `/plan-issue` sweeps sibling **issues** and not sibling **PRs**, so the operator had to supply what the prompt should have found.
+  [#670] was found only because I ran `gh pr list --state open` on my own initiative.
+
+### Diagnostic details
+
+- **Model-performance correlation** — planning and implementation ran on `anthropic/claude-opus-5`; the ship stage ran on `anthropic/claude-sonnet-5`; the retro on `anthropic/claude-opus-5`.
+  All three subagents ran on `anthropic/claude-sonnet-5`: the `Explore` dispatch tracing Pi's agent core (explicitly requested per the `AGENTS.md` rule that Haiku is too weak for a multi-hop trace there), plus `tidy-first-assessor` and `pre-completion-reviewer` via their frontmatter defaults.
+  No mismatches: the judgment-heavy work (design decisions, the reviewer's WARN) landed on reasoning-capable models, and the mechanical ship sequence on the cheaper one without incident.
+- **Escalation-delay tracking** — no sequence exceeded 5 consecutive tool calls on the same error.
+  The longest was the retro-file corruption repair at 4 calls, and the stale-measurement diagnosis at 2.
+  No dispatch or escalation was warranted.
+- **Unused-tool detection** — `colgrep` was never invoked this session.
+  Justified: every search was exact-symbol (`TranscriptOverlay`, `buildContentLines`, `subscribeToUpdates`, `parseSkillBlock`), which the `colgrep` skill's own decision table assigns to `grep`.
+  No missed dispatch opportunity found for any friction point.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check` and the affected test file ran after every Red and every Green; the full suite, root `lint`, and `fallow dead-code` ran after each of the six TDD steps and again before the pre-completion dispatch.
+  The green baseline was established with all four gates before the first change, which is what made the two false-green tests legible as anomalies rather than noise.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — step 4 now sweeps open PRs (`gh pr list --state open`) alongside the existing sibling-issue sweep, since a third-party PR on the same module often carries a diagnosis the issue omits and becomes a close target at ship time.
+2. `.pi/prompts/ship-issue.md` — step 5 now covers an issue that **supersedes** open third-party PRs, distinct from the existing case where the adopted PR is itself the close target.
+3. `.pi/skills/testing/SKILL.md` — added an assertion rule under § Test assertions: an equivalence test pins self-consistency, not correctness, when both sides run the code under test.
+
+Not landed, considered and declined:
+
+- A fourth statement of the "no shell heredoc for retro files" rule — it is already in `AGENTS.md`, the `markdown-conventions` skill, and the `/tdd-plan` prompt; the gap here was adherence, not documentation.
+- A rule about stale output from a disposable measurement script writing to a fixed path — real but self-caught in two tool calls, and judged too situational to earn permanent space.
+- A rule derived from the `Edit` truncation — no reliable account of the cause, and a rule built on a guess is worse than none.
+
 [#661]: https://github.com/gotgenes/pi-packages/issues/661
 [#662]: https://github.com/gotgenes/pi-packages/issues/662
 [#670]: https://github.com/gotgenes/pi-packages/issues/670

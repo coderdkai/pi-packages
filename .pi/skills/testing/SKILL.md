@@ -63,6 +63,8 @@ Load this skill when writing, debugging, or planning tests.
   Assert the positive (non-fallback) path against the same fixture builder first — a malformed fixture then fails loudly there — or assert a discriminating field the fallback cannot produce.
 - When proving a guard test is not vacuous, build the probe to match the guard's exact predicate.
   A near-miss probe (`void runRpcSession;` against a guard matching `runRpcSession(`) leaves the guard silent and looks like proof it is broken (Refs #678).
+- An equivalence test (incremental vs. freshly built, cached vs. uncached) pins self-consistency, not correctness, when both sides run the code under test.
+  Assert independently — a count, a golden row — anything the equivalence cannot see (Refs #689).
 - Prefer a concrete test asserting current (even imperfect) behavior over `test.todo`.
   A real assertion documents the limitation and lets a future fix flip the expectation.
 - When a test reveals a pre-existing bug rather than a wrong assumption, use `test.fails` to document the expected behavior and file a GitHub issue.
