@@ -266,6 +266,10 @@ When planning a refactoring that targets testability, read the test files alongs
 When planning a refactoring that touches handler wiring or shared interfaces, load the `design-review` skill to audit for structural smells before writing the plan.
 
 The bash `external_directory` gate only sees tokens that `classifyTokenAsPathCandidate` accepts — absolute (`/…`), home-relative (`~/…`), parent-traversal (`..`), and Windows drive-letter absolute paths (`C:/…` or `C:\…`).
+A token's shape is judged **after** expansion resolution, not before: `resolveNodeText` resolves a plain `$HOME`/`${HOME}` reference to `os.homedir()` and a plain `$PWD`/`${PWD}` reference to `.` at collection time (`access-intent/bash/shell-variable-expansion.ts`), so `$HOME/x` reaches the strict gate as an ordinary absolute token — independent of the existence probe — and `$PWD/x` is gated exactly as `./x` ([#694]).
+Do not add a `$HOME` branch to a classifier: the expansion vocabulary lives in that one module precisely so it cannot drift from the classifiers again, which is the defect [#694] fixed.
+Plainness is structural (exactly one `variable_name` child, otherwise only delimiters), so `${HOME:-/tmp}` and `${#HOME}` stay literal; the resolvable set is closed at `HOME`/`PWD`, and any other variable, a command substitution, or a variable reached through an assignment (`CURRENT="$HOME"; ls "$CURRENT"`) remains an accepted residual under ADR 0009.
+A `~` token keeps its raw spelling in prompts and logs (it is shape-classified directly and never needed collection-time expansion), while a `$HOME` token now displays expanded — which is what makes the prompt agree with the session-approval pattern, always derived from the expanded `AccessPath.value()`.
 A plain `./relative` token (e.g. `cat ./link/hosts`) is dropped before that gate and is instead gated by the broader `path` surface (`classifyTokenAsRuleCandidate`).
 The broader classifier also recognizes the backslash drive form (`D:\…`) — the forward-slash form is caught by `includes("/")`.
 On win32 the broad classifier additionally recognizes a backslash-relative token (`dir\file`, no leading `.`, no `/`, no `..`, not a drive-letter absolute) as a `path`-surface candidate — gated the same as its forward-slash equivalent `dir/file` ([#520]) — while on POSIX `\` is a legal filename character so the token stays bare; the decision is `PathFlavor.hasPathSeparator`, which the win32 flavor answers by counting `\`, so the classifier never reads `process.platform`.
@@ -285,5 +289,6 @@ When a plan or test asserts a specific bash repro string, trace the token throug
 [#509]: https://github.com/gotgenes/pi-packages/issues/509
 [#645]: https://github.com/gotgenes/pi-packages/issues/645
 [#520]: https://github.com/gotgenes/pi-packages/issues/520
+[#694]: https://github.com/gotgenes/pi-packages/issues/694
 [earendil-works/pi#4731]: https://github.com/earendil-works/pi/issues/4731
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
