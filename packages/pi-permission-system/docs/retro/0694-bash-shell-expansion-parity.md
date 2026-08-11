@@ -77,3 +77,74 @@ Test count for `pi-permission-system` went 2672 → 2721 (+49); full repo suite,
 - **Pre-completion reviewer: PASS.**
   No WARN findings after the lint-hygiene commit (the reviewer's only non-blocking observation was the 20 `noTemplateCurlyInString` warnings, which that commit cleared).
   It independently confirmed the `bash-path.test.ts` flip, the ADR 0009 / ADR 0003 consistency, and that no stale "variable expansion is not parsed" claim survives anywhere in the package.
+
+## Stage: Final Retrospective (2026-08-11T05:26:50Z)
+
+### Session summary
+
+One continuous session took #694 from a third-party bug report through planning, three TDD cycles, and a breaking release (`@gotgenes/pi-permission-system@25.0.0`).
+The defining move was measuring before designing: a throwaway spike against the real analyzer reframed the issue from "computed paths are unsupported" (an ADR 0009 accepted residual) into "the two projections of one AST walk disagree" (a genuine fail-open), and a scan of the package's own permission review log turned three competing design options into three measured percentages the operator could choose between.
+Shipped with 6 commits, +49 tests, and a `PASS` pre-completion review.
+
+### Observations
+
+#### What went well
+
+- **The extension being fixed caught my own path typo.**
+  At the ADR edit I passed `/Users/chris/development/pi/pi-permission-system/docs/...` — a doubled package segment.
+  `pi-permission-system`'s `external_directory` gate denied it *and named the corrected path in the denial reason*, so the retry was a one-line fix with zero investigation.
+  A denial message that repairs the caller's mistake is a notably good failure mode, and worth remembering as a design bar for other gates.
+- **The package's own review log is a measurement instrument.**
+  `~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl` holds 2767 deduplicated real bash commands.
+  Scanning it produced the three numbers that drove the operator's decision — 0.5% touch `$HOME`, 1.6% have a statically-resolvable assign-then-use, 7.0% carry any `$VAR` — turning "which of these three scope ladders?"
+  from a taste question into an evidence question.
+  ADR 0009 had already used this technique for its probe-selectivity figure, but it was nowhere written down as a *method*.
+- **Tidy-First earned its dispatch for once.**
+  The assessor's single recommendation (extract `node-text.test.ts`'s fake-`TSNode` builder to `test/helpers/fake-ts-node.ts`) was consumed 15 turns later by the new `shell-variable-expansion.test.ts`, exactly as predicted.
+  It also correctly rejected a `makeExpansionNode` convenience wrapper as a wrong-abstraction trap — the node shape *is* the thing under test.
+- **The planned false-green hazard was real.**
+  Flagging at plan time that `makeNode`'s zero-children default would let the old `$HOME` assertion keep passing meant the red step was built to actually fail.
+  Writing the hazard down in the plan is what made it survive from planning into the TDD cycle.
+
+#### What caused friction (agent side)
+
+- `missing-context` — Biome findings at **warning** level exit 0, so `pnpm run lint >/dev/null 2>&1 && echo "lint: PASS"` reported green while 20 new `noTemplateCurlyInString` warnings accumulated across four files.
+  Both the post-cycle lint check and the pre-push check were technically correct and completely uninformative.
+  Impact: the warnings surfaced only via the pre-completion reviewer, costing ~12 cleanup tool calls and an unplanned `build:` commit at the very end of the session.
+  Catching them during the red step would have made the `biome.json` override part of the main commit.
+- `missing-context` — a disposable vitest spike used `console.log`, whose output Vitest suppresses for passing tests; the recovery attempt (`--reporter=basic`) is not a Vitest 4 reporter and failed with a 30-line module-resolution stack trace.
+  Fixed by rewriting the spike to `appendFileSync` into `/tmp`.
+  Impact: 2 wasted tool calls before the spike produced anything, no rework.
+- `instruction-violation` (self-identified, post-hoc) — `/plan-issue` directs loading the `colgrep` and `design-review` skills; neither was loaded.
+  Impact: none observable.
+  Every symbol needed was known exactly (`expandHomePath`, `classifyTokenAsPathCandidate`, `resolveNodeText`), so `grep` was the correct tool and `colgrep` would have added nothing; the change introduced one module with one caller, at the shallow end of `design-review`'s remit.
+  Recorded rather than proposed-against: the honest reading is that a six-skill preload list gets triaged when the tool choice is obvious, not that the rule needs strengthening.
+- `other` — the plan's Module-Level Changes missed `test/handlers/gates/bash-path.test.ts`, even though the plan's own Risks section predicted the display change that broke its assertion.
+  Impact: none beyond a deviation to explain; the full-suite run caught it immediately.
+  The gap is a familiar shape — a predicted *effect* was not traced to the specific *file* that asserts on it.
+
+#### What caused friction (user side)
+
+- The two `ask_user` questions were answered decisively in one round, which kept planning tight.
+  One small composition wrinkle: Q1's answer ("home parity only") and Q2's answer ("HOME + PWD") are mildly in tension on their face, since `$PWD` is not home.
+  The resolution was straightforward — `PWD` rides the same expansion mechanism and is scoped to bash tokens only — but it was an interpretation the plan had to make rather than one the answers stated.
+  Opportunity for future asks: when two questions can combine into a pair that needs reconciling, say in the pre-ask message how the axes compose.
+
+### Diagnostic details
+
+- **Model-performance correlation** — planning and the full TDD cycle ran on `anthropic/claude-opus-5` (judgment-heavy: an ADR-level scope decision, an AST-seam design choice, and a breaking-change classification — appropriate).
+  Ship ran on `anthropic/claude-sonnet-5` (mechanical: push, CI polling, release-PR merge — appropriate, and the cheaper model handled the deterministic runbook without a stumble).
+  Both subagents ran on `anthropic/claude-sonnet-5`: `tidy-first-assessor` produced a correctly-scoped single recommendation plus four reasoned rejections, and `pre-completion-reviewer` independently traced the `bash-path.test.ts` data flow to confirm the display flip.
+  No mismatch found.
+- **Escalation-delay tracking** — no `rabbit-hole` friction points.
+  The longest same-problem run was the spike-output issue at 3 consecutive tool calls, well under the 5-call threshold.
+- **Unused-tool detection** — `colgrep` was never dispatched, but every lookup targeted a known exact symbol, so `grep` was the right choice; no `Explore` subagent was warranted for a three-module change in a well-documented area.
+  The one tool that would have helped was already available and simply not run at the right moment: `pnpm exec biome check <new-paths>` during the red step, which reports warnings that `pnpm run lint`'s exit status hides.
+- **Feedback-loop gap analysis** — verification was well distributed, not end-loaded: `pnpm run check` plus the full package suite ran after each of the three TDD cycles, and the four-gate baseline (`check`/`lint`/`test`/`fallow`) ran before the first change.
+  The single gap is the exit-0 warning blindness above — the loop ran at the right *times* but read the wrong *signal*.
+
+### Changes made
+
+1. `AGENTS.md` — appended two sentences to the existing pipe-vs-redirect rule in Commits, noting that the recommended `>/dev/null` redirect hides Biome warning-level findings (which exit 0) and giving the `grep -c 'lint/'` log count as the recovery.
+2. `.pi/skills/testing/SKILL.md` — added a bullet under "Running tests": a disposable spike must write findings to a file, since Vitest suppresses `console.log` from passing tests and `--reporter=basic` no longer exists in Vitest 4.
+3. `.pi/skills/package-pi-permission-system/SKILL.md` — added a sixth "Debugging" step recording the review-log mining technique for measuring a gate change's blast radius, with the log path and the #694 figures.

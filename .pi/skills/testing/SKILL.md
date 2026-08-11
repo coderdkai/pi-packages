@@ -92,6 +92,7 @@ A missing export throws `is not a function` at runtime but surfaces as `TS2305` 
 - Run a single file: `pnpm --filter @gotgenes/<pkg> exec vitest run <test-path>` — plain `pnpm vitest run` fails at the repo root (`Command "vitest" not found`).
 - Run the full suite: `pnpm --filter @gotgenes/<pkg> exec vitest run`
 - When a fix changes shared helper functions, run the full suite before committing — not just the directly affected test file.
+- A disposable spike test must write its findings to a file (`appendFileSync("/tmp/out.txt", …)`) — Vitest suppresses `console.log` from passing tests, and `--reporter=basic` was removed in Vitest 4 (it fails as a missing custom reporter).
 
 ## Operator semantics
 
