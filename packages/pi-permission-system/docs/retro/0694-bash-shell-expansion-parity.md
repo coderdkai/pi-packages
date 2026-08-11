@@ -39,3 +39,41 @@ Plan committed at `packages/pi-permission-system/docs/plans/0694-bash-shell-expa
 - **`docs/configuration.md` line 592 is doubly stale** — it still claims relative paths inside subshells are not resolved against a per-subshell working directory, which `cd` folding (`#454`, `#393`) already handles.
   The plan folds that correction into the same docs step.
 - Scope was deliberately held back from `cd "$HOME"` folding: `literalTextOf` also rejects `cd ~`, so leaving both unknown is parity, and an unknown base is the fail-closed direction.
+
+## Stage: Implementation — TDD (2026-08-11T05:12:00Z)
+
+### Session summary
+
+Implemented the plan in three TDD cycles plus one Tidy-First preparatory commit and one lint-hygiene commit, all from a verified-green baseline.
+The behavior change landed exactly at the planned seam: `resolveNodeText` delegates expansion nodes to a new pure `shell-variable-expansion.ts`, and `token-classification.ts` / `bash-path-resolver.ts` were never edited.
+Test count for `pi-permission-system` went 2672 → 2721 (+49); full repo suite, `check`, root `lint`, and `fallow dead-code` all green.
+
+### Observations
+
+- **The planned false-green hazard was real and was caught.**
+  Rebuilding `node-text.test.ts`'s childless `simple_expansion` fakes with realistic `$`/`variable_name` children was the difference between a test that exercises the new structural discriminator and one that silently passes through the `node.text` fallback.
+  The new `shell-variable-expansion.test.ts` additionally carries a parser-backed `describe` ("fidelity to the shapes tree-sitter-bash actually produces") that pins the hand-built fixtures against the real AST — cheap insurance against the fakes drifting from tree-sitter.
+- **Two red assertions were my error, not the code's, and both were instructive.**
+  `cd /etc && ls "$PWD/passwd"` yields `["/etc", "/etc/passwd"]`, not just the latter — the `cd` argument token is itself an external path, which is correct pre-existing behavior.
+  Asserting the full array (per the testing skill's preference for `toEqual` over `toContain`) is what surfaced it; a `toContain` would have hidden the second entry.
+- **Deviation: `test/handlers/gates/bash-path.test.ts` was touched but not listed in the plan.**
+  Its assertion on the displayed `pathValue` for `cat $HOME/.ssh/config` flipped from `$HOME/.ssh/config` to `/mock/home/.ssh/config`.
+  The plan predicted this display change in Risks and Mitigations but did not trace it to a specific test file — a plan-completeness miss.
+  The reviewer independently traced the data flow and confirmed the flip is correct, not a masked regression.
+- **A `~` vs `$HOME` display asymmetry is now baked in and deliberate.**
+  A `~` token is a plain `word` node, shape-classified directly, and expanded only later inside `AccessPath`; a `$HOME` token is an expansion node resolved at collection.
+  So `~/x` still displays raw while `$HOME/x` displays expanded.
+  Decisions are identical for both — only display differs — and the expanded display is the improvement, since `deriveApprovalPattern` already derived the session rule from the expanded `AccessPath.value()`.
+  Prompt and rule now agree.
+  Documented in `SKILL.md` so a future agent does not read it as a bug.
+- **Deviation: one unplanned `build:` commit for lint hygiene.**
+  Implementing braced-expansion support made every `"${HOME}"` literal trip Biome's `noTemplateCurlyInString` — 20 new warnings across the four files that own that vocabulary.
+  Twenty inline suppressions would have restated one judgement twenty times (the scattered-decision smell), so it became one narrow `biome.json` override scoped to `expand-home` plus the bash access-intent tree, with the two hits in the neighbouring gate test left as inline suppressions rather than widening the override.
+  Warnings are exit-0, so this was optional; leaving 20 lines of noise in a security-sensitive area was the worse outcome.
+- **`expandHomePath` got a small unplanned refactor.**
+  Adding `${HOME}` to three near-identical prefix clauses would have made five; folding them into one bounded `HOME_PREFIXES` table means a fourth spelling could never again be added to one branch and forgotten in another — the same drift class as the defect being fixed.
+- **The declined scope is pinned, not dropped.**
+  `CURRENT="$HOME"; ls "$CURRENT"` has an explicit assertion at both the projection layer (`program.test.ts`) and the gate layer (`bash-external-directory.test.ts`), each commented as an ADR 0009 residual, so a future change to it is deliberate rather than accidental.
+- **Pre-completion reviewer: PASS.**
+  No WARN findings after the lint-hygiene commit (the reviewer's only non-blocking observation was the 20 `noTemplateCurlyInString` warnings, which that commit cleared).
+  It independently confirmed the `bash-path.test.ts` flip, the ADR 0009 / ADR 0003 consistency, and that no stale "variable expansion is not parsed" claim survives anywhere in the package.
