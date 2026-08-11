@@ -210,7 +210,11 @@ After the retro is committed, surface the next issue to work on so the operator 
 Derive it from the shipped issue's roadmap: read the plan's dependency diagram or the package's `docs/architecture/architecture.md` for the step this issue unblocks (e.g. "unblocks #M", the next incomplete numbered step).
 If a successor exists in the current phase, recommend `/plan-issue #M` (name the step).
 If this issue completed the phase's **last** step, recommend `/finish-phase <PKG>` instead — it archives the phase to `history/` and reconciles the architecture doc; the phase-close is a manual command, never a filed issue — then `/plan-improvements <PKG>` for the next round.
-If none is queued, say so explicitly.
+
+When the roadmap has no successor, read the newest backlog triage (`ls -1 docs/triage/*.md | tail -1`) and recommend its highest-ranked item that is still open, naming its rank and severity.
+Re-check state with `gh` — the ranking is a snapshot, and this ship may have closed items above it.
+An item the triage listed under **Deferred** is not a candidate; recommending one contradicts a recorded decision (Refs #689).
+If neither the roadmap nor the triage queues anything, say so explicitly.
 
 ## Rules
 

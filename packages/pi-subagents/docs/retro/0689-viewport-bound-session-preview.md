@@ -122,6 +122,11 @@ The defining characteristic of the session was that every consequential claim wa
   A fixed output path plus a run that can no-op is a false-freshness trap.
 - `other` (scratch-file churn) — the same disposable benchmark was written, run, and deleted four times across planning and implementation (`scratch-perf.test.ts` ×3, `scratch-scale.test.ts`, plus a `/tmp/dbg.test.ts` copied into `test/ui/`).
   Impact: no rework, but it is the mechanism behind the stale-measurement error above.
+- `missing-context` (user-caught) — Step 10's next-issue recommendation consulted only the architecture roadmap.
+  The roadmap had no successor (#689 was a standalone third-party bug, and Phase 21 is complete), so I fell back to a raw `gh issue list` scan and ranked by judgment, never opening `docs/triage/2026-08-05-backlog.md`.
+  That document ranks the shipped issue at 4 and still has #694 (rank 2, security) and #696/#697 (rank 3, crash) open above it — and it lists my actual recommendation, [#695], under **Deferred** with the rationale "they belong in a pi-subagents phase, not this list."
+  Impact: recommended work that contradicted a recorded triage decision while two higher-severity items sat open; caught by the operator after the retro commit, costing one follow-up commit.
+  The second suggestion (#709) was filed after the triage date and so was genuinely unranked — legitimate to raise, but it should have been labelled un-triaged rather than presented beside a deferred item as equally vetted.
 
 #### What caused friction (user side)
 
@@ -133,6 +138,8 @@ The defining characteristic of the session was that every consequential claim wa
 - PR [#690] was supplied as a follow-up message after `/plan-issue` had already begun.
   Impact: negligible directly (~2 tool calls), but it exposed a real prompt gap — `/plan-issue` sweeps sibling **issues** and not sibling **PRs**, so the operator had to supply what the prompt should have found.
   [#670] was found only because I ran `gh pr list --state open` on my own initiative.
+- The operator caught the retro's own next-step recommendation being wrong, after the retro had already been committed.
+  Impact: one follow-up commit; see the `instruction-violation` below, which this prompted.
 
 ### Diagnostic details
 
@@ -154,6 +161,8 @@ The defining characteristic of the session was that every consequential claim wa
 1. `.pi/prompts/plan-issue.md` — step 4 now sweeps open PRs (`gh pr list --state open`) alongside the existing sibling-issue sweep, since a third-party PR on the same module often carries a diagnosis the issue omits and becomes a close target at ship time.
 2. `.pi/prompts/ship-issue.md` — step 5 now covers an issue that **supersedes** open third-party PRs, distinct from the existing case where the adopted PR is itself the close target.
 3. `.pi/skills/testing/SKILL.md` — added an assertion rule under § Test assertions: an equivalence test pins self-consistency, not correctness, when both sides run the code under test.
+4. `.pi/prompts/retro.md` — Step 10 now falls back to the newest `docs/triage/*.md` when the roadmap has no successor, re-checks ranked items with `gh`, and treats a triage **Deferred** entry as disqualifying rather than as a candidate.
+   Landed after the first retro commit, prompted by the operator catching this retro's own recommendation contradicting the 2026-08-05 triage.
 
 Not landed, considered and declined:
 
