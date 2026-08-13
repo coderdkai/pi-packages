@@ -263,10 +263,14 @@ export class SubagentManager {
     return record.abort();
   }
 
-  /** Dispose a record's session and remove it from the map. */
-  private removeRecord(id: string, record: Subagent): void {
-    void record.disposeSession();
+  /**
+   * Remove a record from the map and tear its session down.
+   * The map is updated first so the record is unreachable while its child's
+   * extensions shut down.
+   */
+  private removeRecord(id: string, record: Subagent): Promise<void> {
     this.agents.delete(id);
+    return record.disposeSession();
   }
 
   /**
@@ -288,6 +292,8 @@ export class SubagentManager {
       const windowMinutes = record.consumed
         ? policy.consumedSessionRetentionMinutes
         : policy.unconsumedSessionRetentionMinutes;
+      // Fire-and-forget: the sweep runs on an interval with no one to await it,
+      // and Subagent.releaseSession() already swallows a failing teardown.
       if (now - referenceAt >= windowMinutes * 60_000) void record.releaseSession();
     }
   }
@@ -296,11 +302,13 @@ export class SubagentManager {
    * Remove all completed/stopped/errored records immediately.
    * Called on session start/switch so tasks from a prior session don't persist.
    */
-  clearCompleted(): void {
+  async clearCompleted(): Promise<void> {
+    const teardowns: Promise<void>[] = [];
     for (const [id, record] of this.agents) {
       if (record.isActive()) continue;
-      this.removeRecord(id, record);
+      teardowns.push(this.removeRecord(id, record));
     }
+    await Promise.all(teardowns);
   }
 
   /** Whether any agents are still running or queued. */
@@ -346,13 +354,18 @@ export class SubagentManager {
       .filter((p): p is Promise<void> => p != null);
   }
 
-  dispose() {
+  /**
+   * Tear down every record, resolving once each child's extensions have shut
+   * down. The registry is emptied before the teardowns are awaited, so nothing
+   * can reach a dying record; `allSettled` keeps one failing child from
+   * abandoning its siblings.
+   */
+  async dispose(): Promise<void> {
     clearInterval(this.sweepInterval);
     // Drop pending thunks
     this.limiter.clear();
-    for (const record of this.agents.values()) {
-      void record.disposeSession();
-    }
+    const teardowns = [...this.agents.values()].map(record => record.disposeSession());
     this.agents.clear();
+    await Promise.allSettled(teardowns);
   }
 }

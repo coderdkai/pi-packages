@@ -113,8 +113,8 @@ describe("SubagentManager — Bug 1 race condition (consumed state vs onComplete
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
     vi.useRealTimers();
   });
 
@@ -164,8 +164,8 @@ describe("SubagentManager — Bug 1 race condition (consumed state vs onComplete
 describe("SubagentManager — completion callbacks", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("does not let onComplete errors turn a completed agent into a failed run", async () => {
@@ -183,8 +183,8 @@ describe("SubagentManager — completion callbacks", () => {
 describe("SubagentManager — cleanup timer", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("does not keep the process alive on its own", () => {
@@ -197,8 +197,8 @@ describe("SubagentManager — cleanup timer", () => {
 describe("SubagentManager — Bug 3 clearCompleted", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("clearCompleted removes completed records", async () => {
@@ -208,7 +208,7 @@ describe("SubagentManager — Bug 3 clearCompleted", () => {
     await manager.getRecord(id)!.promise;
 
     expect(manager.listAgents()).toHaveLength(1);
-    manager.clearCompleted();
+    await manager.clearCompleted();
     expect(manager.listAgents()).toHaveLength(0);
   });
 
@@ -223,7 +223,7 @@ describe("SubagentManager — Bug 3 clearCompleted", () => {
     expect(manager.getRecord(id1)!.status).toBe("running");
     expect(manager.getRecord(id2)!.status).toBe("queued");
 
-    manager.clearCompleted();
+    await manager.clearCompleted();
 
     // Both should still be present
     expect(manager.getRecord(id1)).toBeDefined();
@@ -243,7 +243,7 @@ describe("SubagentManager — Bug 3 clearCompleted", () => {
     const id = spawnBg(manager);
     await manager.getRecord(id)!.promise;
 
-    manager.clearCompleted();
+    await manager.clearCompleted();
 
     expect(disposeSpy).toHaveBeenCalledOnce();
   });
@@ -257,17 +257,94 @@ describe("SubagentManager — Bug 3 clearCompleted", () => {
     await manager.getRecord(id)!.promise;
     expect(manager.getRecord(id)!.status).toBe("error");
 
-    manager.clearCompleted();
+    await manager.clearCompleted();
     expect(manager.getRecord(id)).toBeUndefined();
+  });
+});
+
+describe("SubagentManager — teardown awaits each child's shutdown", () => {
+  let manager: SubagentManager;
+
+  /** A manager holding one completed agent whose teardown the test controls. */
+  async function seedGatedTeardown() {
+    const { factory, stub } = createSessionFactory();
+    const teardown = Promise.withResolvers<void>(); // eslint-disable-line @typescript-eslint/no-invalid-void-type -- Promise.withResolvers<void> is valid; rule does not allow void in generic fn call type args
+    stub.dispose = vi.fn((): Promise<void> => teardown.promise);
+    ({ manager } = createManager({ createSubagentSession: factory }));
+    const id = spawnBg(manager);
+    await manager.getRecord(id)!.promise;
+    return { id, teardown, stub };
+  }
+
+  it("clearCompleted resolves only after the removed record's teardown settles", async () => {
+    const { teardown } = await seedGatedTeardown();
+
+    let settled = false;
+    const pending = manager.clearCompleted().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    teardown.resolve();
+    await pending;
+    expect(settled).toBe(true);
+  });
+
+  it("clearCompleted drops the record before awaiting its teardown", async () => {
+    const { id, teardown } = await seedGatedTeardown();
+
+    const pending = manager.clearCompleted();
+    expect(manager.getRecord(id)).toBeUndefined();
+
+    teardown.resolve();
+    await pending;
+  });
+
+  it("dispose resolves only after every record's teardown settles", async () => {
+    const { teardown } = await seedGatedTeardown();
+
+    let settled = false;
+    const pending = manager.dispose().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    teardown.resolve();
+    await pending;
+    expect(settled).toBe(true);
+  });
+
+  it("dispose tears down every record even when one teardown rejects", async () => {
+    const failing = createSessionFactory();
+    failing.stub.dispose = vi.fn((): Promise<void> => Promise.reject(new Error("teardown failed")));
+    const healthy = createSessionFactory();
+    const factories = [failing.factory, healthy.factory];
+    ({ manager } = createManager({
+      createSubagentSession: vi.fn(async (params: CreateSubagentSessionParams) =>
+        (factories.shift() ?? healthy.factory)(params),
+      ),
+    }));
+
+    const first = spawnBg(manager, "test1", "first");
+    const second = spawnBg(manager, "test2", "second");
+    await manager.getRecord(first)!.promise;
+    await manager.getRecord(second)!.promise;
+
+    await expect(manager.dispose()).resolves.toBeUndefined();
+    expect(failing.stub.dispose).toHaveBeenCalledOnce();
+    expect(healthy.stub.dispose).toHaveBeenCalledOnce();
+    expect(manager.listAgents()).toHaveLength(0);
   });
 });
 
 describe("SubagentManager — consumption-aware session release sweep", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    manager.dispose();
+    await manager.dispose();
   });
 
   /** Spawn a background agent over a session factory and await its completion. */
@@ -363,8 +440,8 @@ describe("SubagentManager — consumption-aware session release sweep", () => {
 describe("SubagentManager — lifetime usage + compaction count are eagerly initialized", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("spawn initializes lifetimeUsage to zeros and compactionCount to 0", () => {
@@ -456,8 +533,8 @@ describe("SubagentManager — lifetime usage + compaction count are eagerly init
 describe("SubagentManager — getRunConfig threads defaultMaxTurns and graceTurns into the turn loop", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("passes defaultMaxTurns and graceTurns from getRunConfig to runTurnLoop", async () => {
@@ -489,8 +566,8 @@ describe("SubagentManager — getRunConfig threads defaultMaxTurns and graceTurn
 describe("SubagentManager — parent session threading", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("threads parentSession from AgentSpawnConfig to the factory params", async () => {
@@ -514,8 +591,8 @@ describe("SubagentManager — parent session threading", () => {
 describe("SubagentManager — dependency injection via options bag", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("calls the injected factory when spawning an agent", async () => {
@@ -573,8 +650,8 @@ describe("SubagentManager — dependency injection via options bag", () => {
 describe("SubagentManager — queueing and concurrency with injected stubs", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("queues excess background agents and drains them in order", async () => {
@@ -691,8 +768,8 @@ describe("SubagentManager — queueing and concurrency with injected stubs", () 
 describe("SubagentManager — stopping a queued agent", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("abort() on a queued agent notifies onSubagentCompleted", () => {
@@ -771,8 +848,8 @@ describe("SubagentManager — stopping a queued agent", () => {
 describe("SubagentManager — subagent session state", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("sets record.subagentSession with session and outputFile after session creation", async () => {
@@ -803,8 +880,8 @@ describe("SubagentManager — subagent session state", () => {
 describe("SubagentManager — onSubagentCreated observer", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("fires onSubagentCreated when a background agent is spawned", () => {
@@ -860,8 +937,8 @@ describe("SubagentManager — lifecycle observer forwarding", () => {
     ({ manager } = createManager({ createSubagentSession: factory }));
   });
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("forwards onSessionCreated from spawn options observer to Agent", async () => {
@@ -902,8 +979,8 @@ describe("SubagentManager — lifecycle observer forwarding", () => {
 describe("SubagentManager — toolCallId notification wiring", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   it("wires toolCallId on spawn when provided", () => {
@@ -933,8 +1010,8 @@ describe("SubagentManager — toolCallId notification wiring", () => {
 describe("SubagentManager — registerWorkspaceProvider", () => {
   let manager: SubagentManager;
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
   });
 
   function makeProvider(): WorkspaceProvider {
