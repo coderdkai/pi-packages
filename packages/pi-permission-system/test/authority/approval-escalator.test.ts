@@ -6,6 +6,7 @@ import type { ForwardedPermissionRequest } from "#src/authority/permission-forwa
 import {
   createForwardingTempDir,
   makeForwarderContext,
+  makeParentAuthorizerDeps,
   makeSubagentRegistry,
 } from "#test/helpers/forwarding-fixtures";
 
@@ -49,11 +50,10 @@ describe("ParentAuthorizer", () => {
       });
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
@@ -101,11 +101,10 @@ describe("ParentAuthorizer", () => {
       });
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
@@ -151,11 +150,10 @@ describe("ParentAuthorizer", () => {
           sessionId: "child-session",
           cwd: "/worktree/issue-42",
         }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
@@ -214,11 +212,10 @@ describe("ParentAuthorizer", () => {
       });
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
@@ -255,11 +252,10 @@ describe("ParentAuthorizer", () => {
       });
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
@@ -296,11 +292,10 @@ describe("ParentAuthorizer", () => {
       });
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
-        {
+        makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
           registry,
-          logger: { review: () => {}, debug: () => {} },
-        },
+        }),
       );
 
       const decisionPromise = authorizer.authorize({
