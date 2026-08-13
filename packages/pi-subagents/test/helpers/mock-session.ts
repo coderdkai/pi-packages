@@ -12,6 +12,8 @@ export interface MockSession {
 	steer: Mock<(...args: unknown[]) => Promise<unknown>>;
 	sessionManager: { getSessionFile: Mock<() => unknown> };
 	getToolDefinition: Mock<(name: string) => unknown>;
+	hasExtensionHandlers: Mock<(eventType: string) => boolean>;
+	extensionRunner: { emit: Mock<(event: unknown) => Promise<unknown>> };
 }
 
 /**
@@ -110,6 +112,13 @@ export function createMockSession(overrides: Record<string, unknown> = {}): Mock
 		steer: vi.fn().mockResolvedValue(undefined),
 		sessionManager: { getSessionFile: vi.fn() },
 		getToolDefinition: vi.fn((_name: string): unknown => undefined),
+		// Extension-runner seam read by emitChildSessionShutdown on disposal (#709).
+		// Defaults to "this child has shutdown handlers" so every teardown path
+		// under test exercises the emit rather than its skip branch.
+		hasExtensionHandlers: vi.fn((_eventType: string): boolean => true),
+		extensionRunner: {
+			emit: vi.fn((_event: unknown): Promise<unknown> => Promise.resolve(undefined)),
+		},
 	};
 
 	return { ...base, ...overrides };
