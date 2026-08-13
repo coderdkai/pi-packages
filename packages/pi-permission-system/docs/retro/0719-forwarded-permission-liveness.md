@@ -51,5 +51,39 @@ The plan therefore delivers the failure-mode half in full — truthful `confirma
   The reporter is on `pi-permission-system@22.0.0` against a current `25.0.0`.
   I read the intervening changelogs; nothing between them touches forwarding, so the bug is expected to reproduce on current versions.
 
+## Stage: Implementation — TDD (2026-08-13T04:01:54Z)
+
+### Session summary
+
+Landed ten commits: two preparatory refactorings from the plan, one preparatory test fixture from the Tidy-First assessor, five behavior commits, and a docs commit.
+The `pi-permission-system` suite grew from 2721 to 2757 tests (+36) across 131 → 132 files.
+All deterministic gates green throughout: `check`, root `lint` (0 findings), full workspace `test`, and `fallow dead-code`.
+
+### Observations
+
+- **Pre-completion reviewer: PASS** — ready for `/ship-issue`.
+- **Reviewer warnings** — the four new liveness tests run against real timers and the 2000 ms grace window, costing ~2.0–2.5 s wall clock each (measured 2011/2262/2518/2236 ms).
+  None raced across repeated local runs and all sit well inside vitest's 5000 ms default, but they are the tests most exposed to a slow CI runner.
+  The reviewer suggests `vi.useFakeTimers()` as a follow-up tidy pass only if CI margin becomes a problem; deliberately not done here, since converting them late would trade a measured-safe margin for a fresh flakiness risk.
+- **Deviation: the timeout seam moved a step earlier.**
+  The plan put `getTimeoutMs` in step 8 with the config field, but step 6 needs it: the poll-timeout abandonment path is otherwise a literal ten-minute test.
+  Splitting the seam (step 6) from the operator-facing config key (step 8) is the better split anyway.
+- **Deviation: the Tidy-First `abandon()` extraction was folded in, not landed separately.**
+  The assessor was right that five hand-edited abandonment sites is the friction, but every honest version of the extraction also changes the returned decision shape — a "behavior-preserving" preparatory commit would have needed a helper name that lied about the current behavior.
+  Folding it into step 6 gave the same result: all six paths now route through one `abandon()` helper, so no future path can omit the marker.
+  The assessor's other recommendation (`makeParentAuthorizerDeps`) was genuinely preparatory and landed as its own `test:` commit — it absorbed both new deps in one place instead of six.
+- **Deviation: `config-loader.ts` was missing from the plan's file table.**
+  The plan attributed the scalar merge loop to `extension-config.ts`'s `mergeUnifiedConfigs()`; that function actually lives in `config-loader.ts`.
+  A field added to the runtime type but not that loop is silently dropped before runtime — the failure class the package skill already warns about — so the omission would have been caught by the merge test regardless, but the plan's grep should have located the function rather than trusting the skill's prose.
+- **The composition-root round trip was quietly depending on nobody watching.**
+  It hand-writes the parent's response instead of running the poll timer, so once the fast-fail landed it was racing the 2 s grace window rather than asserting anything.
+  Fixing it with an explicit `markServing(parentSessionId)` made the test state what it had been assuming, and the paired new test (no `markServing`) is the closest thing in the suite to the reported bug.
+- **Strengthening assertions surfaced the point of the change.**
+  Converting the target-resolution tests from `toBe("parent-x")` to `toEqual({ sessionId, source })` was mechanical, but it is what makes the `registry`-vs-`env` distinction — the whole reason out-of-process children are never fast-failed — visible in the test names rather than buried in a branch.
+- **`toMatchObject` will not assert a key's absence.**
+  `confirmationUnavailable: undefined` in a `toMatchObject` expectation fails rather than passing on a missing key, so the "a real parent denial is not marked unavailable" discrimination lives in the abandonment tests' `toEqual` assertions instead.
+- **One test earns its complexity.**
+  Forcing the request-write failure needs a `chmod 0o500` on the requests directory, and the `finally` had to become conditional because the new cleanup removes that directory on the way out — which is itself the assertion that abandonment cleans up after itself.
+
 [#721]: https://github.com/gotgenes/pi-packages/issues/721
 [#722]: https://github.com/gotgenes/pi-packages/issues/722
