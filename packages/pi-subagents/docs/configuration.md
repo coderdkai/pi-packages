@@ -74,7 +74,7 @@ All fields are optional — sensible defaults for everything.
 | ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `description`       | filename       | Agent description shown in tool listings                                                                                                                                                                                                                                                                                |
 | `display_name`      | —              | Display name for UI (e.g. widget, agent list)                                                                                                                                                                                                                                                                           |
-| `tools`             | all 7          | Comma-separated built-in tools: read, bash, edit, write, grep, find, ls. `none` for no tools                                                                                                                                                                                                                            |
+| `tools`             | all 7          | The agent's complete tool allowlist — built-in or extension-registered names. `none` for no tools. See [Tool selection](#tool-selection)                                                                                                                                                                                |
 | `model`             | inherit parent | Model — `provider/modelId` or fuzzy name (`"haiku"`, `"sonnet"`)                                                                                                                                                                                                                                                        |
 | `thinking`          | inherit        | off, minimal, low, medium, high, xhigh                                                                                                                                                                                                                                                                                  |
 | `max_turns`         | unlimited      | Max agentic turns before graceful shutdown. `0` or omit for unlimited                                                                                                                                                                                                                                                   |
@@ -86,6 +86,48 @@ All fields are optional — sensible defaults for everything.
 Frontmatter is authoritative.
 If an agent file sets `model`, `thinking`, `max_turns`, `inherit_context`, or `run_in_background`, those values are locked for that agent.
 `subagent` tool parameters only fill fields the agent config leaves unspecified.
+
+### Tool selection
+
+`tools` is the agent's **complete allowlist**, not a filter over the built-ins.
+A child session gets exactly the tools it names — nothing else is enabled, whoever registered it.
+
+Entries may name built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`) or tools registered by any extension:
+
+```yaml
+---
+description: Browser-driving researcher
+tools: read, grep, find, agent_browser
+---
+```
+
+Naming an extension's tool is the supported way to give a child access to it.
+This matters because a child loads the parent's extensions and runs their setup functions, so an extension **does** call `registerTool` inside the child — and Pi then drops that tool, because the allowlist is applied before the child's tool registry is built.
+The registration reports no error; the tool simply is not there.
+List the tool by name and it is admitted the moment its extension registers it.
+
+Three names are always removed from a child, even when an agent lists them: `subagent`, `get_subagent_result`, and `steer_subagent`.
+This is the recursion guard — without it, an agent could spawn agents of its own without bound.
+
+Accepted forms, all equivalent:
+
+```yaml
+tools: read, grep, find      # comma-separated
+tools: [read, grep, find]    # YAML flow sequence
+tools:                       # YAML block sequence
+  - read
+  - grep
+  - find
+tools: none                  # no tools at all
+```
+
+Omitting `tools` entirely gives the agent all seven built-ins and no extension tools.
+
+Two other settings interact with this list:
+
+- [`excludedExtensionPackages`](#excluding-package-extensions-from-children) stops an extension from loading in children at all, so naming one of its tools has no effect there.
+- When [`@gotgenes/pi-permission-system`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system) is installed, its `permission:` frontmatter narrows the set further, per turn.
+  Use it to deny a tool; use `tools` to decide what the agent has in the first place.
 
 ## Persistent Settings
 
@@ -141,7 +183,7 @@ What this does and does not do:
   Their skills, prompts, and themes stay available to children.
 - The parent session is unaffected, as is the child's own settings — only the child's resource loading is filtered.
 - The exclusion happens during package resolution, so the extension's module is never imported and its factory never runs in the child.
-- Excluding a package also removes the **tools** that extension registers from child sessions.
+- Excluding a package keeps the **tools** that extension registers out of child sessions too: its factory never runs there, so an agent that names one of those tools in [`tools`](#tool-selection) gets nothing.
   If you need the tools but want the extension's resources released when the child is disposed, exclusion is the wrong lever — see [Child session lifecycle](../README.md#child-session-lifecycle).
 
 This key is hand-edited in the global or project `subagents.json`; `/subagents:settings` does not expose it, but it is preserved when you change other settings there.

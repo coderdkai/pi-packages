@@ -315,7 +315,7 @@ src/
 │
 ├── lifecycle/                      agent execution and state tracking
 │   ├── subagent-manager.ts         collection manager + observer wiring + consumption-aware session-retention sweep
-│   ├── create-subagent-session.ts  assembly factory: session creation, binding, tool filtering
+│   ├── create-subagent-session.ts  assembly factory: session creation, spawn-tool denylist, binding
 │   ├── subagent-session.ts         born-complete child session: turn loop, steer, shutdown-then-dispose teardown
 │   ├── turn-limits.ts              normalizeMaxTurns (turn-count policy)
 │   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer, wait-until-settled)
@@ -418,6 +418,19 @@ They declare this package as an optional peer dependency and use dynamic import 
 - Session directory derivation and persisted `SessionManager` for subagent transcripts.
 - Settings persistence.
 - Internal UI (widget, `/subagents:sessions` session navigator, `/subagents:settings` command) — the conversation viewer and `/agents` menu were removed in Phase 19 (Steps 5–6, [#442], [#441]) per [ADR-0004].
+
+### Child tool selection
+
+A child's tool set is exactly its agent type's `tools:` list, which `createSubagentSession` hands to the SDK as the session's tool allowlist.
+Pi applies that allowlist _before_ it builds the session's tool registry, so an extension loaded in the child registers its tools successfully and they are then filtered out unless the agent named them.
+Naming an extension tool in `tools:` is therefore the supported way to give a child access to it, and the documented one ([Configuration](../configuration.md#tool-selection)).
+
+The core does not widen this on the agent's behalf.
+Inheriting every extension tool a child registers would hand a read-only agent whatever write-capable tools the parent's extensions happen to publish — a capability decision that belongs to whoever writes the agent file, expressed per agent, not a default.
+Tool _restriction_ beyond that stays with `@gotgenes/pi-permission-system`, per [ADR-0002].
+
+The recursion guard is the one name set the core removes unconditionally.
+It reaches the SDK as the `excludeTools` denylist, which Pi reapplies on every tool-registry rebuild; filtering the active set once after `bindExtensions` was undone by the next rebuild.
 
 ### What the core dropped
 
