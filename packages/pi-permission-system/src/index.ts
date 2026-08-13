@@ -117,7 +117,9 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     forwardingDir: paths.forwardingDir,
     registry: subagentRegistry,
     servingRegistry,
-    getForwardingTimeoutMs: () => PERMISSION_FORWARDING_TIMEOUT_MS,
+    getForwardingTimeoutMs: () =>
+      configStore.current().forwardingTimeoutMs ??
+      PERMISSION_FORWARDING_TIMEOUT_MS,
     logger,
     prompter,
     // The published service is the narrow, session-scoped PermissionQuery a
