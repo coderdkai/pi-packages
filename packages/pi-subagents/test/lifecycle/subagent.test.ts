@@ -467,67 +467,119 @@ describe("Subagent — stopQueued", () => {
 });
 
 describe("Subagent — disposeSession", () => {
-	it("disposes the wrapped SubagentSession", () => {
+	it("disposes the wrapped SubagentSession", async () => {
 		const record = makeSubagent();
 		const stub = createSubagentSessionStub();
 		record.subagentSession = toSubagentSession(stub);
-		record.disposeSession();
+		await record.disposeSession();
 		expect(stub.dispose).toHaveBeenCalledOnce();
 	});
 
-	it("is a no-op when no session was created", () => {
+	it("resolves only after the child's teardown settles", async () => {
 		const record = makeSubagent();
-		expect(() => record.disposeSession()).not.toThrow();
+		const stub = createSubagentSessionStub();
+		const teardown = Promise.withResolvers<void>(); // eslint-disable-line @typescript-eslint/no-invalid-void-type -- Promise.withResolvers<void> is valid; rule does not allow void in generic fn call type args
+		stub.dispose = vi.fn((): Promise<void> => teardown.promise);
+		record.subagentSession = toSubagentSession(stub);
+
+		let settled = false;
+		const pending = record.disposeSession().then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+
+		teardown.resolve();
+		await pending;
+		expect(settled).toBe(true);
+	});
+
+	it("swallows a failing teardown so the caller's cleanup continues", async () => {
+		const record = makeSubagent();
+		const stub = createSubagentSessionStub();
+		stub.dispose = vi.fn((): Promise<void> => Promise.reject(new Error("teardown failed")));
+		record.subagentSession = toSubagentSession(stub);
+		await expect(record.disposeSession()).resolves.toBeUndefined();
+	});
+
+	it("is a no-op when no session was created", async () => {
+		const record = makeSubagent();
+		await expect(record.disposeSession()).resolves.toBeUndefined();
 	});
 });
 
 describe("Subagent — releaseSession", () => {
-	it("disposes the wrapped session and clears it (isSessionReady false)", () => {
+	it("disposes the wrapped session and clears it (isSessionReady false)", async () => {
 		const record = makeSubagent();
 		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
 		record.subagentSession = toSubagentSession(stub);
-		record.releaseSession();
+		await record.releaseSession();
 		expect(stub.dispose).toHaveBeenCalledOnce();
 		expect(record.isSessionReady()).toBe(false);
 	});
 
-	it("captures outputFile so the getter still resolves it after release", () => {
+	it("captures outputFile so the getter still resolves it after release", async () => {
 		const record = makeSubagent();
 		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl"));
-		record.releaseSession();
+		await record.releaseSession();
 		expect(record.outputFile).toBe("/path/to/session.jsonl");
 	});
 
-	it("sets sessionReleased (default false)", () => {
+	it("sets sessionReleased (default false)", async () => {
 		const record = makeSubagent();
 		expect(record.sessionReleased).toBe(false);
 		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl"));
-		record.releaseSession();
+		await record.releaseSession();
 		expect(record.sessionReleased).toBe(true);
 	});
 
-	it("is a no-op on a second release — does not re-dispose, keeps the captured outputFile", () => {
+	it("clears the session before awaiting teardown, so a racing sweep releases once", async () => {
+		const record = makeSubagent();
+		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
+		const teardown = Promise.withResolvers<void>(); // eslint-disable-line @typescript-eslint/no-invalid-void-type -- Promise.withResolvers<void> is valid; rule does not allow void in generic fn call type args
+		stub.dispose = vi.fn((): Promise<void> => teardown.promise);
+		record.subagentSession = toSubagentSession(stub);
+
+		const first = record.releaseSession();
+		expect(record.isSessionReady()).toBe(false);
+		const second = record.releaseSession();
+
+		teardown.resolve();
+		await Promise.all([first, second]);
+		expect(stub.dispose).toHaveBeenCalledOnce();
+	});
+
+	it("is a no-op on a second release — does not re-dispose, keeps the captured outputFile", async () => {
 		const record = makeSubagent();
 		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
 		record.subagentSession = toSubagentSession(stub);
-		record.releaseSession();
-		record.releaseSession();
+		await record.releaseSession();
+		await record.releaseSession();
 		expect(stub.dispose).toHaveBeenCalledOnce();
 		expect(record.outputFile).toBe("/path/to/session.jsonl");
 	});
 
-	it("disposeSession after release is a no-op (session already cleared)", () => {
+	it("disposeSession after release is a no-op (session already cleared)", async () => {
 		const record = makeSubagent();
 		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
 		record.subagentSession = toSubagentSession(stub);
-		record.releaseSession();
-		record.disposeSession();
+		await record.releaseSession();
+		await record.disposeSession();
 		expect(stub.dispose).toHaveBeenCalledOnce();
 	});
 
-	it("is a no-op when no session was created (sessionReleased stays false)", () => {
+	it("swallows a failing teardown but still marks the session released", async () => {
 		const record = makeSubagent();
-		expect(() => record.releaseSession()).not.toThrow();
+		const stub = createSubagentSessionStub(createMockSession(), "/path/to/session.jsonl");
+		stub.dispose = vi.fn((): Promise<void> => Promise.reject(new Error("teardown failed")));
+		record.subagentSession = toSubagentSession(stub);
+		await expect(record.releaseSession()).resolves.toBeUndefined();
+		expect(record.sessionReleased).toBe(true);
+	});
+
+	it("is a no-op when no session was created (sessionReleased stays false)", async () => {
+		const record = makeSubagent();
+		await expect(record.releaseSession()).resolves.toBeUndefined();
 		expect(record.sessionReleased).toBe(false);
 	});
 });

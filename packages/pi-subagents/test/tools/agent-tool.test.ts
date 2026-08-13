@@ -129,7 +129,7 @@ describe("AgentTool — resume path", () => {
 		const deps = createToolDeps();
 		const released = createTestSubagent();
 		released.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/tasks/agent.jsonl"));
-		released.releaseSession();
+		await released.releaseSession();
 		deps.manager.getRecord = vi.fn().mockReturnValue(released);
 		const result = await execute(deps, {
 			prompt: "continue",

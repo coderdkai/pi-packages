@@ -166,7 +166,7 @@ describe("GetResultTool", () => {
 	it("points to the transcript when verbose is requested but the session was released", async () => {
 		const record = createTestSubagent();
 		record.subagentSession = toSubagentSession(createSubagentSessionStub(createMockSession(), "/tasks/agent.jsonl"));
-		record.releaseSession();
+		await record.releaseSession();
 		const records = new Map([["agent-1", record]]);
 		const result = await execute(makeManager(records), { agent_id: "agent-1", verbose: true });
 		expect(result.content[0].text).toContain("Full transcript available at: /tasks/agent.jsonl");

@@ -514,23 +514,31 @@ export class Subagent {
 		this.execution.observer?.onRunFinished?.(this);
 	}
 
-	/** Dispose the wrapped session, firing the `disposed` lifecycle event. */
-	disposeSession(): void {
-		void this.subagentSession?.dispose().catch((err: unknown) => { debugLog("child session dispose", err); });
+	/**
+	 * Dispose the wrapped session, firing the `disposed` lifecycle event.
+	 * Resolves once the child's extensions have shut down; a failing teardown is
+	 * swallowed so the caller's remaining cleanup still runs.
+	 */
+	async disposeSession(): Promise<void> {
+		await disposeQuietly(this.subagentSession, "child session dispose");
 	}
 
 	/**
 	 * Release the heavy session while keeping the record: capture the transcript
 	 * pointer, dispose the session (firing `disposed`), clear it, and mark released.
 	 * A no-op once the session is gone — the retention sweep may call it repeatedly.
+	 *
+	 * The record's own state is updated before the teardown is awaited, so a sweep
+	 * tick arriving mid-teardown sees a released record rather than starting a
+	 * second one.
 	 */
-	releaseSession(): void {
+	async releaseSession(): Promise<void> {
 		const session = this.subagentSession;
 		if (!session) return;
 		this._releasedOutputFile = session.outputFile;
-		void session.dispose().catch((err: unknown) => { debugLog("child session release", err); });
 		this.subagentSession = undefined;
 		this._sessionReleased = true;
+		await disposeQuietly(session, "child session release");
 	}
 
 	/** Fail a run: mark error, release listeners, best-effort workspace dispose, notify observer. */
@@ -543,6 +551,22 @@ export class Subagent {
 		} catch (cleanupErr) { debugLog("workspace dispose on agent error", cleanupErr); }
 
 		this.execution.observer?.onRunFinished?.(this);
+	}
+}
+
+/**
+ * Tear a child session down without letting its failure escape.
+ * Both teardown paths are cleanup: a child that will not shut down cleanly must
+ * not stop the caller from finishing the rest of its own cleanup.
+ */
+async function disposeQuietly(
+	session: SubagentSession | undefined,
+	context: string,
+): Promise<void> {
+	try {
+		await session?.dispose();
+	} catch (err) {
+		debugLog(context, err);
 	}
 }
 

@@ -265,7 +265,7 @@ export class SubagentManager {
 
   /** Dispose a record's session and remove it from the map. */
   private removeRecord(id: string, record: Subagent): void {
-    record.disposeSession();
+    void record.disposeSession();
     this.agents.delete(id);
   }
 
@@ -288,7 +288,7 @@ export class SubagentManager {
       const windowMinutes = record.consumed
         ? policy.consumedSessionRetentionMinutes
         : policy.unconsumedSessionRetentionMinutes;
-      if (now - referenceAt >= windowMinutes * 60_000) record.releaseSession();
+      if (now - referenceAt >= windowMinutes * 60_000) void record.releaseSession();
     }
   }
 
@@ -351,7 +351,7 @@ export class SubagentManager {
     // Drop pending thunks
     this.limiter.clear();
     for (const record of this.agents.values()) {
-      record.disposeSession();
+      void record.disposeSession();
     }
     this.agents.clear();
   }
