@@ -55,10 +55,11 @@ Before investigating the issue, load skills relevant to the change:
    Then search for open issues the body does **not** reference but that touch the same module or symbol (`gh issue list --state open --search "<symbol>"`) — a sibling issue on the same file changes the framing, and the operator should not have to supply it (Refs #635).
    Sweep open PRs the same way (`gh pr list --state open`) — a third-party PR on the same module often carries a diagnosis the issue omits, and it becomes a close target at ship time (Refs #670, #690).
 5. Open the source files most relevant to the change and skim them before writing.
-6. When the plan introduces a public API pattern (package `exports`, `Symbol.for()` accessor, service interface) or agent-facing message formatting (attribution tags, error prefixes, log labels), use colgrep or grep to search sibling packages for the established convention and follow it unless there is a documented reason to diverge.
+6. When a bug report does not reproduce locally, dispatch `Explore` (`model: "sonnet-5"`) for the root-cause hunt instead of running it inline — a hunt that ends in "not determinable from the code" still costs this session's context, and the plan is written right after (Refs #719).
+7. When the plan introduces a public API pattern (package `exports`, `Symbol.for()` accessor, service interface) or agent-facing message formatting (attribution tags, error prefixes, log labels), use colgrep or grep to search sibling packages for the established convention and follow it unless there is a documented reason to diverge.
    When a config key or public field names an SDK/domain concept (a tool-call part, event, or content type), use the SDK's own term for it — verify against the SDK types — rather than adopting a term from the issue body verbatim (Refs #580: `commandField` shipped, then needed renaming to `commandArgument` to match `ToolCall.arguments`).
    When the change introduces a mechanism a mature ecosystem already standardizes (log redaction, retry/backoff, caching, rate limiting), check what established libraries in that space actually do before building the `ask_user` option set — a set built only from first principles can omit the standard, lowest-maintenance choice (Refs #647).
-7. Determine the issue's **release recommendation** from the package's architecture roadmap, if it is part of one.
+8. Determine the issue's **release recommendation** from the package's architecture roadmap, if it is part of one.
    Grep `packages/<PKG>/docs/architecture/architecture.md` for the step that references this issue (`(#$1)` / `[#$1]`) and read its `Release:` tag (defined by the `improvement-discovery` skill):
    - `Release: independent` (or no tag, or the issue is not in any roadmap) → **ship independently**.
    - `Release: batch "<name>"` → look up `<name>` in the roadmap's `Release batches` subsection; if this step is the batch tail (last listed member) → **ship now — batch tail**; otherwise → **mid-batch — defer**.
@@ -129,7 +130,7 @@ Then an H1 title (e.g., `# <short descriptive title>`) — required by markdownl
   - `**Release:** ship now — batch "<name>" tail (this issue completes the batch)`
   - `**Release:** mid-batch — defer (batch "<name>"); confirm at ship time`
 
-  Use the value derived in Gather context step 7, then add a sentence of rationale (which batch, why independent).
+  Use the value derived in Gather context step 8, then add a sentence of rationale (which batch, why independent).
 - **Problem Statement** — quote the issue's framing in your own words.
 - **Goals** — bullet list, scoped to this change.
 - **Non-Goals** — explicitly defer anything tangential (sibling issues, follow-ups).

@@ -61,6 +61,8 @@ Load this skill when writing, debugging, or planning tests.
   When a weak assertion is necessary (third-party output, non-deterministic ordering), add a comment explaining why.
 - When a test drives the code through a validation/parse step and the invalid-input fallback returns the same value a negative-path test asserts (e.g. a forwarded-response fixture missing a required field and a `denied` expectation both yield `{ approved: false, state: "denied" }`), a broken fixture false-greens the negative test.
   Assert the positive (non-fallback) path against the same fixture builder first — a malformed fixture then fails loudly there — or assert a discriminating field the fallback cannot produce.
+- `toMatchObject` does not assert a key's **absence**: an expected `undefined` value requires the key to be present on the received object, so `toMatchObject({ flag: undefined })` fails when `flag` is missing.
+  Use `toEqual` for a full-shape assertion, or assert a discriminating field the negative case cannot produce.
 - When proving a guard test is not vacuous, build the probe to match the guard's exact predicate.
   A near-miss probe (`void runRpcSession;` against a guard matching `runRpcSession(`) leaves the guard silent and looks like proof it is broken (Refs #678).
 - An equivalence test (incremental vs. freshly built, cached vs. uncached) pins self-consistency, not correctness, when both sides run the code under test.

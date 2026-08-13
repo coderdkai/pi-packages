@@ -85,5 +85,81 @@ All deterministic gates green throughout: `check`, root `lint` (0 findings), ful
 - **One test earns its complexity.**
   Forcing the request-write failure needs a `chmod 0o500` on the requests directory, and the `finally` had to become conditional because the new cleanup removes that directory on the way out — which is itself the assertion that abandonment cleans up after itself.
 
+## Stage: Final Retrospective (2026-08-13T04:29:53Z)
+
+### Session summary
+
+One continuous session carried #719 from a third-party bug report through planning, twelve commits of TDD, and a clean ship to `@gotgenes/pi-permission-system@25.1.0`.
+The shipped change makes a subagent whose parent is not draining its forwarded-permission inbox abandon in ~2 s with a truthful reason, instead of stalling ten minutes and reporting a `User denied` message about a user who was never asked.
+The unexplained stall itself was deliberately split into [#722] rather than chased to a conclusion the code could not support.
+
+### Observations
+
+#### What went well
+
+- **Model allocation tracked task shape without being asked.**
+  Planning and TDD ran on `claude-opus-5` (judgment-heavy: hypothesis elimination, design trade-offs, test design); the ship sequence ran on `claude-sonnet-5` (deterministic, tool-driven) for 29 turns with zero corrections; the retro returned to `claude-opus-5`.
+  This is the allocation the model-performance lens looks for, arrived at by the operator mid-session.
+- **The `pre-completion-reviewer` measured instead of estimating.**
+  Asked whether the grace-window timing made the new tests flaky, it timed all four (2011 / 2262 / 2518 / 2236 ms) and framed the WARN against vitest's 5000 ms default rather than asserting a risk.
+  That is exactly the measured-vs-estimated discipline `AGENTS.md` asks of numbers, applied by a subagent unprompted.
+- **A Tidy-First recommendation was rejected with an argued reason.**
+  The assessor's `abandon()` extraction was right about the friction (five hand-edited abandonment sites) but not landable as a preparatory commit: every honest version also changes the returned decision shape, so the "behavior-preserving" commit would have needed a helper name that lied.
+  Folding it into the behavior step reached the same end state — all six paths route through one helper — and the `tidy-first` skill's "the report is advisory; you decide what lands" contract got its first real exercise.
+- **Caught a green test that had stopped asserting.**
+  `test/composition-root.test.ts`'s forwarding round trip hand-writes the parent's response instead of running the poll timer, so once the fast-fail landed it was passing only because `approveForwardedRequest` beat the 2 s grace window.
+  Making the assumption explicit (`markServing(parentSessionId)`) removed a latent flake the suite would not have reported until CI was slow.
+- **Splitting the deliverable from the diagnosis held up under review.**
+  The reviewer independently confirmed both plan-named follow-ups ([#721], [#722]) carried recorded issue numbers, and the shipped change stands on its own without the root cause.
+
+#### What caused friction (agent side)
+
+- `rabbit-hole` — the root-cause hunt ran inline instead of being delegated.
+  Roughly 30 tool calls across ~20 turns read the whole forwarding stack (`approval-escalator`, `forwarded-request-server`, `forwarding-manager`, `permission-forwarding`, `permission-session`, `lifecycle`, `before-agent-start`, `subagent-detection`, `subagent-context`, `extension-paths`, plus `pi-subagents`' `runtime.ts` and `create-subagent-session.ts`), forming and discarding six hypotheses: the child's `ForwardingManager` stopping the parent's timer, a child `hasUI: true` self-targeting its own inbox, `SUBAGENT_ENV_HINT_KEYS` misclassifying the parent, an unhandled rejection looping `processInbox`, a session-id mismatch, and `ui.custom` being gated while the parent sits idle.
+  Only the last was delegated — an `Explore` subagent on `../pi` refuted it in 80 s.
+  Impact: no rework and the conclusion was correct ("not determinable from the code"), but it consumed a large share of the planning session's context immediately before the plan had to be written.
+- `instruction-violation` (self-identified) — an `Edit` `oldText` anchored on the decorative `// ── Mocks ──…` rule in `test/authority/forwarding-manager.test.ts`, which `AGENTS.md` explicitly says to avoid in favour of adjacent unique code lines.
+  Impact: one rejected atomic batch, one extra `Read`.
+- `instruction-violation` (self-identified) — an `Edit` `oldText` for `test/authority/serving-registry.test.ts` built from the layout I had just emitted, after `pi-autoformat` reflowed the `delete store[KEY]` statement across three lines.
+  `AGENTS.md` states the rule directly: re-read a region you just edited before editing it again.
+  Impact: one rejected batch, one extra `Read`.
+- `missing-context` — wrote `delete store[SERVING_SESSION_REGISTRY_KEY]` in the new test file without checking how `test/composition-root.test.ts` already performs the identical process-global-`Symbol` teardown (it carries an `eslint-disable @typescript-eslint/no-dynamic-delete`).
+  Impact: one commit blocked by the `prek` hook, one grep, one edit, one re-commit — the gate working as designed.
+- `missing-context` — the plan's Module-Level Changes table attributed `mergeUnifiedConfigs()` to `extension-config.ts` because the package skill's "adding a field" bullet names it in the same sentence as that file; it actually lives in `config-loader.ts`.
+  Impact: two files touched that the plan did not list, recorded as a deviation.
+  No rework — a genuinely dropped field would have failed the merge test.
+
+#### What caused friction (user side)
+
+- The `ask_user` gate worked in a single round: direction, liveness mechanism, and timeout policy were all decided in one call, and the answers drove the plan's Goals directly.
+  No friction to report there.
+- One opportunity, framed as such: the reporter's `forwarded_permission.*` review-log lines would have collapsed the ~30-call hunt into a lookup.
+  For a third-party bug that does not reproduce, asking for the review log in the issue thread *before* `/plan-issue` runs would put the decisive evidence in the planning session's hands instead of leaving it to inference.
+
+### Diagnostic details
+
+- **Model-performance correlation** — no mismatch found.
+  Turn-level attribution: `claude-opus-5` for planning + TDD, `claude-sonnet-5` for the entire ship sequence, `claude-opus-5` for the retro.
+  Subagents: `Explore` on `model: "sonnet-5"` for the `../pi` `ui.custom` trace (the model `AGENTS.md` prescribes for that checkout, since `Explore`'s haiku default is too weak); `tidy-first-assessor` and `pre-completion-reviewer` on their configured defaults, both judgment-heavy and both delivering substantive reports (27 and 46 tool uses).
+- **Escalation-delay tracking** — the single `rabbit-hole` ran ~30 consecutive tool calls on one question before the strategy changed, six times the lens's five-call threshold.
+  The delegation that did happen (the `Explore` dispatch) proved the mechanism: 80 s to kill a hypothesis that had already absorbed several turns.
+- **Unused-tool detection** — an `Explore` or `general-purpose` subagent was available for the main hunt and used only for a sub-question.
+  `colgrep` was never dispatched this session; every search was for an exact symbol, where `grep` is the right tool per the `colgrep` skill's decision table, so that is not a gap.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check` plus the affected test file ran after every Red and every Green; the full package suite ran before every commit; root `pnpm run lint` and `pnpm fallow dead-code` ran at the green baseline, before the docs commit, and again as pre-push checks.
+  The two type errors introduced by widening `AuthorizerSelectionDeps` surfaced on the `check` immediately after that step rather than at end-of-cycle.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — added "Gather context" step 6: dispatch `Explore` (`model: "sonnet-5"`) for the root-cause hunt when a bug report does not reproduce locally.
+   Generalizes the `../pi` "hunt vs. targeted read" economics already in `AGENTS.md` to our own packages.
+   Renumbered the following two steps and updated the "Write the plan" back-reference from "Gather context step 7" to "step 8".
+2. `.pi/skills/testing/SKILL.md` — added a "Test assertions" bullet recording that `toMatchObject` does not assert a key's absence (an expected `undefined` requires the key to be present).
+   Verified against this repo's Vitest 4 with a throwaway probe before landing.
+3. `.pi/skills/package-pi-permission-system/SKILL.md` — attributed `mergeUnifiedConfigs()` to `config-loader.ts` in the "adding a field" checklist, and named its "Number scalars" loop.
+   The unattributed symbol sat in a sentence where every other symbol carried its filename, which is what misled this issue's plan table.
+
+Deliberately not landed: no new text for the two `Edit` `oldText` failures (`AGENTS.md` already states both rules — these were salience misses), nothing for the `no-dynamic-delete` miss (the `prek` hook caught it in one cycle), and no `vi.useFakeTimers()` rule (the reviewer measured the margin as safe and scoped a fix to "only if CI degrades").
+
 [#721]: https://github.com/gotgenes/pi-packages/issues/721
 [#722]: https://github.com/gotgenes/pi-packages/issues/722
