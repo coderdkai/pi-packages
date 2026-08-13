@@ -11,6 +11,7 @@ import {
 import { ForwardingManager } from "./authority/forwarding-manager";
 import { requestPermissionDecision } from "./authority/permission-prompt-component";
 import { PermissionPrompter } from "./authority/permission-prompter";
+import { getServingSessionRegistry } from "./authority/serving-registry";
 import { SubagentDetection } from "./authority/subagent-detection";
 import { subscribeSubagentLifecycle } from "./authority/subagent-lifecycle-events";
 import { getSubagentSessionRegistry } from "./authority/subagent-registry";
@@ -55,6 +56,9 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   const hostFlavor = pathFlavorForPlatform(process.platform);
   const sessionRules = new SessionRules();
   const subagentRegistry = getSubagentSessionRegistry();
+  // Process-global, like subagentRegistry: an in-process child reads it from a
+  // separate jiti instance to learn whether its parent is draining its inbox.
+  const servingRegistry = getServingSessionRegistry();
   // Single owner of subagent detection, shared across every consumer instead of
   // threading the (subagentSessionsDir, platform, registry) triple into each.
   const subagentDetection = new SubagentDetection({
@@ -163,6 +167,8 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     new ForwardingManager({
       detection: subagentDetection,
       forwarder: requestServer,
+      serving: servingRegistry,
+      logger,
     }),
     permissionManager,
     sessionRules,

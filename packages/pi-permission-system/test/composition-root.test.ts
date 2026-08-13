@@ -6,9 +6,9 @@
  * completeness, shared-instance contracts across factory invocations, teardown,
  * service↔gate registry sharing, and `ready`-after-publish ordering.
  *
- * Every test runs the factory, which mutates two process-global `Symbol.for()`
+ * Every test runs the factory, which mutates three process-global `Symbol.for()`
  * slots and reads `PI_CODING_AGENT_DIR`. The shared `beforeEach`/`afterEach`
- * isolate the agent dir to a tmpdir and clear both global slots so factory runs
+ * isolate the agent dir to a tmpdir and clear every global slot so factory runs
  * do not leak across tests.
  */
 import {
@@ -45,6 +45,9 @@ const SERVICE_KEY = Symbol.for("@gotgenes/pi-permission-system:service");
 const SUBAGENT_REGISTRY_KEY = Symbol.for(
   "@gotgenes/pi-permission-system:subagent-registry",
 );
+const SERVING_REGISTRY_KEY = Symbol.for(
+  "@gotgenes/pi-permission-system:serving-registry",
+);
 
 /** The six events the factory must register a handler for. */
 const EXPECTED_HANDLERS = [
@@ -64,12 +67,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Drop both process-global slots so factory runs do not leak across tests.
+  // Drop every process-global slot so factory runs do not leak across tests.
   const store = globalThis as Record<symbol, unknown>;
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Symbol-keyed global property
   delete store[SERVICE_KEY];
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Symbol-keyed global property
   delete store[SUBAGENT_REGISTRY_KEY];
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Symbol-keyed global property
+  delete store[SERVING_REGISTRY_KEY];
   vi.unstubAllEnvs();
   rmSync(agentDir, { recursive: true, force: true });
 });
