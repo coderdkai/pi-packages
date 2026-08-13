@@ -118,4 +118,67 @@ Co-authored-by: leipeng <leipeng950504@gmail.com>
 The ship-stage close comment thanks `@beilo` by name and links the implementing SHA(s).
 Reference the PR as `Refs #697` or `(#697)` — never `Closes #697`, which would pre-empt the curated close comment.
 
+## Stage: Planning (2026-08-13T05:13:33Z)
+
+### Session summary
+
+Produced `docs/plans/0696-exclude-package-extensions-from-children.md` and resolved the three questions the PR-review stage deferred: settings key plus a deliberate [ADR-0002] amendment, `SettingsManager.fromStorage` over a read-only filtering storage, and loader-only scoping.
+Deeper reading of Pi's `resource-loader.js` and `package-manager.js` **refuted two of the PR review's own critiques**, which materially changed the design.
+The plan lands as five TDD steps and is a non-breaking, ship-independently feature.
+
+### Observations
+
+#### Two PR-review critiques were wrong, and planning caught both
+
+- **`extensionsOverride` is unusable, not the better seam.**
+  The review recommended replacing the `Proxy` with Pi's `extensionsOverride` loader option.
+  Reading `resource-loader.js` showed it runs at line 279 — *after* `loadFinalExtensionSet` already called `loadExtensionsCached` (modules imported into the heap, so the OOM cost is already paid) and *before* `applyExtensionSourceInfo` at line 280 (so `extension.sourceInfo` is unpopulated and the callback cannot match by package source at all).
+  The contributor's settings-level approach was right on the mechanism.
+- **The claimed `autoload: false` "silent hole" does not exist.**
+  The review asserted `applyPackageDeltaFilter`'s early return on an empty array meant the exclusion silently no-ops.
+  In delta mode the filter starts from nothing and only *adds* matched patterns, so `extensions: []` yields "add none" — the desired outcome.
+  `extensions: []` is correct in both modes.
+
+The generalizable lesson: a PR review that reads the diff plus one layer of the dependency is not enough to judge a mechanism.
+Both errors came from reading `DefaultResourceLoaderOptions`' type surface without tracing the call order in the compiled `.js`.
+
+#### What survived from the review
+
+The `Proxy` critique and the blast-radius critique both held.
+`SettingsManager` has a `private constructor` (no subclassing) and `applyOverrides` only touches the private merged `settings` field, not the per-scope accessors the package manager reads — so `SettingsManager.fromStorage`, which is public and takes a one-method `SettingsStorage`, is the only clean seam.
+It yields a real, fully typed manager with no proxy and no casts.
+
+#### New finding: a data-loss path the PR only accidentally avoided
+
+`saveAndNotify` persists `snapshot()` through a whole-file `writeFileSync`, so any key absent from `snapshot()` is destroyed on the next `/subagents:settings` edit.
+A hand-edited project-scoped `excludedExtensionPackages` would be silently erased by an unrelated grace-turns change.
+The review had dismissed the PR's conditional-spread in `snapshot()` as test-appeasement; it was actually preventing this.
+The plan keeps the conditional field but gives it a named `SettingsSnapshot` type, the real rationale in a doc comment, and its own regression test (TDD step 2, committed as a `fix:` before the feature).
+
+#### Design divergence from the PR: keep policy out of the factory
+
+The PR threads `getExcludedExtensionPackages: () => readonly string[]` into `SubagentSessionDeps` and branches inside `createSubagentSession`.
+Applying the `code-design` rule "thread decisions, not discriminators", the plan instead resolves the policy at the `index.ts` composition boundary and hands the factory the *product* via a new `SessionFactoryIO.createLoaderSettingsManager(parent)` member.
+The factory gains no policy knowledge, no fifth dependency-bag field, and no conditional; the no-exclusions path is identity.
+
+#### Adjacent issue reframes the feature
+
+Issue [#709] (child disposal skips `session_shutdown`, leaking extension-owned processes) explicitly names #696/#697 a *workaround* with a different failure mode — excluding `pi-mcp-adapter` also removes the child's MCP tools.
+The two are complementary, not substitutes, and the plan says so in Non-Goals and in the README cross-reference.
+This did not surface from the issue body; it came from the open-issue sweep.
+
+#### ADR reasoning inverted the expected answer
+
+[ADR-0002] reserved prevent-load as a provider seam, which reads like an argument against the settings key.
+But the same ADR's "no vacant hooks" rule — a seam with no consumer "is not extensibility — it is a speculative abstraction that taxes every reader, and `fallow` flags it as dead" — argues *against* building the seam here, since no external extension wants to supply a prevent-load policy.
+The amendment records that reasoning rather than quietly rewriting the ADR to match the patch, which is what the PR did.
+
+#### Risks carried forward
+
+- The storage adapter must discard writes.
+  Forwarding one would persist synthesized `extensions: []` into the user's real `settings.json`, disabling those packages for the parent and every future session.
+  A dedicated test pins this.
+- The new module may read as dead code between TDD steps 3 and 4; the plan names fold-forward as the remedy rather than a `fallow` suppression.
+
+[#709]: https://github.com/gotgenes/pi-packages/issues/709
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
