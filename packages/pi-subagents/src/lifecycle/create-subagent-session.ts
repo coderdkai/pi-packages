@@ -174,6 +174,7 @@ export async function createSubagentSession(
   );
 
   const agentDir = deps.io.getAgentDir();
+  const sessionSettings = deps.io.createSettingsManager(cfg.effectiveCwd, agentDir);
 
   // Children always load the parent's extensions and skills.
   // Suppress AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md - upstream's
@@ -204,7 +205,7 @@ export async function createSubagentSession(
     cwd: cfg.effectiveCwd,
     agentDir,
     sessionManager,
-    settingsManager: deps.io.createSettingsManager(cfg.effectiveCwd, agentDir),
+    settingsManager: sessionSettings,
     modelRegistry: snapshot.modelRegistry,
     model: cfg.model,
     tools: cfg.toolNames,
