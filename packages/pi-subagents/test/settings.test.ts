@@ -220,6 +220,38 @@ describe("settings persistence", () => {
       writeProject({ abortAllOnInterrupt: null });
       expect(loadSettings(globalDir, projectDir)).toEqual({});
     });
+
+    describe("excludedExtensionPackages", () => {
+      it("keeps string members, trimming and deduplicating them", () => {
+        writeProject({
+          excludedExtensionPackages: [
+            " npm:@cortexkit/pi-magic-context ",
+            "npm:@cortexkit/pi-magic-context",
+            "npm:keep",
+          ],
+        });
+        expect(loadSettings(globalDir, projectDir)).toEqual({
+          excludedExtensionPackages: ["npm:@cortexkit/pi-magic-context", "npm:keep"],
+        });
+      });
+
+      it("drops non-string and empty members", () => {
+        writeProject({ excludedExtensionPackages: ["npm:keep", "", "   ", 42, null, {}] });
+        expect(loadSettings(globalDir, projectDir)).toEqual({
+          excludedExtensionPackages: ["npm:keep"],
+        });
+      });
+
+      it("drops the key entirely when the value is not an array", () => {
+        writeProject({ excludedExtensionPackages: "npm:@cortexkit/pi-magic-context" });
+        expect(loadSettings(globalDir, projectDir)).toEqual({});
+      });
+
+      it("keeps an empty array as an empty array", () => {
+        writeProject({ excludedExtensionPackages: [] });
+        expect(loadSettings(globalDir, projectDir)).toEqual({ excludedExtensionPackages: [] });
+      });
+    });
   });
 
   describe("save result + corrupt-file warning", () => {
@@ -307,6 +339,11 @@ describe("SettingsManager", () => {
     it("defaults to abortAllOnInterrupt: true (ESC keeps its current blast radius)", () => {
       const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
       expect(sm.abortAllOnInterrupt).toBe(true);
+    });
+
+    it("defaults to no excluded extension packages", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      expect(sm.excludedExtensionPackages).toEqual([]);
     });
   });
 
@@ -487,6 +524,22 @@ describe("SettingsManager", () => {
       const sm = new SettingsManager({ emit, cwd: projectDir, agentDir: globalDir });
       sm.load();
       expect(emit).toHaveBeenCalledWith("subagents:settings_loaded", { settings: {} });
+    });
+
+    it("loads excluded extension package sources, and clears them when removed", () => {
+      mkdirSync(join(projectDir, ".pi"), { recursive: true });
+      const settingsPath = join(projectDir, ".pi", "subagents.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({ excludedExtensionPackages: ["npm:@cortexkit/pi-magic-context"] }),
+      );
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: globalDir });
+      sm.load();
+      expect(sm.excludedExtensionPackages).toEqual(["npm:@cortexkit/pi-magic-context"]);
+
+      writeFileSync(settingsPath, JSON.stringify({}));
+      sm.load();
+      expect(sm.excludedExtensionPackages).toEqual([]);
     });
   });
 

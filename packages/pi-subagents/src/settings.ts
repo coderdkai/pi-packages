@@ -24,6 +24,12 @@ export interface SubagentsSettings {
    * abort on ESC either way.
    */
   abortAllOnInterrupt?: boolean;
+  /**
+   * Pi package sources whose extensions child sessions must not load, matched
+   * against Pi's configured source string exactly (e.g. `npm:@scope/pkg`).
+   * The package's skills, prompts, and themes stay available to children.
+   */
+  excludedExtensionPackages?: string[];
 }
 
 /**
@@ -61,6 +67,7 @@ export class SettingsManager {
   private _consumedSessionRetentionMinutes: number = DEFAULT_CONSUMED_RETENTION_MINUTES;
   private _unconsumedSessionRetentionMinutes: number = DEFAULT_UNCONSUMED_RETENTION_MINUTES;
   private _abortAllOnInterrupt: boolean = DEFAULT_ABORT_ALL_ON_INTERRUPT;
+  private _excludedExtensionPackages: string[] = [];
 
   private readonly emit: SettingsEmit;
   private readonly cwd: string;
@@ -132,6 +139,12 @@ export class SettingsManager {
     return this._abortAllOnInterrupt;
   }
 
+  // ── excludedExtensionPackages: hand-edited only; no /subagents:settings affordance ──
+
+  get excludedExtensionPackages(): readonly string[] {
+    return this._excludedExtensionPackages;
+  }
+
   // ── Lifecycle methods ──
 
   /**
@@ -150,6 +163,8 @@ export class SettingsManager {
       this.unconsumedSessionRetentionMinutes = settings.unconsumedSessionRetentionMinutes;
     if (typeof settings.abortAllOnInterrupt === "boolean")
       this._abortAllOnInterrupt = settings.abortAllOnInterrupt;
+    // Assigned unconditionally: removing the key from disk must clear the value.
+    this._excludedExtensionPackages = [...(settings.excludedExtensionPackages ?? [])];
     this.emit("subagents:settings_loaded", { settings });
     return settings;
   }
@@ -285,6 +300,13 @@ function sanitize(raw: unknown): SubagentsSettings {
   }
   if (typeof r.abortAllOnInterrupt === "boolean") {
     out.abortAllOnInterrupt = r.abortAllOnInterrupt;
+  }
+  if (Array.isArray(r.excludedExtensionPackages)) {
+    const sources = r.excludedExtensionPackages
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    out.excludedExtensionPackages = [...new Set(sources)];
   }
   return out;
 }
