@@ -59,6 +59,14 @@ permission:
 The dependency direction is inverted — pi-subagents has zero knowledge of pi-permission-system.
 The `session-created` handler MUST stay synchronous: the core emits it on the same call stack right before `bindExtensions()`, and the event bus dispatches listeners synchronously, so a synchronous handler lands the registry entry before binding proceeds.
 
+A **second** process-global registry, `ServingSessionRegistry` (`src/authority/serving-registry.ts`, accessor `getServingSessionRegistry()`), records which sessions are draining a forwarded-permission inbox.
+`ForwardingManager` marks the session id it polls and clears it on stop; `ParentAuthorizer` reads it each poll tick and abandons a request whose target has looked unserved for `PERMISSION_FORWARDING_SERVING_GRACE_MS`, instead of waiting out the full timeout and reporting the block as a user denial (Refs #719).
+The judgement applies **only** to a target resolved with `source: "registry"` — `resolvePermissionForwardingTarget` returns that provenance precisely so an out-of-process child (`source: "env"`), which shares no `globalThis` with its parent, is never fast-failed on an absent mark (out-of-process liveness is [#721]).
+A stale mark left by a session that died without `session_shutdown` suppresses the fast-fail and falls back to the timeout — the safe direction.
+Every `ParentAuthorizer` abandonment path sets `confirmationUnavailable: true` with a path-naming `denialReason`; `formatUnavailableReason` renders that reason, so `PermissionGateParams.unavailableReason` is a function of the decision (as `userDeniedReason` already was), not a precomputed string.
+
+[#721]: https://github.com/gotgenes/pi-packages/issues/721
+
 **The `SubagentSessionRegistry` is process-global.**
 Access it via `getSubagentSessionRegistry()` (`src/authority/subagent-registry.ts`), backed by `globalThis` + `Symbol.for("@gotgenes/pi-permission-system:subagent-registry")`.
 This is necessary because each session's `ResourceLoader` creates its own `pi.events` bus: the parent emits `subagents:child:session-created` on its bus and only the parent's instance receives it.
@@ -191,9 +199,11 @@ This resolver-internal boundary is a deliberate, formalized seam, not transition
 - Test config loading, validation issues, and tolerance of deprecated keys.
 - When a change reads a **new** `ExtensionContext` field/method (e.g. `ctx.isProjectTrusted()`), update `makeCtx` **and** grep every hand-built ctx literal — `grep -rln "hasUI:" test/` (18 files cast `as unknown as ExtensionContext` / `as never`).
   These casts bypass `tsc`, so a missing field fails only at the full-suite run, not `check` or the cycle-scoped file (#644: `permission-events.test.ts` surfaced `ctx.isProjectTrusted is not a function` at runtime).
-- To test the file-based permission-forwarding round-trip (a subagent's `ask` reaching the parent), do not `await` the child's `pi.fire("tool_call", …)` directly — `ParentAuthorizer.authorize` (`src/authority/approval-escalator.ts`) polls for a response with a 10-minute timeout when forwarding to the parent.
+- To test the file-based permission-forwarding round-trip (a subagent's `ask` reaching the parent), do not `await` the child's `pi.fire("tool_call", …)` directly — `ParentAuthorizer.authorize` (`src/authority/approval-escalator.ts`) polls for a response until `getTimeoutMs()` elapses (the `forwardingTimeoutMs` config default is ten minutes).
   Instead: fire without awaiting, poll the parent's `requests/` dir (`createPermissionForwardingLocation(forwardingDir, parentSessionId)`) for the child's request file, write an approval JSON to `responses/<id>.json`, then await the fire.
-  See the `subagent registry sharing` test in `test/composition-root.test.ts`.
+  Such a test must also `getServingSessionRegistry().markServing(parentSessionId)` — it answers by hand instead of running the parent's poll timer, and without that mark the child correctly abandons the request as unserved after ~2 s.
+  See the `subagent registry sharing` tests in `test/composition-root.test.ts`.
+  A `ParentAuthorizer` unit test builds its deps with `makeParentAuthorizerDeps` (`test/helpers/forwarding-fixtures.ts`), whose `serving` default reports every session as serving and whose `getTimeoutMs` override makes the timeout path testable without waiting it out.
 
 ## Debugging
 
