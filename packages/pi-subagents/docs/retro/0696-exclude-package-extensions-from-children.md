@@ -180,5 +180,68 @@ The amendment records that reasoning rather than quietly rewriting the ADR to ma
   A dedicated test pins this.
 - The new module may read as dead code between TDD steps 3 and 4; the plan names fold-forward as the remedy rather than a `fallow` suppression.
 
+## Stage: Implementation — TDD (2026-08-13T16:58:42Z)
+
+### Session summary
+
+Implemented all five planned TDD cycles plus two preparatory Tidy-First commits, landing `excludedExtensionPackages` as an opt-in prevent-load seam for child sessions.
+Tests went from 66 files / 1175 tests to 67 / 1199 (+24); `check`, root `lint`, `test`, and `fallow dead-code` are all green.
+The pre-completion reviewer returned **PASS**, but only on a second dispatch — the first run was interrupted after it escalated an SDK-symbol lookup into a filesystem-wide `find /`.
+
+### Observations
+
+#### Tidy First paid off exactly as advertised
+
+The `tidy-first-assessor` recommended two mechanical extractions — hoisting `deps.io.createSettingsManager(...)` out of the `createSession` argument literal, and naming `snapshot()`'s inline return type `SettingsSnapshot`.
+Both turned a would-be move-and-add diff into a pure addition, and the assessor correctly **rejected** the one tidying the dispatch prompt had suggested (a shared `snapshot()` expectation fixture), on the grounds that the optional-when-empty design means none of the six existing `toEqual` literals change.
+That rejection was right and saved touching six lines the change never needed.
+
+#### Planning's mechanism call held up under implementation
+
+Nothing in the build contradicted the plan's two reversals of the PR review.
+`extensions: []` disabled the package in both filter modes as predicted, and the `SettingsManager.fromStorage` seam produced a real, fully typed manager — the `private constructor` ruled out subclassing, and `applyOverrides` would not have worked because it only touches the private merged `settings` field.
+
+#### The step-2 `fix:` was the highest-value commit
+
+The `snapshot()` round-trip guard is the one change no one asked for.
+Its red test failed exactly as predicted: `applyGraceTurns` erased a hand-edited `excludedExtensionPackages` from the project file, because `saveAndNotify` whole-file-rewrites from `snapshot()`.
+Worth remembering as a general hazard: **any** future `subagents.json` key without a `/subagents:settings` affordance has this data-loss path, and the plan's Open Questions already flags merge-on-write as the general fix if a second such key appears.
+
+#### Test design closed PR #697's real gap
+
+The PR's integration test asserted against a stub `SettingsManager`, so it pinned that a proxy wrapped two methods rather than that Pi disables anything.
+The replacement builds a real `SettingsManager` via `fromStorage` and asserts resolved `packages`, plus a case proving a write through `withLock` never reaches the parent.
+The reviewer independently re-verified the `applyPackageFilter` empty-array semantics against the pinned `0.80.5` SDK rather than taking the plan's word for it.
+
+#### Deviation: an unplanned agent-hardening commit
+
+One commit outside the plan — `34230776 docs(agents): bound pre-completion-reviewer searches to the repo`.
+The first reviewer dispatch ran `grep -rn "…" …/dist/*.d.ts`, which globs one level only and so missed `dist/core/settings-manager.d.ts`, got `(no output)`, and escalated to `find /` rather than fixing the glob.
+The agent's existing "read-only commands only" instruction did not constrain it, because `find /` **is** read-only.
+The walk also resolved to a stale `0.79.1` copy in the pnpm store instead of the pinned `0.80.5`, so the escalation produced a subtly wrong source as well as an expensive one.
+The fix adds an explicit repo-scope bound, a fix-the-pattern-before-widening ladder, and a rule to pin the dependency version when reading installed types.
+Re-dispatching with the same guardrail restated in the prompt produced a clean PASS in 149 s versus the first run's 556 s.
+
+#### Two permission-system issues surfaced from the same incident
+
+Investigating why `find /` was not gated turned up findings unrelated to this issue but worth recording:
+
+- The gate **did** fire and a prompt **was** raised (`forwarded_permission.prompted`), then resolved `approved` 21.5 s later — but the log records no responder identity beyond a session ID, so a human approval is indistinguishable from an auto-approval.
+  Filed as [#726].
+- `authorizer_chain_unregistered_link` fires for the configured `model-judge` link on every subagent request (41 occurrences vs. 8 `model_judge.decision` across three weeks), so the configured authorizer chain never adjudicates subagent requests.
+  Filed as [#727], which also records that [#699]'s "benign but noisy — authorization still works" impact assessment appears to understate this; a comment on [#699] cross-references it.
+
+Neither blocks this issue, and neither changed the implementation.
+
+### Pre-completion reviewer
+
+**PASS** — ready for `/ship-issue`.
+No WARN findings.
+The reviewer flagged one item as `[visual-check-needed]`: the four-concurrent-children OOM-avoidance claim is a runtime memory property that unit tests cannot observe, though it independently confirmed the underlying mechanism against the pinned SDK.
+It also noted a pre-existing `mock.calls[0][0]` access in an untouched test block, introduced by neither this change nor worth fixing here.
+
+[#699]: https://github.com/gotgenes/pi-packages/issues/699
 [#709]: https://github.com/gotgenes/pi-packages/issues/709
+[#726]: https://github.com/gotgenes/pi-packages/issues/726
+[#727]: https://github.com/gotgenes/pi-packages/issues/727
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
