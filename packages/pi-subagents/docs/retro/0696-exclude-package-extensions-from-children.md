@@ -240,6 +240,99 @@ No WARN findings.
 The reviewer flagged one item as `[visual-check-needed]`: the four-concurrent-children OOM-avoidance claim is a runtime memory property that unit tests cannot observe, though it independently confirmed the underlying mechanism against the pinned SDK.
 It also noted a pre-existing `mock.calls[0][0]` access in an untouched test block, introduced by neither this change nor worth fixing here.
 
+## Stage: Final Retrospective (2026-08-13T17:19:44Z)
+
+### Session summary
+
+One continuous session carried issue #696 from third-party PR triage through planning, TDD implementation, and release as `pi-subagents@19.3.0`.
+The capability from PR #697 (@beilo) was adopted with a re-implemented design; nine commits landed, tests went 1175 → 1199, and PR #697 was closed with credit rather than merged.
+A mid-session permission anomaly the operator caught produced two extra issues ([#726], [#727]) and a hardening commit to the `pre-completion-reviewer` agent.
+
+### Observations
+
+#### What went well
+
+1. **The stage separation caught two of my own wrong technical claims before any code existed.**
+   The PR Review stage concluded that Pi's `extensionsOverride` was the better seam and that `extensions: []` had a silent `autoload: false` hole.
+   Both were wrong.
+   The Planning stage, reading the compiled `resource-loader.js` and `package-manager.js` rather than the `.d.ts`, refuted both and reversed the mechanism decision.
+   This is the multi-stage workflow doing exactly what it exists for — the cost of the error was one stage of re-reading, not a shipped `Proxy` or a wasted implementation.
+
+2. **The `tidy-first-assessor` rejected a suggestion planted in its own dispatch prompt.**
+   The dispatch asked, as question 2, whether a shared `snapshot()` expectation fixture was warranted before adding a seventh field.
+   It came back with "the prompt's premise doesn't hold against the actual design," showed that the optional-when-empty shape leaves all six existing `toEqual` literals untouched, and declined it as tidying code the change never touches.
+   A subagent resisting a leading question from its dispatcher is worth noting; the two tidyings it *did* recommend both landed and both shrank the commits that followed.
+
+3. **A data-loss bug was found by reasoning, not by a failure.**
+   Nothing reported it and no test caught it.
+   Planning traced `saveAndNotify` → `snapshot()` → `saveSettings`' whole-file `writeFileSync` and predicted that a hand-edited `excludedExtensionPackages` would be erased by any unrelated `/subagents:settings` edit.
+   The red test in TDD step 2 failed exactly as predicted.
+   Notably this inverted an earlier judgment: the PR Review stage had dismissed PR #697's conditional-spread in `snapshot()` as test-appeasement, when it was incidentally preventing this.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the PR Review evaluated Pi's seams from the `.d.ts` type surface without checking the compiled call order.
+   `DefaultResourceLoaderOptions.extensionsOverride` looks like a clean filter seam and is one; it simply runs after `loadExtensionsCached` has already imported the modules and before `applyExtensionSourceInfo` populates `sourceInfo`.
+   Neither fact is visible in the types.
+   Impact: two incorrect claims were committed to `main` in the triage note (`7dc384b1`) and corrected one stage later at planning.
+   No code rework, but the recorded evaluation the contributor may read is wrong on both points until the planning stage entry corrects it.
+
+2. `missing-context` — dispatched a subagent, then never inspected what it ran.
+   The first `pre-completion-reviewer` dispatch escalated a failed `grep` into `find /`.
+   The operator caught this; I did not.
+   I had the interrupted result in hand and was ready to move on.
+   Impact: user-caught, and it was the operator's question — not my own review — that surfaced a whole-filesystem walk, a stale-SDK-version read, and two latent permission-system bugs.
+
+3. `instruction-violation` (self-identified) — broke a file's parse with a partial block edit.
+   `AGENTS.md` states: "When wrapping existing lines in a new enclosing block (a `describe`, function, or `try`), emit the opening and closing braces as two `edits[]` entries in one `Edit` call (or use `Write`) — a lone opening brace fails the whole file parse."
+   The TDD step 1 edit replaced the sanitizer `describe`'s closing `});` with a bare `describe(`, and Biome reported two parse errors.
+   Impact: one wasted edit cycle, caught immediately by the autoformat hook; no rework beyond the repair.
+
+4. `missing-context` — typed a new test-helper stub more strictly than its siblings.
+   `createLoaderSettingsManager: vi.fn((parent: unknown): unknown => parent)` failed `tsc` with `Type 'unknown' is not assignable to type 'SettingsManager'`, while the `createSettingsManager` stub one line above already showed the working pattern (`vi.fn().mockReturnValue({})`).
+   Impact: one extra `pnpm run check` cycle.
+
+#### What caused friction (user side)
+
+1. **The highest-leverage intervention in the session was a question, not a correction.**
+   "What justification did it have running `find /`?"
+   was strategic oversight of exactly the kind this workflow wants from the operator — it questioned an agent's *judgment* rather than its output, and it found things no deterministic gate would have.
+   Worth repeating as a pattern.
+
+2. **A durable principle arrived late and only in chat.**
+   "As a core principle, we should be improving our provenance and observability" is a design constraint for every package here, but it exists only in this session's transcript.
+   Opportunity: principles stated in passing during a retro or review are worth promoting to `AGENTS.md` or the `code-design` skill at the moment they are stated, rather than being rediscovered.
+
+3. **No opportunity to intervene earlier on the mechanism error.**
+   The `extensionsOverride` claim was wrong on a detail (compiled call order) that the operator had no reason to hold in working memory.
+   This one was mine to catch, and the process did catch it.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the session ran three model phases, and the split matched task shape well.
+  `anthropic/claude-opus-5` covered PR review, planning, TDD implementation, the permission-incident investigation, and issue drafting (all judgment-heavy).
+  `anthropic/claude-sonnet-5` covered `/ship-issue` — procedural work (push, CI watch, close, merge) with no design judgment, and it executed cleanly.
+  The retro returned to `opus-5`.
+  Both subagent types (`tidy-first-assessor`, `pre-completion-reviewer`) are pinned to `anthropic/claude-sonnet-5` and both produced strong reports; the reviewer's `find /` lapse was a missing scope guardrail rather than a model-tier mismatch, since its actual review reasoning was sound in both dispatches.
+- **Escalation-delay tracking** — no agent-side rabbit holes.
+  The longest single-error sequence was two tool calls (the parse-error repair, and the mock-typing fix).
+  The one genuine escalation failure was the subagent's: **one** failed `grep` → immediate `find /`, with no intermediate attempt to widen the glob depth.
+  That is under-escalation of *thinking* rather than over-escalation of tool calls — the opposite of the pattern this lens usually catches, and not detectable by a call-count threshold.
+- **Unused-tool detection** — for friction point 1 (the `.d.ts`-only reading), an `Explore` subagent with `model: "sonnet-5"` over `resource-loader.js`/`package-manager.js` was available and is explicitly recommended by `AGENTS.md` for multi-hop SDK traces.
+  It was not dispatched at PR-review time; the trace was done inline one stage later during planning, which is where the correction came from.
+- **Feedback-loop gap analysis** — verification was incremental and clean.
+  Each TDD step ran its own test file before committing; `pnpm run check` ran immediately after every step that touched a shared type (steps 3 and 4); `pnpm fallow dead-code` ran at step 3 specifically because the plan predicted a transient dead-code window there.
+  Root `pnpm run lint` ran only at the end and at ship, but per-commit Biome/ESLint pre-commit hooks covered the interval.
+  No gap worth acting on.
+
+### Changes made
+
+1. `AGENTS.md` — extended the Pi SDK-internals paragraph: existence in the `.d.ts` does not establish a seam's call order or the data populated when it fires; those live only in the compiled `.js`.
+2. `AGENTS.md` — added a read-only scope bound to "Background agent guardrails", which previously addressed only write agents.
+3. `.pi/skills/code-design/SKILL.md` — new `### Decision provenance` subsection under "Structural Design": record what decided and on what basis, not only the outcome.
+4. `.pi/prompts/pr-review.md` — added step 5 to the Verify gate: an alternative seam named in an evaluation is a claim about unrun code and must be verified to the same standard as the defect.
+5. `.pi/agents/pre-completion-reviewer.md` — landed earlier in the session (`34230776`), before this retro: an explicit repo-scope bound, a fix-the-pattern-before-widening ladder, and a rule to pin the dependency version when reading installed types.
+
 [#699]: https://github.com/gotgenes/pi-packages/issues/699
 [#709]: https://github.com/gotgenes/pi-packages/issues/709
 [#726]: https://github.com/gotgenes/pi-packages/issues/726

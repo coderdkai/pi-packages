@@ -149,6 +149,11 @@ If the difference is incidental, extract.
 
 Sandi Metz: "duplication is far cheaper than the wrong abstraction."
 
+### Decision provenance
+
+When a system decides on the user's behalf, record what decided and on what basis — not only the outcome.
+A log showing `approved` without _approved by whom_ cannot distinguish a human approval from an auto-approval, which is the distinction an audit needs (Refs #726).
+
 ### Preparatory refactoring (tidy first)
 
 Before planning or landing a refactor as one atomic commit, ask whether a preparatory step would shrink it — a pure-addition interface, or migrating tests to a shared fixture — landed as separate commits first.

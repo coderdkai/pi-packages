@@ -53,6 +53,9 @@ Establish the problem is real **on current `main`** before you read the diff for
 4. **Check the regression risk in the other direction.**
    Ask what the touched path does correctly *today* and whether the patch degrades it.
    Narrowing, truncating, or short-circuiting a path that is already correct is a regression wearing a fix's clothing — weigh that against the claimed benefit.
+5. **Verify any alternative you propose.**
+   An evaluation that names a better seam is a claim about code you have not run.
+   Hold it to the same standard as the defect: confirm the alternative's call order and available data in the compiled source before recommending it (Refs #696).
 
 Record the outcome of this gate in the evaluation, with the commands and results that back it.
 If the defect is unconfirmed, the `ask-user` decision gate below should offer "ask the reporter for version + fresh repro" as a direction.

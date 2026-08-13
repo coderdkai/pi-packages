@@ -64,6 +64,7 @@ Without this discipline, the per-change doc-update commits that append provenanc
   Dispatch an `Explore` subagent with `model: "sonnet-5"` for a multi-hop trace there (e.g. "how does `ui.custom` pass keybindings to the factory?") — a targeted read of a known file is fine inline, but a hunt costs 5–10 greps of this session's context, and `Explore`'s haiku default is too weak for the reasoning.
   The checkout tracks Pi's `main` and runs ahead of the pinned dependency.
   Read it for mechanism, but confirm any API you design around exists in the installed version first — `grep` the types under `node_modules/.pnpm/@earendil-works+pi-coding-agent@*/` (Refs #661).
+  Existence is not enough for a seam you design *around*: a callback's position in the call order, and the data populated by the time it fires, are visible only in the compiled `.js`, never in the `.d.ts` (Refs #696).
 
 ### Tool-injected messages
 
@@ -132,6 +133,9 @@ When delegating lint-fix or refactoring work to a background agent:
 - Do not change function semantics (removing comparisons, altering control flow, removing defensive checks).
 - Only add `eslint-disable` comments or make type-safe transformations (removing unused imports, adding type annotations).
 - Include `pnpm -r run test` as a verification step before reporting completion.
+
+A read-only agent needs a scope bound too — `find /` is read-only and still walks every mounted volume, trips the external-directory permission gate, and can read a stale copy of a dependency.
+Bound its searches to the repo, and require fixing a failed pattern before widening its root (Refs #696).
 
 ### Parallel peer sessions (git worktrees)
 
