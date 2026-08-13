@@ -28,7 +28,10 @@ function makeDetection(): SubagentDetector {
 }
 
 function makeManager() {
-  return new ForwardingManager(makeDetection(), makeForwarder());
+  return new ForwardingManager({
+    detection: makeDetection(),
+    forwarder: makeForwarder(),
+  });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────

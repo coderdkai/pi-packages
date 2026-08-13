@@ -12,6 +12,14 @@ export interface ForwardingController {
   stop(): void;
 }
 
+/** Constructor config for {@link ForwardingManager}. */
+export interface ForwardingManagerDeps {
+  /** Single owner of subagent detection; gates whether this session may serve. */
+  detection: SubagentDetector;
+  /** Drains this session's forwarded-permission inbox on each tick. */
+  forwarder: InboxProcessor;
+}
+
 /**
  * Encapsulates the forwarded-permission polling lifecycle.
  *
@@ -25,10 +33,7 @@ export class ForwardingManager {
   private context: ExtensionContext | null = null;
   private processing = false;
 
-  constructor(
-    private readonly detection: SubagentDetector,
-    private readonly forwarder: InboxProcessor,
-  ) {}
+  constructor(private readonly deps: ForwardingManagerDeps) {}
 
   /**
    * Start polling if `ctx` has UI and is not a subagent execution context.
@@ -37,7 +42,7 @@ export class ForwardingManager {
    * Stops any existing poll when the context does not qualify for forwarding.
    */
   start(ctx: ExtensionContext): void {
-    if (!ctx.hasUI || this.detection.isSubagent(ctx)) {
+    if (!ctx.hasUI || this.deps.detection.isSubagent(ctx)) {
       this.stop();
       return;
     }
@@ -50,7 +55,7 @@ export class ForwardingManager {
         return;
       }
       this.processing = true;
-      void this.forwarder.processInbox(this.context).finally(() => {
+      void this.deps.forwarder.processInbox(this.context).finally(() => {
         this.processing = false;
       });
     }, PERMISSION_FORWARDING_POLL_INTERVAL_MS);
