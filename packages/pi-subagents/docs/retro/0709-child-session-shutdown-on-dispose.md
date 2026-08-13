@@ -39,4 +39,35 @@ Wrote `packages/pi-subagents/docs/plans/0709-child-session-shutdown-on-dispose.m
 - **Three separate session mocks need the new runner stub** — `test/helpers/mock-session.ts`, its local counterpart inside `test/lifecycle/subagent-session.test.ts`, and (transitively, via a spread) `test/helpers/subagent-session-io.ts`.
   Step 2 of the TDD order lands that helper prep on its own so the type-forced steps that follow stay small.
 
+## Stage: Implementation — TDD (2026-08-13T18:20:45Z)
+
+### Session summary
+
+Executed all seven TDD steps from the plan in order: a new bounded `child-shutdown.ts` emitter, extension-runner stubs on the session mocks, the shutdown-before-dispose wiring in `SubagentSession`, and then promise propagation up through `Subagent`, `SubagentManager`, and `SessionLifecycleHandler`, closing with the doc updates.
+Seven commits, all green at each step; pi-subagents went from 1199 to 1229 tests (+30).
+The `pre-completion-reviewer` returned **PASS**.
+
+### Observations
+
+- **The plan's file list held.**
+  Two files it missed surfaced only through lint, not `tsc`: `test/tools/agent-tool.test.ts` and `test/tools/get-result-tool.test.ts` each had one bare `record.releaseSession();` that became a floating promise.
+  `pnpm run check` passes on an un-awaited promise-returning call, so a `src/`-caller grep at plan time would not have found them — only `no-floating-promises` did.
+  The general lesson: when a method becomes promise-returning, the blast radius is the lint rule's, not the type checker's.
+- **`Promise.withResolvers<void>()` needs the repo's boilerplate disable.**
+  It trips `@typescript-eslint/no-invalid-void-type` despite `allowInGenericTypeArguments: true`, and the codebase already carries a standard `eslint-disable-line` comment for it at six sites.
+  Three of the new gating tests needed the same comment; the pre-commit hook caught it before the commit landed.
+- **The retention sweep uses a bare `void`, not the plan's `void promise.catch(debugLog)`.**
+  `Subagent.releaseSession()` routes through a new private `disposeQuietly()` that already swallows a failing teardown, so a `.catch` at the sweep call site would be unreachable.
+  Preferring the honest bare `void` keeps the dead-code gate meaningful.
+- **`index.ts` needed no edit, as predicted.**
+  Its three `pi.on(...)` handlers are expression-bodied arrows that return the handler's value, and `ExtensionHandler` permits a `Promise<void>` return that Pi awaits — so making the lifecycle handlers async propagated the await into Pi's own emit loop with zero wiring change.
+- **`session_start`'s reason for a child is `"startup"`, not `"new"`.**
+  The README draft asserted `"new"` from intuition; checking `AgentSession`'s constructor showed `sessionStartEvent` defaults to `{ reason: "startup" }` and pi-subagents never overrides it.
+  A documented event payload is worth verifying against the SDK rather than inferring from the event's meaning.
+- **The architecture doc's `Total LOC` row is a raw `wc -l` of `src/**/*.ts`, not a fallow metric.**
+  Reproduced the recorded 8,162/60 exactly from the plan commit's tree, which confirmed the method before updating it to 8,323/61.
+  `fallow health` reports whole-package totals (23,774 lines, 144 files) and would have been the wrong source.
+- **Tidy-First assessor found no blocking preparatory work.**
+  It flagged the third mock layer (`subagent-session.test.ts`'s private `createSession`, which does not spread `createMockSession`) as a real but medium-sized consolidation, and correctly declined it as a prerequisite — the duplication this change added there was two lines.
+
 [#617]: https://github.com/gotgenes/pi-packages/issues/617
