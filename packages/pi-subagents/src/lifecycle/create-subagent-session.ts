@@ -3,9 +3,9 @@
  *
  * `createSubagentSession()` does the assembly portion that the old runner's
  * `runAgent()` did up front: detect the environment, assemble the session config,
- * create the SDK session, publish `spawning`/`session-created`, bind extensions,
- * and apply the recursion guard. It returns a fully usable `SubagentSession` —
- * `Subagent` then only coordinates (turn loop, steer, dispose).
+ * create the SDK session (with the recursion guard as a tool denylist), publish
+ * `spawning`/`session-created`, and bind extensions. It returns a fully usable
+ * `SubagentSession` — `Subagent` then only coordinates (turn loop, steer, dispose).
  *
  * The factory takes a resolved `cwd` value, never the WorkspaceProvider: `cwd`
  * is a value the factory consumes directly (detectEnv, assembleSessionConfig,
@@ -26,20 +26,14 @@ import type { ModelRegistry } from "#src/session/model-resolver";
 import { type AssemblerIO, assembleSessionConfig } from "#src/session/session-config";
 import type { ParentSessionInfo, ShellExec, SubagentType, ThinkingLevel } from "#src/types";
 
-/** Names of tools registered by this extension that subagents must NOT inherit. */
-const EXCLUDED_TOOL_NAMES = ["subagent", "get_subagent_result", "steer_subagent"];
-
 /**
- * Apply the recursion guard: remove this extension's dispatch tools from the
- * child's active set. Runs after `bindExtensions` so extension-registered tools
- * are also covered. Unconditional: children always load the parent's extensions.
+ * Recursion guard: names of tools registered by this extension that subagents
+ * must NOT inherit. Passed to the SDK as a denylist, which it applies whenever
+ * it rebuilds the child's tool registry — including the rebuild triggered by a
+ * child extension registering a tool of its own. Filtering the active set once
+ * after `bindExtensions` would be undone by that rebuild (#725).
  */
-function applyRecursionGuard(session: AgentSession): void {
-  const filtered = session
-    .getActiveToolNames()
-    .filter((t) => !EXCLUDED_TOOL_NAMES.includes(t));
-  session.setActiveToolsByName(filtered);
-}
+const EXCLUDED_TOOL_NAMES = ["subagent", "get_subagent_result", "steer_subagent"];
 
 // ── IO boundary ───────────────────────────────────────────────────────────────
 
@@ -77,7 +71,10 @@ export interface CreateSessionOptions {
   settingsManager: SettingsManager;
   modelRegistry: ModelRegistry;
   model?: Model<any>;
+  /** Allowlist: only these tool names are enabled in the session. */
   tools: string[];
+  /** Denylist applied after `tools`, on every tool-registry rebuild. */
+  excludeTools?: string[];
   resourceLoader: ResourceLoaderLike;
   thinkingLevel?: ThinkingLevel;
 }
@@ -221,6 +218,7 @@ export async function createSubagentSession(
     modelRegistry: snapshot.modelRegistry,
     model: cfg.model,
     tools: cfg.toolNames,
+    excludeTools: EXCLUDED_TOOL_NAMES,
     resourceLoader: loader,
     thinkingLevel: cfg.thinkingLevel,
   });
@@ -245,9 +243,6 @@ export async function createSubagentSession(
   try {
     // Bind extensions so that session_start fires and extensions can initialize.
     await session.bindExtensions({});
-    // Apply recursion guard after bindExtensions so extension-registered tools
-    // are included in the post-bind active set.
-    applyRecursionGuard(session);
   } catch (err) {
     // Binding failed after session-created — dispose (child session_shutdown +
     // session.dispose() + emit disposed) before rethrowing so neither the

@@ -111,27 +111,11 @@ describe("createFactorySession", () => {
 		expect(typeof session.bindExtensions).toBe("function");
 	});
 
-	it("getActiveToolNames defaults to ['read'] before and after bind", async () => {
+	it("getActiveToolNames returns ['read'] before and after bind", async () => {
 		const session = createFactorySession();
 		expect(session.getActiveToolNames()).toEqual(["read"]);
 		await session.bindExtensions();
 		expect(session.getActiveToolNames()).toEqual(["read"]);
-	});
-
-	it("flips getActiveToolNames from before-bind to after-bind set", async () => {
-		const session = createFactorySession({
-			toolsBeforeBind: ["read"],
-			toolsAfterBind: ["read", "extension_tool"],
-		});
-		expect(session.getActiveToolNames()).toEqual(["read"]);
-		await session.bindExtensions();
-		expect(session.getActiveToolNames()).toEqual(["read", "extension_tool"]);
-	});
-
-	it("defaults toolsAfterBind to toolsBeforeBind when omitted", async () => {
-		const session = createFactorySession({ toolsBeforeBind: ["read", "grep"] });
-		await session.bindExtensions();
-		expect(session.getActiveToolNames()).toEqual(["read", "grep"]);
 	});
 
 	it("stubs retain Mock methods (vi.fn())", () => {

@@ -18,9 +18,12 @@ The fork carries two original patches from the thin-patch era, still present in 
 1. **Peer-dep rename** - peer dependencies point at `@earendil-works/pi-*` (the active scope) rather than the deprecated `@mariozechner/pi-*` scope.
 2. **Patch 3 (active_agent tag)** - `buildAgentPrompt` includes `<active_agent name="${agentConfig.name}"/>` in every assembled child system prompt (both `replace` and `append` modes); the tag follows the cacheable parent-prompt prefix so `@gotgenes/pi-permission-system` can resolve per-agent `permission:` frontmatter inside the child.
 
-Note: Patch 2 (post-bind active-tool re-filter) was simplified in Phase 14 (#239).
-The two-pass pre-bind/post-bind filter dance is gone.
-A single post-bind call applies the `EXCLUDED_TOOL_NAMES` recursion guard after `bindExtensions`.
+Note: Patch 2 (post-bind active-tool re-filter) was simplified in Phase 14 (#239) and retired in #725.
+The filter dance is gone: `EXCLUDED_TOOL_NAMES` reaches the SDK as the `excludeTools` denylist at session creation, which it reapplies on every tool-registry rebuild.
+
+A child's tool set is exactly its agent's `tools:` frontmatter list.
+Pi treats the `tools` option to `createAgentSession` as an allowlist and applies it *before* building the session's tool registry, so an extension that calls `registerTool` inside a child succeeds and is then filtered out unless the agent names that tool.
+Extension tool names are therefore supported `tools:` entries — that is the documented way to give a child an extension's tool, and `docs/configuration.md` is where the contract lives.
 
 Upstream PRs for these patches ([#71](https://github.com/tintinweb/pi-subagents/pull/71), [#72](https://github.com/tintinweb/pi-subagents/pull/72), [#73](https://github.com/tintinweb/pi-subagents/pull/73)) are open but the fork continues independently regardless.
 

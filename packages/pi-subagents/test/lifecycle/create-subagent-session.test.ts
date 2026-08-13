@@ -22,8 +22,8 @@ beforeEach(() => {
 });
 
 /** Arrange: build a factory session and wire it as the created session. Returns it for assertions. */
-function arrangeFactory(opts?: Parameters<typeof createFactorySession>[0]) {
-  const session = createFactorySession(opts);
+function arrangeFactory() {
+  const session = createFactorySession();
   io.createSession.mockResolvedValue({ session });
   return session;
 }
@@ -255,45 +255,29 @@ describe("createSubagentSession — dispose on creation failure", () => {
   });
 });
 
-describe("createSubagentSession — post-bind recursion guard", () => {
-  // Extension-registered tools join the active set during bindExtensions; a
-  // single post-bind filter pass applies the EXCLUDED_TOOL_NAMES recursion
-  // guard to the full post-bind set. The factory session flips getActiveToolNames
-  // from its before-bind set to its after-bind set once bindExtensions resolves.
+describe("createSubagentSession — recursion guard", () => {
+  // A child loads this extension too, so it registers the spawn tools during
+  // bindExtensions. They are denied at the SDK boundary, which holds for the
+  // child's whole life — a post-bind active-set filter would be undone by the
+  // next tool-registry refresh (#725).
 
-  it("calls setActiveToolsByName once, after bindExtensions", async () => {
-    const session = arrangeFactory({ toolsBeforeBind: ["read"], toolsAfterBind: ["read", "extension_tool"] });
+  it("denies this extension's spawn tools when creating the child session", async () => {
+    arrangeFactory();
 
     await createSubagentSession({ snapshot: STUB_SNAPSHOT, type: "Explore" }, defaultDeps());
 
-    expect(session.setActiveToolsByName).toHaveBeenCalledTimes(1);
-    const bindOrder = session.bindExtensions.mock.invocationCallOrder[0];
-    const setOrder = session.setActiveToolsByName.mock.invocationCallOrder[0];
-    expect(setOrder).toBeGreaterThan(bindOrder);
+    expect(io.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        excludeTools: ["subagent", "get_subagent_result", "steer_subagent"],
+      }),
+    );
   });
 
-  it.each([
-    {
-      name: "includes extension-registered tools",
-      toolsAfterBind: ["read", "extension_tool"],
-      expected: ["read", "extension_tool"],
-    },
-    {
-      name: "excludes EXCLUDED_TOOL_NAMES while keeping other tools",
-      toolsAfterBind: ["read", "subagent", "get_subagent_result", "steer_subagent", "external"],
-      expected: ["read", "external"],
-    },
-    {
-      name: "runs the guard unconditionally when no extension tools register",
-      toolsAfterBind: ["read"],
-      expected: ["read"],
-    },
-  ])("post-bind set: $name", async ({ toolsAfterBind, expected }) => {
-    const session = arrangeFactory({ toolsBeforeBind: ["read"], toolsAfterBind });
+  it("leaves the child's active tool set untouched after bind", async () => {
+    const session = arrangeFactory();
 
     await createSubagentSession({ snapshot: STUB_SNAPSHOT, type: "Explore" }, defaultDeps());
 
-    expect(session.setActiveToolsByName).toHaveBeenCalledTimes(1);
-    expect(session.setActiveToolsByName.mock.calls[0][0]).toEqual(expected);
+    expect(session.setActiveToolsByName).not.toHaveBeenCalled();
   });
 });
