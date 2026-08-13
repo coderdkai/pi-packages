@@ -204,7 +204,25 @@ export function createPermissionForwardingLocation(
   };
 }
 
-export function resolvePermissionForwardingTargetSessionId(options: {
+/**
+ * How a forwarding target was resolved.
+ *
+ * `"registry"` is the load-bearing value: it means the requester is an
+ * **in-process** child of `sessionId`, so the two share a `globalThis` and the
+ * requester may consult the serving-session registry to decide whether anyone
+ * is draining its inbox. `"env"` means the target lives in another process,
+ * where that signal is unavailable; `"self"` is the UI host owning its own
+ * forwarding location.
+ */
+export type PermissionForwardingTargetSource = "self" | "registry" | "env";
+
+/** The resolved forwarding target together with how it was found. */
+export interface PermissionForwardingTarget {
+  sessionId: string;
+  source: PermissionForwardingTargetSource;
+}
+
+export function resolvePermissionForwardingTarget(options: {
   hasUI: boolean;
   isSubagent: boolean;
   currentSessionId?: string | null;
@@ -213,9 +231,12 @@ export function resolvePermissionForwardingTargetSessionId(options: {
   sessionId?: string;
   /** In-process subagent session registry (checked before env vars). */
   registry?: SubagentSessionRegistry;
-}): string | null {
+}): PermissionForwardingTarget | null {
   if (options.hasUI) {
-    return normalizePermissionForwardingSessionId(options.currentSessionId);
+    const own = normalizePermissionForwardingSessionId(
+      options.currentSessionId,
+    );
+    return own === null ? null : { sessionId: own, source: "self" };
   }
 
   if (!options.isSubagent) {
@@ -228,14 +249,14 @@ export function resolvePermissionForwardingTargetSessionId(options: {
     const resolved = normalizePermissionForwardingSessionId(
       entry?.parentSessionId,
     );
-    if (resolved) return resolved;
+    if (resolved) return { sessionId: resolved, source: "registry" };
   }
 
   // 2. Env vars — process-based subagent extensions.
   const env = options.env ?? process.env;
   for (const key of SUBAGENT_PARENT_SESSION_ENV_CANDIDATES) {
     const resolved = normalizePermissionForwardingSessionId(env[key]);
-    if (resolved) return resolved;
+    if (resolved) return { sessionId: resolved, source: "env" };
   }
   return null;
 }

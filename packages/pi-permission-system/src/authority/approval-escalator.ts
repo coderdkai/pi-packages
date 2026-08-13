@@ -28,7 +28,7 @@ import {
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
   PERMISSION_FORWARDING_TIMEOUT_MS,
   type PermissionForwardingLocation,
-  resolvePermissionForwardingTargetSessionId,
+  resolvePermissionForwardingTarget,
   SUBAGENT_PARENT_SESSION_ENV_CANDIDATES,
 } from "#src/authority/permission-forwarding";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
@@ -137,7 +137,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     facts: ForwardedRequestFacts,
   ): Promise<PermissionPromptDecision> {
     const requesterSessionId = getSessionId(ctx);
-    const targetSessionId = resolvePermissionForwardingTargetSessionId({
+    const target = resolvePermissionForwardingTarget({
       hasUI: ctx.hasUI,
       // Invariant: selectAuthorizer only selects ParentAuthorizer for a
       // no-UI subagent context, so this is always true — no detection dep
@@ -149,7 +149,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       registry: this.registry,
     });
 
-    if (!targetSessionId) {
+    if (!target) {
       logPermissionForwardingError(
         this.logger,
         `Permission forwarding target session could not be resolved. ` +
@@ -164,12 +164,12 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     const location = ensurePermissionForwardingLocation(
       this.logger,
       this.forwardingDir,
-      targetSessionId,
+      target.sessionId,
     );
     if (!location) {
       logPermissionForwardingError(
         this.logger,
-        `Permission forwarding is unavailable because session-scoped directories could not be prepared for '${targetSessionId}'`,
+        `Permission forwarding is unavailable because session-scoped directories could not be prepared for '${target.sessionId}'`,
       );
       return { approved: false, state: "denied" };
     }
@@ -178,7 +178,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       ctx,
       facts,
       requesterSessionId,
-      targetSessionId,
+      target.sessionId,
     );
     const requestPath = join(location.requestsDir, `${request.id}.json`);
     const responsePath = join(location.responsesDir, `${request.id}.json`);
@@ -187,7 +187,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       requestId: request.id,
       requesterAgentName: request.requesterAgentName,
       requesterSessionId: request.requesterSessionId,
-      targetSessionId,
+      targetSessionId: target.sessionId,
       requestPath,
       responsePath,
     });
