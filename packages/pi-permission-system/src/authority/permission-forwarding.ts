@@ -5,6 +5,17 @@ import type { SubagentSessionRegistry } from "./subagent-registry";
 
 export const PERMISSION_FORWARDING_POLL_INTERVAL_MS = 250;
 export const PERMISSION_FORWARDING_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * How long an in-process forwarding target may go unserved before the child
+ * gives up on it — eight poll ticks.
+ *
+ * A window rather than a single check because `ForwardingManager` withdraws and
+ * re-announces across a session switch, and a request that arrives inside that
+ * gap is about to be picked up. Not configurable: the operator-facing knob is
+ * the overall timeout, and this only decides how fast a hopeless wait ends.
+ */
+export const PERMISSION_FORWARDING_SERVING_GRACE_MS =
+  8 * PERMISSION_FORWARDING_POLL_INTERVAL_MS;
 export const SUBAGENT_ENV_HINT_KEYS = [
   // pi-agent-router (original)
   "PI_IS_SUBAGENT",

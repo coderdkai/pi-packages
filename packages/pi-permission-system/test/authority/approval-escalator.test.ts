@@ -9,9 +9,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ParentAuthorizer } from "#src/authority/approval-escalator";
-import type { ForwardedPermissionRequest } from "#src/authority/permission-forwarding";
+import {
+  type ForwardedPermissionRequest,
+  PERMISSION_FORWARDING_SERVING_GRACE_MS,
+} from "#src/authority/permission-forwarding";
+import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import {
   createForwardingTempDir,
   makeForwarderContext,
@@ -487,6 +491,107 @@ describe("ParentAuthorizer abandonment", () => {
         denialReason: "Session 'parent-session' did not answer within 0.4s",
       });
     } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("abandons quickly when an in-process target is not serving", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+          // Nobody has marked themselves as serving.
+          serving: new ServingSessionRegistry(),
+          getTimeoutMs: () => 60_000,
+        }),
+      );
+
+      const started = Date.now();
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason:
+          "Session 'parent-session' is not serving forwarded permission requests",
+      });
+      expect(Date.now() - started).toBeLessThan(60_000);
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("keeps waiting while the in-process target is serving", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const serving = new ServingSessionRegistry();
+      serving.markServing("parent-session");
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+          serving,
+          getTimeoutMs: () => 60_000,
+        }),
+      );
+
+      const decisionPromise = authorizer.authorize({ ...forwardedAsk });
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      // Well past the unserved grace window: a serving target must not be
+      // abandoned no matter how long the human deliberates.
+      await new Promise((resolve) =>
+        setTimeout(resolve, PERMISSION_FORWARDING_SERVING_GRACE_MS + 250),
+      );
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+        }),
+        "utf-8",
+      );
+
+      await expect(decisionPromise).resolves.toMatchObject({
+        approved: true,
+        state: "approved",
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("never fast-fails a target resolved from the environment", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      vi.stubEnv("PI_SUBAGENT_PARENT_SESSION", "parent-session");
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          // No registry entry, so the target resolves from the environment:
+          // the parent is in another process and shares no serving registry.
+          registry: makeSubagentRegistry("child-session"),
+          serving: new ServingSessionRegistry(),
+          getTimeoutMs: () => PERMISSION_FORWARDING_SERVING_GRACE_MS + 400,
+        }),
+      );
+
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason: expect.stringContaining("did not answer within"),
+      });
+    } finally {
+      vi.unstubAllEnvs();
       temp.cleanup();
     }
   });

@@ -26,6 +26,7 @@ import {
   type ForwardedPromptDisplay,
   type ForwardedSessionApproval,
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
+  PERMISSION_FORWARDING_SERVING_GRACE_MS,
   type PermissionForwardingLocation,
   type PermissionForwardingTarget,
   resolvePermissionForwardingTarget,
@@ -299,6 +300,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     const { id: requestId, requesterAgentName, targetSessionId } = request;
     const timeoutMs = this.getTimeoutMs();
     const deadline = Date.now() + timeoutMs;
+    let unservedSince: number | null = null;
 
     while (Date.now() < deadline) {
       if (existsSync(responsePath)) {
@@ -322,6 +324,23 @@ export class ParentAuthorizer implements TerminalAuthorizer {
         );
       }
 
+      unservedSince = this.checkServingLiveness(target, unservedSince);
+      if (
+        unservedSince !== null &&
+        Date.now() - unservedSince >= PERMISSION_FORWARDING_SERVING_GRACE_MS
+      ) {
+        this.logger.review("forwarded_permission.no_serving_session", {
+          requestId,
+          requesterSessionId: request.requesterSessionId,
+          targetSessionId,
+          servingSessionIds: this.serving.servingIds(),
+        });
+        this.discardRequest(location, requestPath);
+        return abandon(
+          `Session '${target.sessionId}' is not serving forwarded permission requests`,
+        );
+      }
+
       await sleep(PERMISSION_FORWARDING_POLL_INTERVAL_MS);
     }
 
@@ -339,6 +358,26 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     return abandon(
       `Session '${target.sessionId}' did not answer within ${timeoutMs / 1000}s`,
     );
+  }
+
+  /**
+   * Track how long the target has looked unserved, or `null` while it looks fine.
+   *
+   * Only an in-process target (`source: "registry"`) can be judged: a target in
+   * another process shares no serving registry with this one, so its absence
+   * from the registry says nothing (#719, follow-up in #721).
+   */
+  private checkServingLiveness(
+    target: PermissionForwardingTarget,
+    unservedSince: number | null,
+  ): number | null {
+    if (target.source !== "registry") {
+      return null;
+    }
+    if (this.serving.isServing(target.sessionId)) {
+      return null;
+    }
+    return unservedSince ?? Date.now();
   }
 
   /**

@@ -32,6 +32,7 @@ import {
   createPermissionForwardingLocation,
   type ForwardedPermissionRequest,
 } from "#src/authority/permission-forwarding";
+import { getServingSessionRegistry } from "#src/authority/serving-registry";
 import { SUBAGENT_CHILD_SESSION_CREATED } from "#src/authority/subagent-lifecycle-events";
 import { getSubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { getGlobalConfigPath } from "#src/config-paths";
@@ -271,6 +272,12 @@ describe("subagent registry sharing across factory instances", () => {
       parentSessionId,
     });
 
+    // This test answers the forwarded request by hand instead of running the
+    // parent's poll timer, so state what that timer would have published:
+    // the parent is draining its inbox. Without it the child correctly
+    // abandons the request as unserved (#719).
+    getServingSessionRegistry().markServing(parentSessionId);
+
     // The child fires an external-directory read with no UI. With the shared
     // registry it detects itself as a subagent and forwards; the simulated
     // parent approves.
@@ -298,6 +305,56 @@ describe("subagent registry sharing across factory instances", () => {
 
     const result = (await firePromise) as { block?: true };
     expect(result.block).toBeUndefined();
+
+    rmSync(childCwd, { recursive: true, force: true });
+    rmSync(externalDir, { recursive: true, force: true });
+  });
+
+  // The #719 failure mode: the child forwards correctly, but nothing drains
+  // the parent's inbox. Before the serving registry it waited out the full
+  // ten-minute timeout and reported the block as a user denial.
+  it("blocks promptly when no session is draining the parent's inbox", async () => {
+    writeGlobalConfig({
+      permission: { "*": "allow", external_directory: "ask" },
+    });
+
+    const childCwd = mkdtempSync(join(tmpdir(), "pi-perm-child-cwd-"));
+    const externalDir = mkdtempSync(join(tmpdir(), "pi-perm-external-"));
+    const parentSessionId = "parent-session-2";
+    const childSessionId = "child-session-2";
+
+    const parentBus = createEventBus();
+    piPermissionSystemExtension(
+      makeFakePi({ events: parentBus }) as unknown as ExtensionAPI,
+    );
+    const childPi = makeFakePi({
+      events: createEventBus(),
+      toolNames: ["read"],
+    });
+    piPermissionSystemExtension(childPi as unknown as ExtensionAPI);
+
+    parentBus.emit(SUBAGENT_CHILD_SESSION_CREATED, {
+      sessionId: childSessionId,
+      parentSessionId,
+    });
+    // Deliberately no markServing: nobody is polling the parent's inbox.
+
+    const result = (await childPi.fire(
+      "tool_call",
+      {
+        toolName: "read",
+        toolCallId: "child-external-read",
+        input: { path: join(externalDir, "secret.txt") },
+      },
+      makeChildCtx(childCwd, childSessionId),
+    )) as { block?: true; reason?: string };
+
+    expect(result.block).toBe(true);
+    expect(result.reason).toContain("no interactive UI is available");
+    expect(result.reason).toContain(
+      `Session '${parentSessionId}' is not serving forwarded permission requests.`,
+    );
+    expect(result.reason).not.toContain("User denied");
 
     rmSync(childCwd, { recursive: true, force: true });
     rmSync(externalDir, { recursive: true, force: true });
