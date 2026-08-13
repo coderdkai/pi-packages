@@ -575,6 +575,11 @@ describe("SettingsManager", () => {
       sm.toggleAbortAllOnInterrupt();
       expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: false });
     });
+
+    it("omits excludedExtensionPackages when none are configured", () => {
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: "/tmp", agentDir: "/nonexistent" });
+      expect(sm.snapshot()).toEqual({ maxConcurrent: 4, defaultMaxTurns: 0, graceTurns: 5, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720, abortAllOnInterrupt: true });
+    });
   });
 
   describe("saveAndNotify()", () => {
@@ -586,6 +591,32 @@ describe("SettingsManager", () => {
 
     afterEach(() => {
       rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    it("preserves a hand-edited excludedExtensionPackages across an unrelated edit", () => {
+      // saveSettings rewrites the whole project file, so a key missing from
+      // snapshot() is destroyed the next time any setting changes.
+      mkdirSync(join(projectDir, ".pi"), { recursive: true });
+      const settingsPath = join(projectDir, ".pi", "subagents.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({ excludedExtensionPackages: ["npm:@cortexkit/pi-magic-context"] }),
+      );
+      const sm = new SettingsManager({ emit: vi.fn(), cwd: projectDir, agentDir: "/nonexistent" });
+      sm.load();
+
+      sm.applyGraceTurns(7);
+
+      const written = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      expect(written).toEqual({
+        maxConcurrent: 4,
+        defaultMaxTurns: 0,
+        graceTurns: 7,
+        consumedSessionRetentionMinutes: 10,
+        unconsumedSessionRetentionMinutes: 720,
+        abortAllOnInterrupt: true,
+        excludedExtensionPackages: ["npm:@cortexkit/pi-magic-context"],
+      });
     });
 
     it("persists snapshot to disk and returns info toast on success", () => {

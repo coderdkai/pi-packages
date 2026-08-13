@@ -44,6 +44,12 @@ export interface SettingsSnapshot {
   consumedSessionRetentionMinutes: number;
   unconsumedSessionRetentionMinutes: number;
   abortAllOnInterrupt: boolean;
+  /**
+   * Present only when non-empty, so files that never set it gain no noise.
+   * It must round-trip: the key has no `/subagents:settings` affordance, so a
+   * hand-edited value would otherwise be erased by any unrelated setting change.
+   */
+  excludedExtensionPackages?: string[];
 }
 
 
@@ -174,7 +180,7 @@ export class SettingsManager {
    * `defaultMaxTurns` uses 0 as the on-disk marker for unlimited (undefined).
    */
   snapshot(): SettingsSnapshot {
-    return {
+    const snapshot: SettingsSnapshot = {
       maxConcurrent: this._maxConcurrent,
       defaultMaxTurns: this._defaultMaxTurns ?? 0,
       graceTurns: this._graceTurns,
@@ -182,6 +188,10 @@ export class SettingsManager {
       unconsumedSessionRetentionMinutes: this._unconsumedSessionRetentionMinutes,
       abortAllOnInterrupt: this._abortAllOnInterrupt,
     };
+    if (this._excludedExtensionPackages.length > 0) {
+      snapshot.excludedExtensionPackages = [...this._excludedExtensionPackages];
+    }
+    return snapshot;
   }
 
   /**
