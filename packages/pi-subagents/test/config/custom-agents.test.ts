@@ -115,8 +115,69 @@ tools: read, my_custom_tool, grep
 Custom tools.`);
 
     const result = loadCustomAgents(tmpDir);
-    // Unknown tool names are passed through — filtering happens at tool creation time
+    // An extension-registered tool name is a supported `tools:` entry: the child's
+    // allowlist admits it when the extension registers it during bind (#725).
     expect(result.get("custom-tools")!.builtinToolNames).toEqual(["read", "my_custom_tool", "grep"]);
+  });
+
+  describe("tools field forms", () => {
+    it("accepts a YAML block sequence", () => {
+      writeAgent("block-seq", `---
+tools:
+  - read
+  - my_custom_tool
+  - grep
+---
+
+Block sequence.`);
+
+      const result = loadCustomAgents(tmpDir);
+      expect(result.get("block-seq")!.builtinToolNames).toEqual(["read", "my_custom_tool", "grep"]);
+    });
+
+    it("accepts a YAML flow sequence", () => {
+      writeAgent("flow-seq", `---
+tools: [read, grep]
+---
+
+Flow sequence.`);
+
+      const result = loadCustomAgents(tmpDir);
+      expect(result.get("flow-seq")!.builtinToolNames).toEqual(["read", "grep"]);
+    });
+
+    it("treats a single-element none sequence as no tools", () => {
+      writeAgent("seq-none", `---
+tools: [none]
+---
+
+No tools.`);
+
+      const result = loadCustomAgents(tmpDir);
+      expect(result.get("seq-none")!.builtinToolNames).toEqual([]);
+    });
+
+    it("treats an empty sequence as no tools", () => {
+      writeAgent("seq-empty", `---
+tools: []
+---
+
+No tools.`);
+
+      const result = loadCustomAgents(tmpDir);
+      expect(result.get("seq-empty")!.builtinToolNames).toEqual([]);
+    });
+
+    it("keeps a comma inside a quoted sequence entry", () => {
+      writeAgent("seq-comma", `---
+tools: ["read", "weird,name"]
+---
+
+Comma entry.`);
+
+      const result = loadCustomAgents(tmpDir);
+      expect(result.get("seq-comma")!.builtinToolNames).toEqual(["read", "weird,name"]);
+    });
   });
 
   it("passes through thinking level as-is (no validation)", () => {

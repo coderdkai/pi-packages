@@ -57,7 +57,7 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       name,
       displayName: str(fm.display_name),
       description: str(fm.description) ?? name,
-      builtinToolNames: csvList(fm.tools, BUILTIN_TOOL_NAMES),
+      builtinToolNames: listField(fm.tools, BUILTIN_TOOL_NAMES),
       model: str(fm.model),
       thinking: str(fm.thinking) as ThinkingLevel | undefined,
       maxTurns: nonNegativeInt(fm.max_turns),
@@ -85,22 +85,28 @@ function nonNegativeInt(val: unknown): number | undefined {
 }
 
 /**
- * Parse a raw CSV field value into items, or undefined if absent/empty/"none".
+ * Parse a raw list field into items, or undefined if absent/empty/"none".
+ *
+ * Frontmatter is YAML, so a list field is written either as a comma-separated
+ * scalar (`tools: read, grep`) or as a sequence (`tools: [read, grep]`). Both
+ * are supported: a sequence keeps its entries intact, while a scalar is split
+ * on commas.
  */
-function parseCsvField(val: unknown): string[] | undefined {
+function parseListField(val: unknown): string[] | undefined {
   if (val === undefined || val === null) return undefined;
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- val is already narrowed past null/undefined; String() is the intended coercion here
-  const s = String(val).trim();
-  if (!s || s === "none") return undefined;
-  const items = s.split(",").map(t => t.trim()).filter(Boolean);
-  return items.length > 0 ? items : undefined;
+  const items = Array.isArray(val)
+    ? val.map(entry => String(entry).trim()).filter(Boolean)
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- val is already narrowed past null/undefined; String() is the intended coercion here
+    : String(val).trim().split(",").map(entry => entry.trim()).filter(Boolean);
+  if (items.length === 0) return undefined;
+  return items.length === 1 && items[0] === "none" ? undefined : items;
 }
 
 /**
- * Parse a comma-separated list field with defaults.
- * omitted → defaults; "none"/empty → []; csv → listed items.
+ * Parse a list field with defaults.
+ * omitted → defaults; "none"/empty → []; otherwise → listed items.
  */
-function csvList(val: unknown, defaults: string[]): string[] {
+function listField(val: unknown, defaults: string[]): string[] {
   if (val === undefined || val === null) return defaults;
-  return parseCsvField(val) ?? [];
+  return parseListField(val) ?? [];
 }
