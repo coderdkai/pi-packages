@@ -69,10 +69,10 @@ describe("createAgentLookup", () => {
 		expect(config.promptMode).toBe("replace");
 	});
 
-	it("default config builtinToolNames includes 'read'", () => {
+	it("default config toolNames includes 'read'", () => {
 		const lookup = createAgentLookup();
 		const config = lookup.resolveAgentConfig("Explore");
-		expect(config.builtinToolNames).toContain("read");
+		expect(config.toolNames).toContain("read");
 	});
 
 	it("getToolNamesForType returns ['read'] by default", () => {

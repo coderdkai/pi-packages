@@ -52,7 +52,7 @@ You are a security auditor.`);
     const agent = result.get("auditor")!;
     expect(agent.name).toBe("auditor");
     expect(agent.description).toBe("Security Auditor");
-    expect(agent.builtinToolNames).toEqual(["read", "grep", "find"]);
+    expect(agent.toolNames).toEqual(["read", "grep", "find"]);
     expect(agent.model).toBe("anthropic/claude-opus-4-6");
     expect(agent.thinking).toBe("high");
     expect(agent.maxTurns).toBe(30);
@@ -73,7 +73,7 @@ Just a prompt.`);
 
     expect(agent.name).toBe("minimal");
     expect(agent.description).toBe("minimal"); // defaults to filename
-    expect(agent.builtinToolNames).toEqual(BUILTIN_TOOL_NAMES); // all tools
+    expect(agent.toolNames).toEqual(BUILTIN_TOOL_NAMES); // all tools
     expect(agent.model).toBeUndefined();
     expect(agent.thinking).toBeUndefined();
     expect(agent.maxTurns).toBeUndefined();
@@ -91,7 +91,7 @@ Just a prompt.`);
 
     expect(agent.name).toBe("bare");
     expect(agent.description).toBe("bare");
-    expect(agent.builtinToolNames).toEqual(BUILTIN_TOOL_NAMES);
+    expect(agent.toolNames).toEqual(BUILTIN_TOOL_NAMES);
     expect(agent.promptMode).toBe("append");
     expect(agent.systemPrompt).toBe("Just a system prompt, no frontmatter.");
   });
@@ -104,7 +104,7 @@ tools: none
 No tools.`);
 
     const result = loadCustomAgents(tmpDir);
-    expect(result.get("notool")!.builtinToolNames).toEqual([]);
+    expect(result.get("notool")!.toolNames).toEqual([]);
   });
 
   it("passes through unknown tool names (not filtered)", () => {
@@ -117,7 +117,7 @@ Custom tools.`);
     const result = loadCustomAgents(tmpDir);
     // An extension-registered tool name is a supported `tools:` entry: the child's
     // allowlist admits it when the extension registers it during bind (#725).
-    expect(result.get("custom-tools")!.builtinToolNames).toEqual(["read", "my_custom_tool", "grep"]);
+    expect(result.get("custom-tools")!.toolNames).toEqual(["read", "my_custom_tool", "grep"]);
   });
 
   describe("tools field forms", () => {
@@ -132,7 +132,7 @@ tools:
 Block sequence.`);
 
       const result = loadCustomAgents(tmpDir);
-      expect(result.get("block-seq")!.builtinToolNames).toEqual(["read", "my_custom_tool", "grep"]);
+      expect(result.get("block-seq")!.toolNames).toEqual(["read", "my_custom_tool", "grep"]);
     });
 
     it("accepts a YAML flow sequence", () => {
@@ -143,7 +143,7 @@ tools: [read, grep]
 Flow sequence.`);
 
       const result = loadCustomAgents(tmpDir);
-      expect(result.get("flow-seq")!.builtinToolNames).toEqual(["read", "grep"]);
+      expect(result.get("flow-seq")!.toolNames).toEqual(["read", "grep"]);
     });
 
     it("treats a single-element none sequence as no tools", () => {
@@ -154,7 +154,7 @@ tools: [none]
 No tools.`);
 
       const result = loadCustomAgents(tmpDir);
-      expect(result.get("seq-none")!.builtinToolNames).toEqual([]);
+      expect(result.get("seq-none")!.toolNames).toEqual([]);
     });
 
     it("treats an empty sequence as no tools", () => {
@@ -165,7 +165,7 @@ tools: []
 No tools.`);
 
       const result = loadCustomAgents(tmpDir);
-      expect(result.get("seq-empty")!.builtinToolNames).toEqual([]);
+      expect(result.get("seq-empty")!.toolNames).toEqual([]);
     });
 
     it("keeps a comma inside a quoted sequence entry", () => {
@@ -176,7 +176,7 @@ tools: ["read", "weird,name"]
 Comma entry.`);
 
       const result = loadCustomAgents(tmpDir);
-      expect(result.get("seq-comma")!.builtinToolNames).toEqual(["read", "weird,name"]);
+      expect(result.get("seq-comma")!.toolNames).toEqual(["read", "weird,name"]);
     });
   });
 

@@ -6,7 +6,7 @@ function makeAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
     name: "test-agent",
     description: "Test agent",
-    builtinToolNames: ["read", "grep"],
+    toolNames: ["read", "grep"],
     systemPrompt: "You are a test agent.",
     promptMode: "replace",
     inheritContext: false,
@@ -225,7 +225,7 @@ describe("AgentTypeRegistry", () => {
 
     it("returns custom tool names for user agent", () => {
       const registry = makeRegistry(
-        new Map([["auditor", makeAgentConfig({ name: "auditor", builtinToolNames: ["read", "grep"] })]])
+        new Map([["auditor", makeAgentConfig({ name: "auditor", toolNames: ["read", "grep"] })]])
       );
       expect(registry.getToolNamesForType("auditor")).toEqual(["read", "grep"]);
     });

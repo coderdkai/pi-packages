@@ -16,7 +16,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
       displayName: "Agent",
       description: "General-purpose agent for complex, multi-step tasks",
       toolGuideline: "- Use general-purpose for complex tasks that need file editing.",
-      // builtinToolNames omitted — means "all available tools" (resolved at lookup time)
+      // toolNames omitted — means "all available tools" (resolved at lookup time)
       // inheritContext / runInBackground omitted — strategy fields, callers decide per-call.
       // Setting them to false would lock callsite intent (see resolveAgentInvocationConfig in invocation-config.ts).
       systemPrompt: "",
@@ -31,7 +31,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
       displayName: "Explore",
       description: "Fast codebase exploration agent (read-only)",
       toolGuideline: "- Use Explore for codebase searches and code understanding.",
-      builtinToolNames: READ_ONLY_TOOLS,
+      toolNames: READ_ONLY_TOOLS,
       model: "anthropic/claude-haiku-4-5-20251001",
       systemPrompt: `# CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
 You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
@@ -72,7 +72,7 @@ Use Bash ONLY for read-only operations: ls, git status, git log, git diff, find,
       displayName: "Plan",
       description: "Software architect for implementation planning (read-only)",
       toolGuideline: "- Use Plan for architecture and implementation planning.",
-      builtinToolNames: READ_ONLY_TOOLS,
+      toolNames: READ_ONLY_TOOLS,
       systemPrompt: `# CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
 You are a software architect and planning specialist.
 Your role is EXCLUSIVELY to explore the codebase and design implementation plans.

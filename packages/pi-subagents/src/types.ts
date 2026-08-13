@@ -48,7 +48,8 @@ export interface AgentPromptConfig {
 
 /** Unified agent configuration — used for both default and user-defined agents. */
 export interface AgentConfig extends AgentIdentity, AgentPromptConfig {
-  builtinToolNames?: string[];
+  /** The agent's tool allowlist. Entries name built-in or extension-registered tools; omitted means every built-in. */
+  toolNames?: string[];
   model?: string;
   thinking?: ThinkingLevel;
   maxTurns?: number;

@@ -95,7 +95,7 @@ export class AgentTypeRegistry implements AgentConfigLookup {
     const key = this.resolveKey(type);
     const raw = key ? this.agents.get(key) : undefined;
     const config = raw?.enabled !== false ? raw : undefined;
-    const names = config?.builtinToolNames?.length ? config.builtinToolNames : [...BUILTIN_TOOL_NAMES];
+    const names = config?.toolNames?.length ? config.toolNames : [...BUILTIN_TOOL_NAMES];
     return names;
   }
 
@@ -113,7 +113,7 @@ export class AgentTypeRegistry implements AgentConfigLookup {
       name: type,
       displayName: "Agent",
       description: "General-purpose agent for complex, multi-step tasks",
-      builtinToolNames: BUILTIN_TOOL_NAMES,
+      toolNames: BUILTIN_TOOL_NAMES,
       systemPrompt: "",
       promptMode: "append",
     };

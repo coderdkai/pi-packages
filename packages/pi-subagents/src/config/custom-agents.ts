@@ -57,7 +57,7 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       name,
       displayName: str(fm.display_name),
       description: str(fm.description) ?? name,
-      builtinToolNames: listField(fm.tools, BUILTIN_TOOL_NAMES),
+      toolNames: listField(fm.tools, BUILTIN_TOOL_NAMES),
       model: str(fm.model),
       thinking: str(fm.thinking) as ThinkingLevel | undefined,
       maxTurns: nonNegativeInt(fm.max_turns),

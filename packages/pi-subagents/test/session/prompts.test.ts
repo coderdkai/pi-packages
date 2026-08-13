@@ -81,7 +81,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "appender",
       description: "Appender",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "Extra custom instructions here.",
       promptMode: "append",
       inheritContext: false,
@@ -104,7 +104,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "appender",
       description: "Appender",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "Extra custom instructions here.",
       promptMode: "append",
       inheritContext: false,
@@ -120,7 +120,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "clone",
       description: "Clone",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "",
       promptMode: "append",
       inheritContext: false,
@@ -141,7 +141,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "custom",
       description: "Custom",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "You are a specialized agent.",
       promptMode: "replace",
       inheritContext: false,
@@ -158,7 +158,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "standalone",
       description: "Standalone",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "You are a standalone agent.",
       promptMode: "replace",
       inheritContext: false,
@@ -182,7 +182,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "standalone",
       description: "Standalone",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "Custom standalone instructions.",
       promptMode: "replace",
       inheritContext: false,
@@ -199,7 +199,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "ordered",
       description: "Ordered",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "Final custom instructions.",
       promptMode: "replace",
       inheritContext: false,
@@ -238,7 +238,7 @@ describe("buildAgentPrompt", () => {
     const config: AgentConfig = {
       name: "no-parent",
       description: "No parent",
-      builtinToolNames: [],
+      toolNames: [],
       systemPrompt: "Extra stuff.",
       promptMode: "append",
       inheritContext: false,
@@ -260,7 +260,7 @@ describe("buildAgentPrompt", () => {
       const config: AgentConfig = {
         name: "Explore",
         description: "Explore",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "You are an explorer.",
         promptMode: "replace",
         inheritContext: false,
@@ -284,7 +284,7 @@ describe("buildAgentPrompt", () => {
       const config: AgentConfig = {
         name: "general-purpose",
         description: "Twin",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "",
         promptMode: "append",
         inheritContext: false,
@@ -308,7 +308,7 @@ describe("buildAgentPrompt", () => {
       const config: AgentConfig = {
         name: "my-custom-agent",
         description: "Custom",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "You are custom.",
         promptMode: "replace",
         inheritContext: false,
@@ -322,7 +322,7 @@ describe("buildAgentPrompt", () => {
       const replaceConfig: AgentConfig = {
         name: "agent-a",
         description: "Replace",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "Replace agent.",
         promptMode: "replace",
         inheritContext: false,
@@ -339,7 +339,7 @@ describe("buildAgentPrompt", () => {
       const appendConfig: AgentConfig = {
         name: "agent-b",
         description: "Append",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "",
         promptMode: "append",
         inheritContext: false,
@@ -377,7 +377,7 @@ describe("buildAgentPrompt", () => {
       return {
         name: "twin",
         description: "Twin",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "",
         promptMode: "append",
         inheritContext: false,
@@ -389,7 +389,7 @@ describe("buildAgentPrompt", () => {
       return {
         name: "specialist",
         description: "Specialist",
-        builtinToolNames: [],
+        toolNames: [],
         systemPrompt: "You are a specialist.",
         promptMode: "replace",
         inheritContext: false,

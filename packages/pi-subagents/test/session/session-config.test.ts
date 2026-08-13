@@ -8,7 +8,7 @@ import { makeModel } from "#test/helpers/make-model";
 const mockResolveAgentConfig = vi.fn((): AgentConfig => ({
   name: "Explore",
   description: "Fast codebase exploration agent",
-  builtinToolNames: ["read"],
+  toolNames: ["read"],
   systemPrompt: "You are Explore.",
   promptMode: "replace",
 }));
