@@ -33,4 +33,25 @@ Planned a docs-first response: document the allowlist contract and extension too
   Its one wrong conclusion — "no ordering/capping issue" — came from a Pi regression test where no allowlist was in play; reading `_refreshToolRegistry` in the installed `dist` directly settled it.
   Verify a subagent's negative finding against the code path your caller actually takes.
 
+## Stage: Implementation — TDD (2026-08-13T23:50:00Z)
+
+### Session summary
+
+Six commits, all six plan steps: the YAML-sequence `tools:` parse, the `excludeTools` recursion guard, the SDK-seam retyping, the `builtinToolNames` → `toolNames` rename, the `docs/configuration.md` extraction, and the tool-allowlist contract documentation.
+`pi-subagents` went 1229 → 1230 tests (five new `tools:` form cases and two new guard cases, against three retired post-bind guard cases and three retired fixture self-tests).
+Pre-completion reviewer: PASS.
+
+### Observations
+
+- The tidy-first assessor recommended no preparatory commits and made one call that proved right: the fixture's `toolsBeforeBind`/`toolsAfterBind` toggle went dead as a consequence of the guard change, so it belonged inside that commit rather than before it.
+- Step 1 landed as `fix:`, not the planned `feat:`.
+  Four of the five new parser tests passed on the first run — the sequence forms already worked through `String(val)` coercion, exactly as the plan measured.
+  The fifth (a quoted sequence entry containing a comma) failed, which is the whole behavior delta and makes `fix:` the honest type.
+  A plan that predicts "this already works" should expect a thin red.
+- Removing the `as any` at the SDK seam turned out to be self-verifying: the file-level `@typescript-eslint/no-unsafe-argument` disable immediately reported as unused, proving the cast was its only cause.
+  The field-scoped downcast compiled on the first try, so the plan's fallback (a single documented `as unknown as` in a named helper) was not needed.
+- The reviewer noted the new `### Child tool selection` architecture subsection had landed after `### What the core dropped`; moved it up beside `### What the core owns`, where an ownership-policy statement belongs, and amended.
+- Deviations beyond the plan, all small: `parseCsvField` → `parseListField` and `csvList` → `listField` (the names described a CSV-only parser that no longer exists), and the removal of the now-unused eslint-disable.
+- Ship-time reminder carried forward from planning: PR #612 closes with thanks and the two-defect analysis (built-in leakage into read-only agents; the guard restored by the next registry rebuild).
+
 [PR 612]: https://github.com/gotgenes/pi-packages/pull/612
