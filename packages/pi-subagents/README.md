@@ -105,88 +105,6 @@ Background agent completion notifications render as styled boxes:
 
 The LLM receives structured `<task-notification>` XML for parsing, while the user sees the themed visual.
 
-## Default Agent Types
-
-| Type              | Tools                      | Model                         | Prompt Mode            | Description                                                                                      |
-| ----------------- | -------------------------- | ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `general-purpose` | all 7                      | inherit                       | `append` (parent twin) | Inherits the parent's full system prompt — same rules, CLAUDE.md, project conventions            |
-| `Explore`         | read, bash, grep, find, ls | haiku (falls back to inherit) | `replace`              | Fast codebase exploration (read-only); inherits the parent prompt as a base                      |
-| `Plan`            | read, bash, grep, find, ls | inherit                       | `replace`              | Software architect for implementation planning (read-only); inherits the parent prompt as a base |
-
-The `general-purpose` agent is a **parent twin** — it receives the parent's entire system prompt plus a sub-agent context bridge, so it follows the same rules the parent does.
-Explore and Plan use `replace` mode: the parent prompt is the cacheable base and their specialist read-only instructions are appended last, giving them the final say.
-
-In every mode, a child that runs somewhere other than the parent — one given an isolated workspace by a `WorkspaceProvider` — does not inherit the parent's `Current working directory:` footer.
-That line is stripped from the inherited prompt, leaving the fresh footer Pi appends for the child session's own directory as the single, correct claim; without the strip, the child follows the parent's path instead.
-A child sharing the parent's directory inherits the prompt untouched, so its prefix stays byte-identical to the parent's.
-
-Default agents can be **overridden** by creating a `.md` file with the same name (e.g. `.pi/agents/general-purpose.md`), or **disabled** per-project with `enabled: false` frontmatter.
-
-## Custom Agents
-
-Define custom agent types by creating `.md` files.
-The filename becomes the agent type name.
-Any name is allowed — using a default agent's name overrides it.
-
-Agents are discovered from two locations (higher priority wins):
-
-| Priority    | Location                                                                         | Scope                         |
-| ----------- | -------------------------------------------------------------------------------- | ----------------------------- |
-| 1 (highest) | `.pi/agents/<name>.md`                                                           | Project — per-repo agents     |
-| 2           | `$PI_CODING_AGENT_DIR/agents/<name>.md` (default `~/.pi/agent/agents/<name>.md`) | Global — available everywhere |
-
-Project-level agents override global ones with the same name, so you can customize a global agent for a specific project.
-The global location follows the upstream `PI_CODING_AGENT_DIR` env var — set it to relocate all pi-coding-agent state (agents, skills, settings) to a custom directory.
-
-### Example: `.pi/agents/auditor.md`
-
-```markdown
----
-description: Security Code Reviewer
-tools: read, grep, find, bash
-model: anthropic/claude-opus-4-6
-thinking: high
-max_turns: 30
----
-
-You are a security auditor.
-Review code for vulnerabilities including:
-
-- Injection flaws (SQL, command, XSS)
-- Authentication and authorization issues
-- Sensitive data exposure
-- Insecure configurations
-
-Report findings with file paths, line numbers, severity, and remediation advice.
-```
-
-Then spawn it like any built-in type:
-
-```text
-subagent({ subagent_type: "auditor", prompt: "Review the auth module", description: "Security audit" })
-```
-
-### Frontmatter Fields
-
-All fields are optional — sensible defaults for everything.
-
-| Field               | Default        | Description                                                                                                                                                                                                                                                                                                             |
-| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `description`       | filename       | Agent description shown in tool listings                                                                                                                                                                                                                                                                                |
-| `display_name`      | —              | Display name for UI (e.g. widget, agent list)                                                                                                                                                                                                                                                                           |
-| `tools`             | all 7          | Comma-separated built-in tools: read, bash, edit, write, grep, find, ls. `none` for no tools                                                                                                                                                                                                                            |
-| `model`             | inherit parent | Model — `provider/modelId` or fuzzy name (`"haiku"`, `"sonnet"`)                                                                                                                                                                                                                                                        |
-| `thinking`          | inherit        | off, minimal, low, medium, high, xhigh                                                                                                                                                                                                                                                                                  |
-| `max_turns`         | unlimited      | Max agentic turns before graceful shutdown. `0` or omit for unlimited                                                                                                                                                                                                                                                   |
-| `prompt_mode`       | `append`       | `replace`: parent prompt is the cacheable base; body is appended last with full control (no `<sub_agent_context>` bridge, no `<agent_instructions>` wrapper). `append`: parent prompt is the base; body is wrapped in `<agent_instructions>` and a sub-agent context bridge is injected (agent acts as a "parent twin") |
-| `inherit_context`   | `false`        | Fork parent conversation into agent                                                                                                                                                                                                                                                                                     |
-| `run_in_background` | `false`        | Run in background by default                                                                                                                                                                                                                                                                                            |
-| `enabled`           | `true`         | Set to `false` to disable an agent (useful for hiding a default agent per-project)                                                                                                                                                                                                                                      |
-
-Frontmatter is authoritative.
-If an agent file sets `model`, `thinking`, `max_turns`, `inherit_context`, or `run_in_background`, those values are locked for that agent.
-`subagent` tool parameters only fill fields the agent config leaves unspecified.
-
 ## Tools
 
 ### `subagent`
@@ -236,14 +154,14 @@ The message interrupts after the current tool execution.
 
 Interactive list to tune runtime settings — max concurrency, default max turns, grace turns, the two session-retention windows, and whether ESC aborts every subagent.
 The numeric settings open an input prompt; the abort-on-ESC entry is a direct flip.
-Changes persist across pi restarts (see [Persistent Settings](#persistent-settings)).
+Changes persist across pi restarts (see [Persistent Settings](./docs/configuration.md#persistent-settings)).
 
 ### `/subagents:sessions`
 
 Pick any subagent — running, or completed with its live session already released — and read its full session transcript in pi's native per-entry viewer.
 Read-only: no steering, no session takeover (steering lives in the `steer_subagent` tool and the background widget).
 
-Creating and editing agent definitions is not a command — write an agent `.md` file in your editor, or ask a pi session to generate one (see [Custom Agents](#custom-agents)).
+Creating and editing agent definitions is not a command — write an agent `.md` file in your editor, or ask a pi session to generate one (see [Custom Agents](./docs/configuration.md#custom-agents)).
 
 ## Graceful Max Turns
 
@@ -271,67 +189,7 @@ Foreground agents bypass the queue — they block the parent anyway.
 Stopping a still-queued agent produces the same completion notification a running agent's stop does.
 Because that agent never started, the notification says so and offers no result to collect.
 
-## Persistent Settings
-
-Runtime tuning values set via `/subagents:settings` (max concurrency, default max turns, grace turns, the two session-retention windows, and the abort-on-interrupt policy) persist across pi restarts.
-A completed subagent's record is kept for the whole parent session (so `get_subagent_result` never misses); only its heavy in-memory session is released — after `consumedSessionRetentionMinutes` once the result has been collected, or after the `unconsumedSessionRetentionMinutes` safety cap if it never was.
-Two files, merged on load:
-
-- **Global:** `~/.pi/agent/subagents.json` — your machine-wide defaults.
-  Edit by hand; the `/subagents:settings` command never writes here.
-- **Project:** `<cwd>/.pi/subagents.json` — per-project overrides.
-  Written by `/subagents:settings`.
-
-**Precedence:** project overrides global on any field present in both.
-Missing fields fall back to the hardcoded defaults (max concurrency `4`, default max turns unlimited, grace turns `5`, consumed-session retention `10` minutes, unconsumed-session retention `720` minutes, abort-all-on-interrupt `true`).
-
-**Example — global defaults for a beefy machine:**
-
-```bash
-mkdir -p ~/.pi/agent
-cat > ~/.pi/agent/subagents.json <<'EOF'
-{
-  "maxConcurrent": 16,
-  "graceTurns": 10,
-  "unconsumedSessionRetentionMinutes": 1440,
-  "abortAllOnInterrupt": false
-}
-EOF
-```
-
-Every project now starts with concurrency 16, grace 10, and ESC left to the parent, without ever touching the command.
-Individual projects can still override via `/subagents:settings`.
-
-**Failure behavior:** missing file is silent; malformed JSON logs a `[pi-subagents] Ignoring malformed settings at …` warning to stderr; invalid/out-of-range field values are dropped per-field; write failures downgrade the `/subagents:settings` toast to a warning with `(session only; failed to persist)`.
-
-### Excluding package extensions from children
-
-Some package extensions are parent-scoped or expensive to initialize per session.
-Because children run in the parent's process, such an extension initializing once per child multiplies its cost in a single heap — enough, in the case that motivated this feature, to exhaust the V8 heap with four concurrent children.
-
-List the offending packages under `excludedExtensionPackages` to keep their extensions out of child sessions:
-
-```json
-{
-  "excludedExtensionPackages": ["npm:@cortexkit/pi-magic-context"]
-}
-```
-
-Entries must match Pi's configured package source string exactly, as it appears in your Pi `settings.json` `packages` array — there is no glob or prefix matching.
-
-What this does and does not do:
-
-- Only the matched packages' **extensions** are disabled, and only in children.
-  Their skills, prompts, and themes stay available to children.
-- The parent session is unaffected, as is the child's own settings — only the child's resource loading is filtered.
-- The exclusion happens during package resolution, so the extension's module is never imported and its factory never runs in the child.
-- Excluding a package also removes the **tools** that extension registers from child sessions.
-  If you need the tools but want the extension's resources released when the child is disposed, exclusion is the wrong lever — see [Child session lifecycle](#child-session-lifecycle) below.
-
-This key is hand-edited in the global or project `subagents.json`; `/subagents:settings` does not expose it, but it is preserved when you change other settings there.
-An absent or empty list reproduces the default behavior, in which children inherit every parent extension.
-
-### Child session lifecycle
+## Child session lifecycle
 
 A child session runs in the parent's process but is a full Pi session with its own extension set.
 It receives the standard pair of session lifecycle events:
@@ -350,16 +208,6 @@ Each child's shutdown is bounded: a handler that never resolves is abandoned aft
 If you author an extension that runs in children, note that its `session_shutdown` handler now fires **once per child session** in addition to once for the parent.
 A handler that flushes a log, writes a summary, or closes a shared resource should be safe to run repeatedly within one process.
 Before this behavior existed, children fired `session_start` with no matching shutdown, so extension-owned resources accumulated for the life of the parent process.
-
-### Abort on interrupt
-
-By default, pressing ESC to interrupt the parent agent also aborts every subagent.
-Set `abortAllOnInterrupt` to `false` (or flip it from `/subagents:settings`) to keep background and queued subagents running when you interrupt the parent — useful when you spawn long background work and then want to steer the parent without losing it.
-
-A foreground agent aborts on ESC regardless of this setting.
-It holds the parent's own run signal for the duration of its blocking tool call, so the interrupt reaches it directly; the policy governs background and queued agents.
-
-The policy is read at the moment ESC fires, so flipping it mid-session applies to the very next interrupt.
 
 ## Events
 
@@ -391,7 +239,7 @@ The earlier `isolation: "worktree"` spawn flag and `isolation:` frontmatter key 
 
 Persistent agent memory (the `memory:` frontmatter key) and skill preloading (the `skills:` frontmatter key) were removed when the core was slimmed down.
 Children inherit the parent's skills and extensions by default, so the `isolated`, `extensions`, and `skills` frontmatter keys no longer exist.
-Package-level extension opt-outs live in the [`excludedExtensionPackages`](#excluding-package-extensions-from-children) setting rather than agent frontmatter.
+Package-level extension opt-outs live in the [`excludedExtensionPackages`](./docs/configuration.md#excluding-package-extensions-from-children) setting rather than agent frontmatter.
 
 ## Migrating from `disallowed_tools`
 
@@ -468,11 +316,17 @@ const config = loadLayeredSettings<MyConfig>({
 `loadLayeredSettings` returns `Partial<T>` (all fields optional); apply your defaults after the call.
 It never throws — all error conditions produce a `console.warn` and return `{}`.
 
+## Documentation
+
+| Document                                                       | Contents                                                                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [Configuration](./docs/configuration.md)                       | Default agent types, custom agent files and their frontmatter fields, and the `subagents.json` settings file   |
+| [Architecture](./docs/architecture/architecture.md)            | Design principles, domain decomposition, module dependency flow, Mermaid diagrams, and the improvement roadmap |
+| [Comparison with upstream](./docs/comparison-with-upstream.md) | Feature-by-feature comparison against the current upstream release                                             |
+
 ## Architecture
 
 This extension is a minimal, composable core: it owns agent spawning, execution, and result retrieval, and exposes a typed `SubagentsService` plus lifecycle events that other extensions build on.
-
-See [`docs/architecture/architecture.md`](./docs/architecture/architecture.md) for the full architecture document — design principles, domain decomposition, module dependency flow, Mermaid diagrams, and the improvement roadmap.
 
 ## Relationship to upstream
 
