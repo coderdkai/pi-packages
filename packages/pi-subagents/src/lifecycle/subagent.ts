@@ -516,7 +516,7 @@ export class Subagent {
 
 	/** Dispose the wrapped session, firing the `disposed` lifecycle event. */
 	disposeSession(): void {
-		this.subagentSession?.dispose();
+		void this.subagentSession?.dispose().catch((err: unknown) => { debugLog("child session dispose", err); });
 	}
 
 	/**
@@ -528,7 +528,7 @@ export class Subagent {
 		const session = this.subagentSession;
 		if (!session) return;
 		this._releasedOutputFile = session.outputFile;
-		session.dispose();
+		void session.dispose().catch((err: unknown) => { debugLog("child session release", err); });
 		this.subagentSession = undefined;
 		this._sessionReleased = true;
 	}

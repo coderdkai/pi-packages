@@ -235,6 +235,24 @@ describe("createSubagentSession — dispose on creation failure", () => {
     expect(lifecycle.disposed).toHaveBeenCalledWith({ sessionId: "child-session-id" });
     expect(session.dispose).toHaveBeenCalledOnce();
   });
+
+  it("shuts down the extensions that did initialize before the bind failed", async () => {
+    const session = createFactorySession();
+    session.bindExtensions = vi.fn().mockRejectedValue(new Error("bind failed"));
+    io.createSession.mockResolvedValue({ session });
+
+    await expect(
+      createSubagentSession(
+        { snapshot: STUB_SNAPSHOT, type: "Explore" },
+        createSubagentSessionDeps({ io, exec, registry: mockAgentLookup }),
+      ),
+    ).rejects.toThrow("bind failed");
+
+    expect(session.extensionRunner.emit).toHaveBeenCalledWith({
+      type: "session_shutdown",
+      reason: "quit",
+    });
+  });
 });
 
 describe("createSubagentSession — post-bind recursion guard", () => {

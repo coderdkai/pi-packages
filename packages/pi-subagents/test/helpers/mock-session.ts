@@ -44,6 +44,8 @@ export function toAgentSession(session: MockSession): AgentSession {
  * For tests that only need an Agent to own a `.session` / `.outputFile`: the
  * turn-driving methods are inert vi.fn() spies, and `steer`/`dispose` delegate
  * to the underlying MockSession so existing session-spy assertions keep working.
+ * `dispose` resolves a promise, mirroring the real teardown that awaits the
+ * child's `session_shutdown` before disposing the session.
  */
 export function createSubagentSessionStub(
 	session: MockSession = createMockSession(),
@@ -55,8 +57,9 @@ export function createSubagentSessionStub(
 		runTurnLoop: vi.fn().mockResolvedValue({ responseText: "done", aborted: false, steered: false }),
 		resumeTurnLoop: vi.fn().mockResolvedValue("resumed"),
 		steer: vi.fn((message: string): Promise<void> => session.steer(message) as Promise<void>),
-		dispose: vi.fn((): void => {
+		dispose: vi.fn((): Promise<void> => {
 			session.dispose();
+			return Promise.resolve();
 		}),
 		getConversation: vi.fn((): string => ""),
 		getContextPercent: vi.fn((): number | null => null),
