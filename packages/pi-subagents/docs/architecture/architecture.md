@@ -310,6 +310,7 @@ src/
 │   ├── conversation.ts             render a session's messages as formatted text
 │   ├── env.ts                      git/platform detection
 │   ├── model-resolver.ts           fuzzy model name resolution
+│   ├── package-exclusions.ts       child settings view that disables excluded packages' extensions
 │   └── session-dir.ts              session directory derivation
 │
 ├── lifecycle/                      agent execution and state tracking
@@ -548,8 +549,10 @@ The observational surface then carries only fire-and-forget broadcasts of immuta
 - **Session lifecycle** — create child sessions, bind extensions, run conversation loop, track results.
 - **Concurrency management** — queue, abort, resume, max concurrency.
 - **Recursion guard** — remove pi-subagents' own three tools from child sessions (prevent infinite nesting).
-  With `isolated` removed (#264), children always load the parent's resources, so the guard is unconditional rather than gated on `cfg.extensions`.
+  With `isolated` removed (#264), the guard is unconditional for every child that reaches binding, rather than gated on `cfg.extensions`.
   This is the core defending its own invariant, keyed off its own tool names — not policy.
+- **Package-extension exclusion** — filter the child's package view by the `excludedExtensionPackages` setting before resource loading, so an excluded package's extensions are never imported in children (#696).
+  Resolved at the composition root; the assembly factory receives a ready-made settings view and holds no policy.
 - **Lifecycle events** — emit awaited, ordered events when child sessions spawn, are created, complete, and are disposed.
 - **Workspace provider seam** — accept a registered `WorkspaceProvider` and consult it for the child's cwd; default to the parent's cwd when none is registered.
 - **Service API** — publish `SubagentsService` via `Symbol.for()` for cross-extension access.
@@ -560,7 +563,8 @@ These policy and environment concerns were removed so the core stays narrow; eac
 
 - **Tool policy** (`disallowed_tools`) and **extension filtering** (`extensions: string[]`) — access control and tool visibility belong in pi-permission-system's `permission:` frontmatter (Phase 14, #237/#238).
 - **Worktree isolation** (`GitWorktreeManager`, the `isolation: "worktree"` mode) — one _strategy_ for choosing the child's cwd, evicted to `@gotgenes/pi-subagents-worktrees` (#263), the first consumer of the workspace provider seam.
-- **Extension lifecycle control** (`extensions: false`, `isolated`, `noSkills`) — removed in #264; deny-at-use covers what `isolated` pretended to do for tools, and prevent-load is left as a _latent_ (un-built) provider seam, added only if a real consumer needs it.
+- **Per-agent extension lifecycle control** (`extensions: false`, `isolated`, `noSkills`) — removed in #264; deny-at-use covers what `isolated` pretended to do for tools.
+  Prevent-load ships instead as the global/project `excludedExtensionPackages` setting (#696): a provider seam was declined because no _extension_ wants to supply the policy, which would make the seam a vacant hook.
 
 ### Composition model
 
@@ -659,7 +663,7 @@ That method — testability friction as a boundary probe, with its limits — is
 | Metric                     | Value                                                                   |
 | -------------------------- | ----------------------------------------------------------------------- |
 | Health score               | 78/100 (B), end of Phase 21                                             |
-| Total LOC                  | 8,025 (59 files)                                                        |
+| Total LOC                  | 8,162 (60 files)                                                        |
 | Dead code                  | 0 files, 0 exports                                                      |
 | Maintainability index      | 91.0 (good)                                                             |
 | Avg cyclomatic complexity  | 1.3                                                                     |
