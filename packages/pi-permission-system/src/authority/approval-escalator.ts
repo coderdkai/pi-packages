@@ -26,11 +26,12 @@ import {
   type ForwardedPromptDisplay,
   type ForwardedSessionApproval,
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
-  PERMISSION_FORWARDING_TIMEOUT_MS,
   type PermissionForwardingLocation,
+  type PermissionForwardingTarget,
   resolvePermissionForwardingTarget,
   SUBAGENT_PARENT_SESSION_ENV_CANDIDATES,
 } from "#src/authority/permission-forwarding";
+import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
 import type { DebugReviewLogger } from "#src/session-logger";
@@ -85,7 +86,28 @@ export interface ParentAuthorizerDeps {
   forwardingDir: string;
   /** In-process subagent session registry for forwarding target resolution. */
   registry?: SubagentSessionRegistry;
+  /** Whether the resolved target is draining its inbox (in-process targets only). */
+  serving: ServingLookup;
+  /** How long to wait for the target's answer, read live so config edits apply. */
+  getTimeoutMs: () => number;
   logger: DebugReviewLogger;
+}
+
+/**
+ * Deny because no authority ever ruled — the request was never delivered,
+ * never answered, or answered unreadably.
+ *
+ * `confirmationUnavailable` is what keeps this out of the "User denied …"
+ * message (#719): a user who was never asked denied nothing. `denialReason`
+ * names which path gave up, and the gate renders it to the model.
+ */
+function abandon(denialReason: string): PermissionPromptDecision {
+  return {
+    approved: false,
+    state: "denied",
+    confirmationUnavailable: true,
+    denialReason,
+  };
 }
 
 /**
@@ -103,6 +125,8 @@ export interface ParentAuthorizerDeps {
 export class ParentAuthorizer implements TerminalAuthorizer {
   private readonly forwardingDir: string;
   private readonly registry: SubagentSessionRegistry | undefined;
+  private readonly serving: ServingLookup;
+  private readonly getTimeoutMs: () => number;
   private readonly logger: DebugReviewLogger;
 
   constructor(
@@ -111,6 +135,8 @@ export class ParentAuthorizer implements TerminalAuthorizer {
   ) {
     this.forwardingDir = deps.forwardingDir;
     this.registry = deps.registry;
+    this.serving = deps.serving;
+    this.getTimeoutMs = deps.getTimeoutMs;
     this.logger = deps.logger;
   }
 
@@ -158,7 +184,9 @@ export class ParentAuthorizer implements TerminalAuthorizer {
           `ask its maintainer to set PI_SUBAGENT_PARENT_SESSION in the child process environment ` +
           `(see https://github.com/gotgenes/pi-permission-system/issues/143).`,
       );
-      return { approved: false, state: "denied" };
+      return abandon(
+        "Could not resolve a parent session to forward this permission request to",
+      );
     }
 
     const location = ensurePermissionForwardingLocation(
@@ -171,7 +199,9 @@ export class ParentAuthorizer implements TerminalAuthorizer {
         this.logger,
         `Permission forwarding is unavailable because session-scoped directories could not be prepared for '${target.sessionId}'`,
       );
-      return { approved: false, state: "denied" };
+      return abandon(
+        `Permission forwarding directories could not be prepared for session '${target.sessionId}'`,
+      );
     }
 
     const request = this.buildForwardedRequest(
@@ -200,7 +230,8 @@ export class ParentAuthorizer implements TerminalAuthorizer {
         `Failed to write forwarded permission request '${requestPath}'`,
         error,
       );
-      return { approved: false, state: "denied" };
+      cleanupPermissionForwardingLocationIfEmpty(this.logger, location);
+      return abandon("The forwarded permission request could not be written");
     }
 
     return this.pollForForwardedResponse(
@@ -208,6 +239,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       request,
       requestPath,
       responsePath,
+      target,
     );
   }
 
@@ -262,9 +294,11 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     request: ForwardedPermissionRequest,
     requestPath: string,
     responsePath: string,
+    target: PermissionForwardingTarget,
   ): Promise<PermissionPromptDecision> {
     const { id: requestId, requesterAgentName, targetSessionId } = request;
-    const deadline = Date.now() + PERMISSION_FORWARDING_TIMEOUT_MS;
+    const timeoutMs = this.getTimeoutMs();
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       if (existsSync(responsePath)) {
@@ -281,18 +315,11 @@ export class ParentAuthorizer implements TerminalAuthorizer {
           targetSessionId,
           responsePath,
         });
-        safeDeleteFile(
-          this.logger,
-          responsePath,
-          "forwarded permission response",
+        this.discardRequest(location, requestPath, responsePath);
+        return (
+          response ??
+          abandon("The parent session's permission response could not be read")
         );
-        safeDeleteFile(
-          this.logger,
-          requestPath,
-          "forwarded permission request",
-        );
-        cleanupPermissionForwardingLocationIfEmpty(this.logger, location);
-        return response ?? { approved: false, state: "denied" };
       }
 
       await sleep(PERMISSION_FORWARDING_POLL_INTERVAL_MS);
@@ -308,8 +335,31 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       targetSessionId,
       responsePath,
     });
+    this.discardRequest(location, requestPath);
+    return abandon(
+      `Session '${target.sessionId}' did not answer within ${timeoutMs / 1000}s`,
+    );
+  }
+
+  /**
+   * Drop this exchange's files and, if nothing else is pending, its directories.
+   *
+   * Deleting the request is what makes an abandonment final: a request left
+   * behind would be answered by the parent long after the child gave up.
+   */
+  private discardRequest(
+    location: PermissionForwardingLocation,
+    requestPath: string,
+    responsePath?: string,
+  ): void {
+    if (responsePath) {
+      safeDeleteFile(
+        this.logger,
+        responsePath,
+        "forwarded permission response",
+      );
+    }
     safeDeleteFile(this.logger, requestPath, "forwarded permission request");
     cleanupPermissionForwardingLocationIfEmpty(this.logger, location);
-    return { approved: false, state: "denied" };
   }
 }

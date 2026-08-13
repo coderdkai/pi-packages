@@ -1,4 +1,13 @@
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { ParentAuthorizer } from "#src/authority/approval-escalator";
@@ -322,6 +331,183 @@ describe("ParentAuthorizer", () => {
         approved: false,
         state: "denied",
       });
+    } finally {
+      temp.cleanup();
+    }
+  });
+});
+
+// ── Abandonment ─────────────────────────────────────────────────────
+//
+// Every path where ParentAuthorizer gives up without a human having ruled must
+// be distinguishable from a user denial — `confirmationUnavailable` selects the
+// "no authority could answer" block message, and `denialReason` says which
+// path (#719).
+
+const forwardedAsk = {
+  requestId: "unused-by-parent-authorizer",
+  source: "tool_call",
+  agentName: "Explore",
+  message: "Allow pwd?",
+  toolName: "bash",
+} as const;
+
+describe("ParentAuthorizer abandonment", () => {
+  test("reports an unresolvable target as unavailable, not user-denied", async () => {
+    const authorizer = new ParentAuthorizer(
+      makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+      makeParentAuthorizerDeps({
+        registry: makeSubagentRegistry("child-session"),
+      }),
+    );
+
+    await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+      approved: false,
+      state: "denied",
+      confirmationUnavailable: true,
+      denialReason:
+        "Could not resolve a parent session to forward this permission request to",
+    });
+  });
+
+  test("reports unusable forwarding directories as unavailable", async () => {
+    const root = mkdtempSync(join(tmpdir(), "permission-forwarding-blocked-"));
+    try {
+      // A file where the forwarding root must be a directory: every mkdir
+      // beneath it fails with ENOTDIR.
+      const forwardingDir = join(root, "forwarding");
+      writeFileSync(forwardingDir, "not a directory", "utf-8");
+
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+        }),
+      );
+
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason:
+          "Permission forwarding directories could not be prepared for session 'parent-session'",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reports an unwritable request as unavailable", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      // Deny writes into requests/ so writeJsonFileAtomic's temp write fails.
+      chmodSync(temp.location.requestsDir, 0o500);
+
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+        }),
+      );
+
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason: "The forwarded permission request could not be written",
+      });
+      // The directories it created for an exchange that never happened are
+      // cleaned up, so the chmod'd directory is already gone.
+      expect(existsSync(temp.location.requestsDir)).toBe(false);
+    } finally {
+      if (existsSync(temp.location.requestsDir)) {
+        chmodSync(temp.location.requestsDir, 0o700);
+      }
+      temp.cleanup();
+    }
+  });
+
+  test("reports an unreadable response as unavailable, not as the parent's denial", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+        }),
+      );
+
+      const decisionPromise = authorizer.authorize({ ...forwardedAsk });
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        "{ not json",
+        "utf-8",
+      );
+
+      await expect(decisionPromise).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason:
+          "The parent session's permission response could not be read",
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("reports an unanswered request as timed out, not user-denied", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+          getTimeoutMs: () => 400,
+        }),
+      );
+
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason: "Session 'parent-session' did not answer within 0.4s",
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("deletes the request it abandoned so the parent cannot answer it later", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+          getTimeoutMs: () => 400,
+        }),
+      );
+
+      await authorizer.authorize({ ...forwardedAsk });
+
+      expect(existsSync(temp.location.requestsDir)).toBe(false);
     } finally {
       temp.cleanup();
     }

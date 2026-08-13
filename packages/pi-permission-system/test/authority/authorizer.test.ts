@@ -7,6 +7,7 @@ import {
 } from "#src/authority/authorizer";
 import { DenyingAuthorizer } from "#src/authority/denying-authorizer";
 import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
+import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -45,6 +46,8 @@ function makeDeps(
       vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
     forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
     registry: overrides.registry,
+    servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),
+    getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
     logger: overrides.logger ?? { review: vi.fn(), debug: vi.fn() },
   };
 }

@@ -4,6 +4,7 @@ import type {
   PromptPreferences,
   requestPermissionDecision,
 } from "#src/authority/permission-prompt-component";
+import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import type { PermissionEventBus } from "#src/permission-events";
 import type { AuthorizerLog, PermissionQuery } from "#src/service";
@@ -72,6 +73,10 @@ export interface AuthorizerSelectionDeps {
   forwardingDir: string;
   /** In-process subagent session registry for forwarding target resolution. */
   registry?: SubagentSessionRegistry;
+  /** Which sessions are draining a forwarded-permission inbox. */
+  servingRegistry: ServingLookup;
+  /** The forwarding timeout, read live so a config edit applies to the next ask. */
+  getForwardingTimeoutMs: () => number;
   logger: DebugReviewLogger;
 }
 
@@ -100,6 +105,8 @@ export function selectAuthorizer(
     return new ParentAuthorizer(ctx, {
       forwardingDir: deps.forwardingDir,
       registry: deps.registry,
+      serving: deps.servingRegistry,
+      getTimeoutMs: deps.getForwardingTimeoutMs,
       logger: deps.logger,
     });
   }

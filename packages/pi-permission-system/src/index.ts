@@ -9,6 +9,7 @@ import {
   type ServingPolicy,
 } from "./authority/forwarded-request-server";
 import { ForwardingManager } from "./authority/forwarding-manager";
+import { PERMISSION_FORWARDING_TIMEOUT_MS } from "./authority/permission-forwarding";
 import { requestPermissionDecision } from "./authority/permission-prompt-component";
 import { PermissionPrompter } from "./authority/permission-prompter";
 import { getServingSessionRegistry } from "./authority/serving-registry";
@@ -115,6 +116,8 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     requestPermissionDecision,
     forwardingDir: paths.forwardingDir,
     registry: subagentRegistry,
+    servingRegistry,
+    getForwardingTimeoutMs: () => PERMISSION_FORWARDING_TIMEOUT_MS,
     logger,
     prompter,
     // The published service is the narrow, session-scoped PermissionQuery a

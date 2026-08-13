@@ -21,6 +21,7 @@ import type {
   PermissionPrompterApi,
   PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
+import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
 import type { PermissionQuery } from "#src/service";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
@@ -117,6 +118,8 @@ function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
       vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
     forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
     registry: overrides.registry,
+    servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),
+    getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
     logger: overrides.logger ?? makeAuthorizerLog(),
     prompter: overrides.prompter ?? makePrompterApi(),
     getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),
