@@ -316,7 +316,7 @@ src/
 ├── lifecycle/                      agent execution and state tracking
 │   ├── subagent-manager.ts         collection manager + observer wiring + consumption-aware session-retention sweep
 │   ├── create-subagent-session.ts  assembly factory: session creation, binding, tool filtering
-│   ├── subagent-session.ts         born-complete child session: turn loop, steer, dispose
+│   ├── subagent-session.ts         born-complete child session: turn loop, steer, shutdown-then-dispose teardown
 │   ├── turn-limits.ts              normalizeMaxTurns (turn-count policy)
 │   ├── subagent.ts                 owns full execution lifecycle (run, abort, steer, wait-until-settled)
 │   ├── subagent-state.ts           lifecycle status + metrics + result-consumption value object (transitions, accumulators, classification predicates)
@@ -325,6 +325,7 @@ src/
 │   ├── concurrency-limiter.ts       background admission gate: schedules run thunks FIFO against the limit
 │   ├── parent-snapshot.ts          immutable spawn-time parent state
 │   ├── child-lifecycle.ts          child-execution lifecycle event publisher
+│   ├── child-shutdown.ts           bounded session_shutdown emit for a child being disposed
 │   ├── workspace.ts                workspace provider seam (generative extension surface)
 │   └── usage.ts                    token usage tracking
 │
@@ -663,7 +664,7 @@ That method — testability friction as a boundary probe, with its limits — is
 | Metric                     | Value                                                                   |
 | -------------------------- | ----------------------------------------------------------------------- |
 | Health score               | 78/100 (B), end of Phase 21                                             |
-| Total LOC                  | 8,162 (60 files)                                                        |
+| Total LOC                  | 8,323 (61 files)                                                        |
 | Dead code                  | 0 files, 0 exports                                                      |
 | Maintainability index      | 91.0 (good)                                                             |
 | Avg cyclomatic complexity  | 1.3                                                                     |

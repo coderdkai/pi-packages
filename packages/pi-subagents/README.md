@@ -326,10 +326,30 @@ What this does and does not do:
 - The parent session is unaffected, as is the child's own settings — only the child's resource loading is filtered.
 - The exclusion happens during package resolution, so the extension's module is never imported and its factory never runs in the child.
 - Excluding a package also removes the **tools** that extension registers from child sessions.
-  If you need the tools but want the resources released when a child finishes, that is a separate lifecycle concern tracked in [#709](https://github.com/gotgenes/pi-packages/issues/709).
+  If you need the tools but want the extension's resources released when the child is disposed, exclusion is the wrong lever — see [Child session lifecycle](#child-session-lifecycle) below.
 
 This key is hand-edited in the global or project `subagents.json`; `/subagents:settings` does not expose it, but it is preserved when you change other settings there.
 An absent or empty list reproduces the default behavior, in which children inherit every parent extension.
+
+### Child session lifecycle
+
+A child session runs in the parent's process but is a full Pi session with its own extension set.
+It receives the standard pair of session lifecycle events:
+
+| Event              | When                                                | Reason      |
+| ------------------ | --------------------------------------------------- | ----------- |
+| `session_start`    | Extensions are bound, before the child's first turn | `"startup"` |
+| `session_shutdown` | The child session is disposed                       | `"quit"`    |
+
+Disposal happens when the retention window for a finished agent expires, when completed records are cleared at session start or switch, when the parent session shuts down, or when child extension binding fails partway.
+It does **not** happen the moment an agent finishes: the session is retained so the agent can be resumed, per the `consumedSessionRetentionMinutes` and `unconsumedSessionRetentionMinutes` settings above.
+
+The shutdown event is dispatched and awaited **before** the child's `AgentSession` is disposed, so a handler still has a live context and can close what it opened — stdio subprocesses, sockets, timers, file handles.
+Each child's shutdown is bounded: a handler that never resolves is abandoned after a few seconds and disposal proceeds, so one misbehaving extension cannot stall the parent's teardown or Pi's exit.
+
+If you author an extension that runs in children, note that its `session_shutdown` handler now fires **once per child session** in addition to once for the parent.
+A handler that flushes a log, writes a summary, or closes a shared resource should be safe to run repeatedly within one process.
+Before this behavior existed, children fired `session_start` with no matching shutdown, so extension-owned resources accumulated for the life of the parent process.
 
 ### Abort on interrupt
 
