@@ -26,6 +26,20 @@ export interface SubagentsSettings {
   abortAllOnInterrupt?: boolean;
 }
 
+/**
+ * The persisted form of the in-memory settings values.
+ * `saveSettings` rewrites the whole project file from this shape, so every key
+ * that must survive a `/subagents:settings` edit has to appear here.
+ */
+export interface SettingsSnapshot {
+  maxConcurrent: number;
+  defaultMaxTurns: number;
+  graceTurns: number;
+  consumedSessionRetentionMinutes: number;
+  unconsumedSessionRetentionMinutes: number;
+  abortAllOnInterrupt: boolean;
+}
+
 
 /** Emit callback — a subset of `pi.events.emit` to keep helpers testable. */
 export type SettingsEmit = (event: string, payload: unknown) => void;
@@ -144,14 +158,7 @@ export class SettingsManager {
    * Snapshot current in-memory values for persistence.
    * `defaultMaxTurns` uses 0 as the on-disk marker for unlimited (undefined).
    */
-  snapshot(): {
-    maxConcurrent: number;
-    defaultMaxTurns: number;
-    graceTurns: number;
-    consumedSessionRetentionMinutes: number;
-    unconsumedSessionRetentionMinutes: number;
-    abortAllOnInterrupt: boolean;
-  } {
+  snapshot(): SettingsSnapshot {
     return {
       maxConcurrent: this._maxConcurrent,
       defaultMaxTurns: this._defaultMaxTurns ?? 0,
