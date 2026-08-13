@@ -673,6 +673,9 @@ That method — testability friction as a boundary probe, with its limits — is
 | Test duplication           | retired (fallow 3.2.0 excludes test files; see Phase 20 Step 9 history) |
 | Fallow refactoring targets | 0                                                                       |
 
+Recompute `Total LOC` with `find src -name '*.ts' | wc -l` and `cat $(find src -name '*.ts') | wc -l` — it counts `src/` only, so `fallow health`'s package-wide total is the wrong source.
+Every other row is a `fallow health` field.
+
 ### Dependency bag inventory
 
 The 10+-field dependency bags flagged in prior phases (`ResolvedSpawnConfig`, `AgentSpawnConfig`, `RunOptions`, `SessionConfig`, `SubagentSessionIO`, `SubagentExecution`) were all decomposed into focused value objects; the remaining wide interfaces (`NotificationDetails`, `ResourceLoaderOptions`, `CreateSessionOptions`) are DTO/SDK-boundary types accepted as-is.
