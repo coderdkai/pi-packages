@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument -- Pi SDK types are not fully exported; see upstream Pi SDK for type improvements */
 /**
  * pi-agents — A pi extension providing focused, in-process autonomous sub-agents.
  *
@@ -16,6 +15,8 @@ import {
   DefaultResourceLoader,
   type ExtensionAPI,
   getAgentDir,
+  type ResourceLoader,
+  ModelRegistry as SdkModelRegistry,
   SettingsManager as SdkSettingsManager,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -111,7 +112,17 @@ export default function (pi: ExtensionAPI) {
           projectTrusted: parent.isProjectTrusted(),
         });
       },
-      createSession: (opts) => createAgentSession(opts as any),
+      // The factory states its collaborators as narrow structural contracts so
+      // it can be tested with plain stubs. Here at the composition root the
+      // values really are the SDK objects, so widen those three and let every
+      // other option type-check against the SDK signature.
+      createSession: ({ sessionManager, resourceLoader, modelRegistry, ...rest }) =>
+        createAgentSession({
+          ...rest,
+          sessionManager: sessionManager as SessionManager,
+          resourceLoader: resourceLoader as ResourceLoader,
+          modelRegistry: modelRegistry as SdkModelRegistry,
+        }),
       assemblerIO: {
         buildAgentPrompt,
       },
