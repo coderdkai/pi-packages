@@ -15,6 +15,25 @@ Bash is for read-only commands only: `pnpm run check`, `pnpm run lint`, `pnpm ru
 Do NOT modify files, run auto-fixers, or commit anything.
 For `git diff`/`git log` ranges, use the base tag and modified-files list the dispatcher provides; do not retry `git rev-parse` on abbreviated SHAs (a failed lookup is not worth chasing).
 
+## Search scope
+
+Every command must stay inside the repository working directory.
+Never pass an absolute path outside it as a search root — `find /`, `grep -r /`, `ls /usr`, or any walk of `~` or `/` is out of bounds, even though those commands are read-only.
+Read-only is not the same as in-scope: a filesystem-wide walk crosses every mounted volume, is slow enough to stall the review, and trips the external-directory permission gate for a file that is almost always already in the repo.
+
+When a targeted search returns no output, the pattern is wrong far more often than the file is missing.
+Fix the pattern before widening the root, in this order:
+
+1. Re-check the glob's depth — `dir/*.ext` matches one level only.
+   Use `-r` on the directory (`grep -rn "sym" dir/`) when the file may be nested.
+2. Re-check the filename assumption — `ls` the directory and look.
+3. Only then widen, and never past the repo root.
+
+To confirm an SDK or dependency API, read the installed types under `node_modules/.pnpm/<pkg>@<version>/` and pin the version to the one the package depends on.
+A store can hold several versions of the same package, so an unpinned match may come from a copy the code never loads.
+
+If you genuinely cannot answer a question within the repo, report it as an open question in your findings rather than escalating the search.
+
 ## Input
 
 The dispatching agent provides:
