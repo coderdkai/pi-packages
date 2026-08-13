@@ -36,6 +36,7 @@ import { SubagentsServiceAdapter } from "#src/service/service-adapter";
 import { detectEnv } from "#src/session/env";
 
 import { resolveModel } from "#src/session/model-resolver";
+import { createExcludedPackagesStorage } from "#src/session/package-exclusions";
 import { buildAgentPrompt } from "#src/session/prompts";
 import { deriveSubagentSessionDir } from "#src/session/session-dir";
 import { SettingsManager } from "#src/settings";
@@ -101,6 +102,15 @@ export default function (pi: ExtensionAPI) {
       deriveSessionDir: deriveSubagentSessionDir,
       createSessionManager: (cwd, dir) => SessionManager.create(cwd, dir),
       createSettingsManager: (cwd, dir) => SdkSettingsManager.create(cwd, dir),
+      // The exclusion policy is resolved here, at the composition root, so the
+      // assembly factory stays free of it and gets a ready-made settings view.
+      createLoaderSettingsManager: (parent) => {
+        const excluded = new Set(settings.excludedExtensionPackages);
+        if (excluded.size === 0) return parent;
+        return SdkSettingsManager.fromStorage(createExcludedPackagesStorage(parent, excluded), {
+          projectTrusted: parent.isProjectTrusted(),
+        });
+      },
       createSession: (opts) => createAgentSession(opts as any),
       assemblerIO: {
         buildAgentPrompt,

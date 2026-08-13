@@ -59,6 +59,8 @@ export interface SessionManagerLike {
 export interface ResourceLoaderOptions {
   cwd: string;
   agentDir: string;
+  /** Settings the loader resolves packages from; defaults to the ambient ones when absent. */
+  settingsManager?: SettingsManager;
   noPromptTemplates?: boolean;
   noThemes?: boolean;
   noContextFiles?: boolean;
@@ -102,6 +104,12 @@ export interface SessionFactoryIO {
   createResourceLoader: (opts: ResourceLoaderOptions) => ResourceLoaderLike;
   createSessionManager: (cwd: string, sessionDir: string) => SessionManagerLike;
   createSettingsManager: (cwd: string, agentDir: string) => SettingsManager;
+  /**
+   * Settings view the child's resource loader resolves packages from.
+   * The composition root decides whether any package extensions are excluded;
+   * the identity function reproduces the child's default full inheritance.
+   */
+  createLoaderSettingsManager: (parent: SettingsManager) => SettingsManager;
   createSession: (opts: CreateSessionOptions) => Promise<{ session: AgentSession }>;
   assemblerIO: AssemblerIO;
 }
@@ -175,8 +183,11 @@ export async function createSubagentSession(
 
   const agentDir = deps.io.getAgentDir();
   const sessionSettings = deps.io.createSettingsManager(cfg.effectiveCwd, agentDir);
+  const loaderSettings = deps.io.createLoaderSettingsManager(sessionSettings);
 
-  // Children always load the parent's extensions and skills.
+  // Children inherit the parent's skills and every extension the composition
+  // root did not exclude (#696).
+  //
   // Suppress AGENTS.md/CLAUDE.md and APPEND_SYSTEM.md - upstream's
   // buildSystemPrompt() re-appends both AFTER systemPromptOverride, which
   // would defeat prompt_mode: replace. Parent context, if wanted, reaches the
@@ -185,6 +196,7 @@ export async function createSubagentSession(
   const loader = deps.io.createResourceLoader({
     cwd: cfg.effectiveCwd,
     agentDir,
+    settingsManager: loaderSettings,
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
