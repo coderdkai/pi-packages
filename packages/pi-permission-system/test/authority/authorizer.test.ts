@@ -1,14 +1,13 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { ParentAuthorizer } from "#src/authority/approval-escalator";
-import {
-  type AuthorizerSelectionDeps,
-  selectAuthorizer,
-} from "#src/authority/authorizer";
+import { selectAuthorizer } from "#src/authority/authorizer";
 import { DenyingAuthorizer } from "#src/authority/denying-authorizer";
 import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
-import { ServingSessionRegistry } from "#src/authority/serving-registry";
-import type { SubagentDetector } from "#src/authority/subagent-detection";
+import {
+  makeAuthorizerSelectionDeps as makeDeps,
+  makeDetection,
+} from "#test/helpers/authorizer-fixtures";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -23,33 +22,6 @@ function makeCtx(hasUI: boolean): ExtensionContext {
       getEntries: vi.fn().mockReturnValue([]),
     },
   } as unknown as ExtensionContext;
-}
-
-function makeDetection(isSubagent = false): SubagentDetector {
-  return { isSubagent: vi.fn().mockReturnValue(isSubagent) };
-}
-
-function makeDeps(
-  overrides: Partial<AuthorizerSelectionDeps> = {},
-): AuthorizerSelectionDeps {
-  return {
-    detection: overrides.detection ?? makeDetection(),
-    events: overrides.events ?? {
-      emit: vi.fn(),
-      on: vi.fn().mockReturnValue(() => undefined),
-    },
-    getPromptPreferences:
-      overrides.getPromptPreferences ??
-      (() => ({ doublePressToConfirm: true })),
-    requestPermissionDecision:
-      overrides.requestPermissionDecision ??
-      vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
-    forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
-    registry: overrides.registry,
-    servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),
-    getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
-    logger: overrides.logger ?? { review: vi.fn(), debug: vi.fn() },
-  };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
