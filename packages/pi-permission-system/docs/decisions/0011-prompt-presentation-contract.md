@@ -96,7 +96,7 @@ An illustrative shape — the implementing issue owns the exact types:
 ```typescript
 interface PromptPayload {
   /** Never elided by any renderer. */
-  core: {
+  request: {
     requester: { agentName: string | null; forwarded: boolean };
     surface: string;
     toolName: string | null;
@@ -114,7 +114,8 @@ interface PromptPayload {
 
 ### 3. The invariant core
 
-These facts are always visible, in every render, and no budget may elide them:
+The payload's `request` group carries the facts that are always visible, in every render, and that no budget may elide.
+It is named for what it holds — the permission request's own facts, matching the package's `PermissionRequest` / `ForwardedPermissionRequest` / `permission_request.*` vocabulary — rather than for its contract, which this section states instead:
 
 1. The requesting agent, and whether the ask was forwarded from a subagent.
 2. The tool name — and the invoked tool name as a distinct fact when a shell alias re-exposes bash, since "gated as `bash`, invoked as `exec_command`" is two facts.
@@ -159,7 +160,12 @@ One payload, four renderers, each with its own budget and its own configuration.
 | Inline TUI dialog                 | row budget + per-field width cap | the bound that answers [#710]                        |
 | `select`/`input` fallback         | same budget                      | no assumption of an expansion affordance             |
 | Review log                        | its own configured limits        | key-name redaction unchanged; exposure does not grow |
-| `permissions:ui_prompt` broadcast | the payload, unrendered          | observers render for themselves                      |
+| `permissions:ui_prompt` broadcast | `request` only                   | no `evidence`, no `annotations`                      |
+
+The broadcast is the narrowest renderer, and deliberately narrower than what it emits today.
+Any loaded extension can observe the bus without the operator having named it, whereas every route to evidence — a registered tool-input formatter, an `Authorizer` link the operator lists in `authorizerChain` — requires that consent.
+So the bus receives the request facts and the verdict, and nothing a renderer would have had to elide.
+For a bash ask this discloses no less than today, because the command is the request's `value`; for a `write`, an `edit`, or an MCP call it discloses the path and the verdict rather than the body, where today an incidental preview of up to 200 characters rides `message`.
 
 The review log renders the payload under its existing limits rather than persisting it whole.
 This is deliberate: `docs/decisions/0010-permission-log-secret-exposure.md` bounds what the logs accumulate, and a complete payload written verbatim on every ask would defeat that bound.
@@ -194,7 +200,7 @@ Two capabilities belong downstream, with this package owning only the seam.
 
 **Annotations** ([#654]).
 A named, opt-in, config-ordered annotator registry, mirroring `registerAuthorizer` and `registerToolInputFormatter`, fails safe when a configured name is unregistered.
-Four properties make it admissible: the core owns the payload slot, its attribution, and its model-generated marking, so the marker is a property of the slot rather than a discipline a downstream package must remember; the slot is structurally separate from `AuthorizerVerdict`, so an annotator cannot allow, deny, defer, or suppress; it is timeout-bounded with an unchanged-prompt fallback; and it runs at the serving node, where the human is, per `docs/decisions/0007-model-judge-authorizer-chain-adr.md` §7.
+Four properties make it admissible: this package owns the payload slot, its attribution, and its model-generated marking, so the marker is a property of the slot rather than a discipline a downstream package must remember; the slot is structurally separate from `AuthorizerVerdict`, so an annotator cannot allow, deny, defer, or suppress; it is timeout-bounded with an unchanged-prompt fallback; and it runs at the serving node, where the human is, per `docs/decisions/0007-model-judge-authorizer-chain-adr.md` §7.
 
 **Evidence formatters** ([#648]).
 The existing tool-input formatter registry produces **evidence entries** rather than strings, so a downstream package can supply richer evidence — a diff renderer among them — without this package growing a display for every operator's ideal.
@@ -235,6 +241,9 @@ Fail-closed applies to presentation as it does to policy: if the facts cannot be
   The payload must stand alone.
 - **Persisting the complete payload to the review log.**
   Rejected: it would make the log a full-text destination at the cost of the growth bound `docs/decisions/0010-permission-log-secret-exposure.md` was written to hold.
+- **Broadcasting the complete payload, or the payload minus annotations.**
+  Rejected: both widen what an unconsented observer sees, and the second converts today's capped incidental exposure into a complete one.
+  An operator-configurable switch to widen the bus was also rejected as a mechanism with no requested use.
 - **Retaining the two preview caps alongside the new budgets.**
   Rejected: two layers that both sound like they bound the prompt is exactly the confusion this decision removes.
 
