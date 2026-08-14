@@ -84,13 +84,16 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   // eslint-disable-next-line prefer-const -- forward-declared let; `const` requires an initializer
   let session: PermissionSession;
 
-  // Constructed after the `configStore` forward declaration so the yolo reader
-  // can close over it; the closure runs per check(), after configStore is
-  // assigned below. yolo becomes a composition-stage ask→allow rewrite (#526).
+  // Declared after the `configStore` forward declaration so the reader can
+  // close over it; every call runs after configStore is assigned below. yolo is
+  // a composition-stage ask→allow rewrite (#526) that the gate runner extends
+  // to asks synthesized after resolution (#712), so both share this reader.
+  const isYoloEnabled = (): boolean => isYoloModeEnabled(configStore.current());
+
   const permissionManager = new PermissionManager({
     agentDir,
     flavor: hostFlavor,
-    isYoloEnabled: () => isYoloModeEnabled(configStore.current()),
+    isYoloEnabled,
   });
 
   const logger = new PermissionSessionLogger({
@@ -255,6 +258,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     sessionRules,
     authorizerSelection,
     reporter,
+    isYoloEnabled,
   );
   const toolCallGatePipeline = new ToolCallGatePipeline(
     resolver,
