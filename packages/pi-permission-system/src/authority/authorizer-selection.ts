@@ -4,8 +4,8 @@ import type { PermissionQuery } from "#src/service";
 import {
   type Authorizer,
   type AuthorizerSelectionDeps,
+  type SelectedAuthority,
   selectAuthorizer,
-  type TerminalAuthorizer,
 } from "./authorizer";
 import { composeAuthorizerChain } from "./authorizer-chain";
 import type { AuthorizerLookup } from "./authorizer-registry";
@@ -54,7 +54,7 @@ export interface AskEscalator {
 export class AuthorizerSelection
   implements AskEscalator, AuthorizerSelectionLifecycle
 {
-  private terminal: TerminalAuthorizer | null = null;
+  private authority: SelectedAuthority | null = null;
 
   constructor(
     private readonly deps: AuthorizerSelectionDeps & {
@@ -69,13 +69,13 @@ export class AuthorizerSelection
   ) {}
 
   /**
-   * Select the terminal Authorizer for `ctx` and store it. The non-terminal
+   * Select the live authority for `ctx` and store it. The non-terminal
    * chain is composed per ask in {@link escalate}, not here: ADR 0007 §4 lets a
    * link register in a `permissions:ready` handler that may fire after
    * activation, so link resolution is deferred to the session's first ask.
    */
   activate(ctx: ExtensionContext): void {
-    this.terminal = selectAuthorizer(ctx, this.deps);
+    this.authority = selectAuthorizer(ctx, this.deps);
   }
 
   /**
@@ -100,7 +100,7 @@ export class AuthorizerSelection
 
   /** Clear the stored selection. */
   deactivate(): void {
-    this.terminal = null;
+    this.authority = null;
   }
 
   /**
@@ -117,14 +117,15 @@ export class AuthorizerSelection
   escalate(
     details: PromptPermissionDetails,
   ): Promise<PermissionPromptDecision> {
-    if (this.terminal === null) {
+    const authority = this.authority;
+    if (authority === null) {
       return Promise.reject(
         new Error("escalate called before the session was activated"),
       );
     }
     const chain = composeAuthorizerChain(
       this.resolveConfiguredLinks(),
-      this.terminal,
+      authority.terminal,
       this.deps.getPermissionQuery(),
       this.deps.logger,
     );

@@ -27,32 +27,65 @@ function makeCtx(hasUI: boolean): ExtensionContext {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe("selectAuthorizer", () => {
-  it("selects LocalUserAuthorizer when the context has UI", () => {
-    const authorizer = selectAuthorizer(makeCtx(true), makeDeps());
-    expect(authorizer).toBeInstanceOf(LocalUserAuthorizer);
+  describe("terminal dispatch", () => {
+    it("selects LocalUserAuthorizer when the context has UI", () => {
+      const authority = selectAuthorizer(makeCtx(true), makeDeps());
+      expect(authority.terminal).toBeInstanceOf(LocalUserAuthorizer);
+    });
+
+    it("selects LocalUserAuthorizer even when the context is also a subagent", () => {
+      const authority = selectAuthorizer(
+        makeCtx(true),
+        makeDeps({ detection: makeDetection(true) }),
+      );
+      expect(authority.terminal).toBeInstanceOf(LocalUserAuthorizer);
+    });
+
+    it("selects ParentAuthorizer when there is no UI but the context is a subagent", () => {
+      const authority = selectAuthorizer(
+        makeCtx(false),
+        makeDeps({ detection: makeDetection(true) }),
+      );
+      expect(authority.terminal).toBeInstanceOf(ParentAuthorizer);
+    });
+
+    it("selects DenyingAuthorizer when there is no UI and no subagent", () => {
+      const authority = selectAuthorizer(
+        makeCtx(false),
+        makeDeps({ detection: makeDetection(false) }),
+      );
+      expect(authority.terminal).toBeInstanceOf(DenyingAuthorizer);
+    });
   });
 
-  it("selects LocalUserAuthorizer even when the context is also a subagent", () => {
-    const authorizer = selectAuthorizer(
-      makeCtx(true),
-      makeDeps({ detection: makeDetection(true) }),
-    );
-    expect(authorizer).toBeInstanceOf(LocalUserAuthorizer);
-  });
+  describe("chain role", () => {
+    it("adjudicates locally when the terminal is the human", () => {
+      const authority = selectAuthorizer(makeCtx(true), makeDeps());
+      expect(authority.adjudicatesLocally).toBe(true);
+    });
 
-  it("selects ParentAuthorizer when there is no UI but the context is a subagent", () => {
-    const authorizer = selectAuthorizer(
-      makeCtx(false),
-      makeDeps({ detection: makeDetection(true) }),
-    );
-    expect(authorizer).toBeInstanceOf(ParentAuthorizer);
-  });
+    it("adjudicates locally when a subagent has its own UI", () => {
+      const authority = selectAuthorizer(
+        makeCtx(true),
+        makeDeps({ detection: makeDetection(true) }),
+      );
+      expect(authority.adjudicatesLocally).toBe(true);
+    });
 
-  it("selects DenyingAuthorizer when there is no UI and no subagent", () => {
-    const authorizer = selectAuthorizer(
-      makeCtx(false),
-      makeDeps({ detection: makeDetection(false) }),
-    );
-    expect(authorizer).toBeInstanceOf(DenyingAuthorizer);
+    it("relays instead of adjudicating when the terminal forwards to a serving node", () => {
+      const authority = selectAuthorizer(
+        makeCtx(false),
+        makeDeps({ detection: makeDetection(true) }),
+      );
+      expect(authority.adjudicatesLocally).toBe(false);
+    });
+
+    it("adjudicates locally when the terminal denies for want of authority", () => {
+      const authority = selectAuthorizer(
+        makeCtx(false),
+        makeDeps({ detection: makeDetection(false) }),
+      );
+      expect(authority.adjudicatesLocally).toBe(true);
+    });
   });
 });
