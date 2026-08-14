@@ -58,12 +58,7 @@ export function resolveBashCommandCheck(
 ): PermissionCheckResult {
   if (commands.length === 0) {
     if (isTriviallyEmptyCommand(command)) {
-      return resolver.resolve({
-        kind: "tool",
-        surface: "bash",
-        input: { command },
-        agentName,
-      });
+      return resolveWholeCommand(command, agentName, resolver);
     }
     return {
       state: "ask",
@@ -94,12 +89,7 @@ export function resolveBashCommandCheck(
   });
   return (
     pickMostRestrictive(results) ??
-    resolver.resolve({
-      kind: "tool",
-      surface: "bash",
-      input: { command },
-      agentName,
-    })
+    resolveWholeCommand(command, agentName, resolver)
   );
 }
 
@@ -115,4 +105,18 @@ function isTriviallyEmptyCommand(command: string): boolean {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
   return lines.every((line) => line.startsWith("#"));
+}
+
+/** Resolve the whole command string as a single unit on the `bash` surface. */
+function resolveWholeCommand(
+  command: string,
+  agentName: string | undefined,
+  resolver: ScopedPermissionResolver,
+): PermissionCheckResult {
+  return resolver.resolve({
+    kind: "tool",
+    surface: "bash",
+    input: { command },
+    agentName,
+  });
 }
