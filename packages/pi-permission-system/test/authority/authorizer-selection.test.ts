@@ -253,7 +253,74 @@ describe("AuthorizerSelection", () => {
       });
       expect(logger.review).toHaveBeenCalledWith(
         "authorizer_chain_unregistered_link",
-        { name: "missing" },
+        { requestId: "req-1", name: "missing" },
+      );
+    });
+
+    it("records the resolved link names on the ask", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "defer" });
+      const logger = makeAuthorizerLog();
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+          logger,
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      // Positive evidence the link was consulted: a link that defers decides
+      // nothing and would otherwise leave no trace of having run.
+      expect(logger.review).toHaveBeenCalledWith("authorizer_chain_resolved", {
+        requestId: "req-1",
+        links: ["judge"],
+      });
+    });
+
+    it("records only the names it could resolve", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "present", { kind: "defer" });
+      const logger = makeAuthorizerLog();
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["missing", "present"],
+          logger,
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      expect(logger.review).toHaveBeenCalledWith("authorizer_chain_resolved", {
+        requestId: "req-1",
+        links: ["present"],
+      });
+    });
+
+    it("records no consultation when no configured name resolved", async () => {
+      const logger = makeAuthorizerLog();
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          getAuthorizerChain: () => ["missing"],
+          logger,
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      // Nothing ran, so there is no consultation to record; the per-name
+      // warning already reports the skip.
+      expect(logger.review).not.toHaveBeenCalledWith(
+        "authorizer_chain_resolved",
+        expect.anything(),
       );
     });
 
@@ -370,6 +437,10 @@ describe("AuthorizerSelection", () => {
         requestId: "req-1",
         links: ["judge"],
       });
+      expect(logger.review).not.toHaveBeenCalledWith(
+        "authorizer_chain_resolved",
+        expect.anything(),
+      );
     });
 
     it("does not report an unregistrable link as an unregistered one", async () => {

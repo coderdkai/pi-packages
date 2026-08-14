@@ -105,7 +105,7 @@ export class AuthorizerSelection
       });
       return [];
     }
-    return this.resolveConfiguredLinks(configured);
+    return this.resolveConfiguredLinks(configured, requestId);
   }
 
   /**
@@ -114,16 +114,35 @@ export class AuthorizerSelection
    * warning (invariant 2 — more prompting, never less); each resolved link is
    * wrapped in the bounded-delegation envelope so an `allow` on an excluded
    * surface cannot exceed the operator's policy.
+   *
+   * The resolved names are recorded against the ask before any link runs — a
+   * link that defers decides nothing and would otherwise leave no evidence it
+   * was consulted at all, which is what makes "the judge never ran" and "the
+   * judge ran and deferred" indistinguishable in the review log.
    */
-  private resolveConfiguredLinks(configured: readonly string[]): Authorizer[] {
+  private resolveConfiguredLinks(
+    configured: readonly string[],
+    requestId: string,
+  ): Authorizer[] {
     const links: Authorizer[] = [];
+    const resolved: string[] = [];
     for (const name of configured) {
       const authorize = this.deps.authorizerRegistry.get(name);
       if (authorize === undefined) {
-        this.deps.logger.review("authorizer_chain_unregistered_link", { name });
+        this.deps.logger.review("authorizer_chain_unregistered_link", {
+          requestId,
+          name,
+        });
         continue;
       }
+      resolved.push(name);
       links.push({ authorize: encloseInDelegationEnvelope(authorize) });
+    }
+    if (resolved.length > 0) {
+      this.deps.logger.review("authorizer_chain_resolved", {
+        requestId,
+        links: resolved,
+      });
     }
     return links;
   }
