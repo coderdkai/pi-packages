@@ -8,7 +8,7 @@
  * `AskEscalator` to exercise the chain end to end.
  */
 
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
 import type {
   AuthorizerVerdict,
   AuthorizerSelectionDeps as SelectionCtorDeps,
@@ -35,7 +35,7 @@ export function makeDetection(isSubagent = false): SubagentDetector {
 
 /** A prompter that records the call and resolves to a default approval. */
 export function makePrompterApi(): PermissionPrompterApi & {
-  prompt: ReturnType<typeof vi.fn>;
+  prompt: Mock<PermissionPrompterApi["prompt"]>;
 } {
   return {
     prompt: vi
@@ -50,7 +50,7 @@ export function makePrompterApi(): PermissionPrompterApi & {
  * entries around `authorizer.authorize(details)`).
  */
 export function makeInvokingPrompter(): PermissionPrompterApi & {
-  prompt: ReturnType<typeof vi.fn>;
+  prompt: Mock<PermissionPrompterApi["prompt"]>;
 } {
   return {
     prompt: vi.fn<PermissionPrompterApi["prompt"]>((authorizer, details) =>
