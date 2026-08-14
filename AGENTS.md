@@ -137,6 +137,9 @@ When delegating lint-fix or refactoring work to a background agent:
 A read-only agent needs a scope bound too — `find /` is read-only and still walks every mounted volume, trips the external-directory permission gate, and can read a stale copy of a dependency.
 Bound its searches to the repo, and require fixing a failed pattern before widening its root (Refs #696).
 
+A subagent's universal claim ("no ordering issue", "nothing else calls this") is the one to verify — a positive finding ships the line that proves it, a universal one quantifies over cases the report never shows.
+Check a multi-question report against itself first: #725's trace answered "the `tools` option is an allowlist" and "there is no capping issue" in the same document, and answered the second by citing a test fixture rather than the implementation (Refs #725).
+
 ### Parallel peer sessions (git worktrees)
 
 Run two agents in parallel by giving each its own git worktree and its own interactive Pi session.
@@ -271,7 +274,12 @@ Use `scripts/issue-context.sh <N>` to gather all available context for an issue 
 
 This project uses **pnpm** exclusively — never `npm` or `npx`.
 Before implementing, refactoring, or reviewing code, load the `code-design` skill — it covers naming, SOLID and structural design heuristics, TypeScript conventions, pnpm/ES2024 tooling rules, Pi SDK boundaries, and Biome/ESLint conflict workarounds.
+
+## Shell and search
+
 Use `colgrep` for intent-based codebase exploration and convention discovery; use `grep` for exact symbol matching.
+`rg -r` is `--replace`, not `--recursive` — `rg -rn pattern path` silently rewrites every match to `n` and drops the line numbers.
+`rg` recurses by default; drop the `-r` (Refs #725).
 Quote a glob pattern meant for a command rather than the shell — `--include='*.ts'`, `find . -name '*.ts'`.
 Unquoted, it expands against the cwd first: bash silently substitutes a matched filename, and zsh aborts with `no matches found`.
 Do not start a bash word with `=` — zsh's `equals` expansion reads `=word` as a command-path lookup, so a decorative `echo ===` separator aborts with `zsh:1: == not found` and discards the rest of an `A; B; C` chain.

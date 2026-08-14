@@ -54,4 +54,72 @@ Pre-completion reviewer: PASS.
 - Deviations beyond the plan, all small: `parseCsvField` → `parseListField` and `csvList` → `listField` (the names described a CSV-only parser that no longer exists), and the removal of the now-unused eslint-disable.
 - Ship-time reminder carried forward from planning: PR #612 closes with thanks and the two-defect analysis (built-in leakage into read-only agents; the guard restored by the next registry rebuild).
 
+## Stage: Final Retrospective (2026-08-14T00:04:54Z)
+
+### Session summary
+
+One process carried all four stages — planning, TDD, ship, and this retro — for a third-party report that turned out to describe Pi's own SDK semantics rather than a `pi-subagents` defect.
+Six implementation commits landed `@gotgenes/pi-subagents@19.3.2`: two `fix:` (YAML-sequence `tools:` parsing, durable recursion guard), two `refactor:` (SDK-seam typing, `builtinToolNames` → `toolNames`), and two `docs:` (the new `docs/configuration.md`, the tool-allowlist contract).
+Issue #725 closed with a root-cause explanation, and [PR 612] closed as superseded with the two defects named.
+
+### Observations
+
+#### What went well
+
+- The diagnosis held up end to end because it was read out of source, not inferred.
+  The whole issue turns on one line in the installed SDK — `_refreshToolRegistry`'s `isAllowedTool` filter running *before* the registry is built — and every downstream decision (docs-only direction, `excludeTools` denylist, the PR 612 critique) rests on it.
+  Reading `node_modules/.pnpm/@earendil-works+pi-coding-agent@0.80.5/.../core/agent-session.js` directly cost about four tool calls and settled questions that prose could not.
+- The `ask_user` free-text note channel did real design work.
+  Three of this issue's scope decisions arrived as notes attached to option selections, not as answers to the options: the YAML-vs-CSV frontmatter question (became the parser fix), "this package deserves its own configuration doc" (became `docs/configuration.md`), and "can we please avoid an `as any` cast?"
+  (became the seam retyping).
+  None required rework; each was a genuine improvement the option set had not anticipated.
+- Verification ran incrementally and caught two things at the moment they happened: root `pnpm run lint` reported the file-level `@typescript-eslint/no-unsafe-argument` disable as unused the instant the `as any` left `src/index.ts` (proving the cast was its only cause), and `pnpm pack` + `tar tzf` confirmed the new `docs/configuration.md` ships in the tarball — a risk the plan named rather than an assumption.
+- The plan's Risks table made the TDD stage decision-free.
+  Both hedges it recorded (a fallback `as unknown as` helper if the field-scoped downcast would not compile; the tarball check) resolved on the first attempt, so no step needed re-deciding mid-implementation.
+
+#### What caused friction (agent side)
+
+- `other` — `rg -rn 'setActiveTools|before_agent_start' packages/pi-permission-system/src/` returned output with every match rewritten to `n` (`pi.n(names)`, `pi.on("n", ...)`), because `rg -r` is `--replace`, not `--recursive`, and it consumed the `n` from the bundled flags.
+  The output looked like plausible minified code rather than an error, so the first reaction was to suspect a `RIPGREP_CONFIG_PATH` replacement setting.
+  Confirmed after the fact: `rg -rn 'alpha' file` on `alpha beta` prints `n beta`.
+  Impact: about three wasted tool calls and a near-misreading of the permission-system source; no rework, because the mangling was noticed before any conclusion was drawn from it.
+- `other` — the `Explore` subagent's SDK trace returned an internally inconsistent report: it answered the caller's actual configuration correctly under "what does the `tools` option do" (an allowlist) and "what does a subagent-style caller get", then concluded under "is there an ordering/capping issue" that there is **none**, citing a Pi regression test that runs without the allowlist in play.
+  Accepting that negative would have inverted the entire diagnosis.
+  Impact: no rework — the contradiction was visible within the report itself and settled by reading `_refreshToolRegistry` directly — but it cost the verification detour and is the session's clearest reusable lesson.
+- `instruction-violation` (self-identified) — used `echo ===` as a separator inside a bundled `bash` call and hit `zsh:1: == not found`, discarding the rest of the chain.
+  `AGENTS.md` documents this exact trap and prescribes `echo ---`.
+  Impact: one wasted command, corrected immediately on the next call; no rework.
+- `other` — the plan scheduled step 1 as `feat:` while its own Design Overview measured that both YAML sequence forms already worked through `String(val)` coercion.
+  Four of the five new parser tests passed on the first run; only the quoted-comma-entry case was genuinely red, which is what made `fix:` the honest commit type.
+  Impact: no rework — the type was corrected at commit time and the deviation recorded in the commit body — but a plan that measures "this already works" should name the one failing input up front or reclassify the step as `test:` + `refactor:`.
+
+#### What caused friction (user side)
+
+- Nothing that cost rework.
+  One modest opportunity: the three scope-expanding asides arrived across three separate `ask_user` rounds, so each cost a round-trip.
+  The frontmatter-format question in particular was answerable at the first ask — had the pre-ask message shown `parseCsvField`'s `String(val).split(",")` alongside the direction options, the CSV-vs-YAML observation and the direction choice could have been made together.
+  Showing a config field's parse path in the pre-ask context, not just its documented semantics, is the generalizable version.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the session ran three effective model switches: `claude-opus-5` for planning, `claude-sonnet-5` for TDD and ship, `claude-opus-5` for this retro.
+  The split matches the work: judgment-heavy direction-setting and design on opus, mechanical red→green→commit execution and the deterministic ship sequence on sonnet.
+  Three subagents ran: `Explore` on `sonnet-5` for the SDK trace (68 tool calls, 85k tokens, one wrong negative as noted above — the model choice was right for a multi-hop trace, and `haiku` would have done worse), `tidy-first-assessor` (returned no preparatory commits plus one correct call — that the fixture's before/after-bind toggle would go dead as a *consequence* of the guard change, so it belonged inside that commit), and `pre-completion-reviewer` (PASS, with one placement note that was acted on).
+- **Escalation-delay tracking** — no sequence exceeded five consecutive tool calls on the same error.
+  The one investigation deep enough to qualify (the SDK semantics hunt) was delegated to `Explore` rather than run inline, per the `AGENTS.md` guidance.
+- **Unused-tool detection** — nothing material.
+  `colgrep` went unused, but every search this session targeted exact symbols (`builtinToolNames`, `applyRecursionGuard`, `excludeTools`), which is `grep`'s case per the `colgrep` skill's decision table.
+- **Feedback-loop gap analysis** — verification was incremental throughout: `pnpm run check` after every type-touching step, a targeted `vitest run <file>` per red/green cycle, root `pnpm run lint` immediately after the seam change, and the full suite plus `pnpm fallow dead-code` at the end and again before push.
+  No gap to flag.
+
+### Changes made
+
+1. `AGENTS.md` — new `## Shell and search` section, carrying the four items that had accumulated under `## Code Style` (the `colgrep`-vs-`grep` split, glob quoting, `=`-leading bash words, `*/` inside a block comment) plus the new `rg -r` rule.
+   The operator's observation on reviewing the proposal: those items are tool usage, not code style, and had been misfiled all along.
+2. `AGENTS.md` § Background agent guardrails — added the rule for consuming a subagent report: a universal claim is the one to verify, and a multi-question report should be checked against itself first.
+   The first framing proposed ("trust positives, distrust negatives") was imprecise and the operator pushed back on it.
+   The real asymmetry is existential vs. universal — a positive finding is usually existential and one cited line settles it, while a negative usually quantifies over configurations the report never enumerates.
+   The concrete tell in this session's trace was an evidence-class switch: questions 1 and 2 were answered from the implementation and were right, question 3 was answered from a test fixture (`2835-tools-allowlist-filters-extension-tools.test.ts`) and was wrong, because a test proves only the configuration it sets up.
+3. `.pi/skills/testing/SKILL.md` § TDD planning rules — added the rule that a plan measuring "this already works" must name the failing input or reclassify the step as `test:` plus `refactor:`.
+
 [PR 612]: https://github.com/gotgenes/pi-packages/pull/612

@@ -109,6 +109,8 @@ A missing export throws `is not a function` at runtime but surfaces as `TS2305` 
 
 - When a TDD step changes behavior, account for existing tests that will break.
   Either fold the test updates into the same step or place a dedicated test-update step immediately before it.
+- When a plan's own measurement shows the target behavior already works, name the one input that actually fails — or reclassify the step as `test:` (characterization) plus `refactor:`.
+  A `feat:` step whose red comes up four-fifths green was mistyped at plan time (Refs #725).
 - When a TDD plan lists separate steps that share a type definition, changing that type in step N breaks steps N+1…N+k.
   Either fold them into one step or introduce the new type alongside the old one and migrate callers incrementally.
 - When a plan adds a parameter that flows through callback chains, the "Module-Level Changes" section must list every file in the chain.
