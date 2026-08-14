@@ -97,7 +97,11 @@ An illustrative shape — the implementing issue owns the exact types:
 interface PromptPayload {
   /** Never elided by any renderer. */
   request: {
-    requester: { agentName: string | null; forwarded: boolean };
+    requester: {
+      agentName: string | null;
+      forwarded: boolean;
+      sessionId: string | null;
+    };
     surface: string;
     toolName: string | null;
     invokedToolName: string | null;
@@ -117,7 +121,7 @@ interface PromptPayload {
 The payload's `request` group carries the facts that are always visible, in every render, and that no budget may elide.
 It is named for what it holds — the permission request's own facts, matching the package's `PermissionRequest` / `ForwardedPermissionRequest` / `permission_request.*` vocabulary — rather than for its contract, which this section states instead:
 
-1. The requesting agent, and whether the ask was forwarded from a subagent.
+1. The requesting agent, whether the ask was forwarded from a subagent, and — for a forwarded ask — the requesting session id.
 2. The tool name — and the invoked tool name as a distinct fact when a shell alias re-exposes bash, since "gated as `bash`, invoked as `exec_command`" is two facts.
 3. The gate surface and the matched rule, including a sentinel such as `<indirection-bash-wrapper>`.
 4. The decision-relevant value: the command, path, MCP target, or skill name.
@@ -161,6 +165,10 @@ One payload, four renderers, each with its own budget and its own configuration.
 | `select`/`input` fallback         | same budget                      | no assumption of an expansion affordance             |
 | Review log                        | its own configured limits        | key-name redaction unchanged; exposure does not grow |
 | `permissions:ui_prompt` broadcast | `request` only                   | no `evidence`, no `annotations`                      |
+
+Requester identity is part of the `request` facts, not evidence, so narrowing the broadcast does not touch it.
+The forwarded provenance the broadcast carries today — `requesterAgentName` and `requesterSessionId` — is retained in full: [#292] added it precisely so a forwarded ask's broadcast stays non-degraded, [#610] builds on it to correlate a decision back to the serving session, and `permission-events.ts` guarantees its fields are not removed without a semver-major bump.
+What narrows is evidence, never correlation.
 
 The broadcast is the narrowest renderer, and deliberately narrower than what it emits today.
 Any loaded extension can observe the bus without the operator having named it, whereas every route to evidence — a registered tool-input formatter, an `Authorizer` link the operator lists in `authorizerChain` — requires that consent.
@@ -260,6 +268,8 @@ The payload and the renderer seam are built first, and [#710] is fixed by constr
 | [#648] | the payload carries the edit's facts; the renderer decides, and the formatter seam admits a richer downstream display |
 | [#654] | a downstream package plus the annotator seam described in §8                                                          |
 
+[#292]: https://github.com/gotgenes/pi-packages/issues/292
+[#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#648]: https://github.com/gotgenes/pi-packages/issues/648
 [#654]: https://github.com/gotgenes/pi-packages/issues/654
 [#656]: https://github.com/gotgenes/pi-packages/pull/656
