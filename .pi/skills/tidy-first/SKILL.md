@@ -45,6 +45,7 @@ The report is advisory — you decide what lands.
   If one looks worth doing, it is separate-concern cleanup — note it for `/plan-improvements`, do not fold it into this change.
 
 Do not tidy code the change will not touch — that is scope creep, not Tidy First.
+An extraction is a copy, so it carries the source's rule violations into a file that is now shared — re-read moved code against the governing skill before committing it (Refs #727).
 If the assessor reports "no preparatory tidying warranted," proceed directly to the change.
 
 ## Step 4: Proceed

@@ -222,6 +222,7 @@ When investigating a reported bug:
    To test Windows behavior on a POSIX CI, construct a `win32` `PathNormalizer` with `win32PathFlavor` (or pass `flavor: win32PathFlavor` to `makeRealSession` / the manager) — never `vi.mock("node:path")`.
 5. When a report claims a path/permission **bypass** (or that a rule is evadable), reproduce the literal repro against the running extension before concluding it is already handled — a live deny is stronger evidence than unit tests and can surface adjacent bugs (#493's bypass claim was already fixed, but the live repro exposed a misleading prompt, filed as #507).
 6. To quantify a proposed gate change's blast radius, mine the local review log (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`) — each `toolName: "bash"` entry carries the raw `command`, so a `node -e` scan over the deduplicated set yields a measured percentage instead of an estimate (#694: 2767 commands, three competing options).
+   The same log answers diagnostic questions: counting an `event` per day and against an adjacent event's timestamps separates populations a code reading treats as one (#727: 43 identical warnings split into 15 relay false alarms and 23 genuine misconfigurations).
 
 The gate fails closed (#452).
 Every `tool_call` goes through `createFailClosedToolCall` (`src/handlers/tool-call-boundary.ts`), the only `pi.on("tool_call")` target and the sole place an internal `GateOutcome` is translated to the SDK result shape.
