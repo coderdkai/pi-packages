@@ -8,6 +8,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
+import { ParentAuthorizer } from "#src/authority/approval-escalator";
 import type { Authorizer } from "#src/authority/authorizer";
 import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { AuthorizerSelection } from "#src/authority/authorizer-selection";
@@ -16,6 +17,7 @@ import type { PermissionPromptDecision } from "#src/authority/permission-dialog"
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
 import {
   makeAuthorizerSelectionDeps as makeDeps,
+  makeDetection,
   makeInvokingPrompter,
   makePrompterApi,
   registerLink as register,
@@ -314,6 +316,87 @@ describe("AuthorizerSelection", () => {
       // Empty chain ⇒ the selected value is the terminal instance itself.
       expect(prompter.prompt).toHaveBeenCalledWith(
         expect.any(LocalUserAuthorizer),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe("chain delegation on a relaying node", () => {
+    /** A no-UI subagent node: its terminal relays the ask to the serving node. */
+    function makeRelayingSelection(
+      overrides: Parameters<typeof makeDeps>[0] = {},
+    ): AuthorizerSelection {
+      const selection = new AuthorizerSelection(
+        makeDeps({ detection: makeDetection(true), ...overrides }),
+      );
+      selection.activate(makeCtx({ hasUI: false }));
+      return selection;
+    }
+
+    it("composes no links, so the ask reaches the relaying terminal unchanged", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "deny", reason: "judged locally" });
+      const prompter = makePrompterApi();
+      const selection = makeRelayingSelection({
+        prompter,
+        authorizerRegistry: registry,
+        getAuthorizerChain: () => ["judge"],
+      });
+      const details = makeDetailsOn("bash");
+
+      await selection.escalate(details);
+
+      // Zero links ⇒ the composed chain *is* the terminal instance, so the
+      // registered link never ran: the serving node adjudicates this ask.
+      expect(prompter.prompt).toHaveBeenCalledWith(
+        expect.any(ParentAuthorizer),
+        details,
+      );
+    });
+
+    it("records the delegated chain instead of the resolved one", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "deny", reason: "judged locally" });
+      const logger = makeAuthorizerLog();
+      const selection = makeRelayingSelection({
+        authorizerRegistry: registry,
+        getAuthorizerChain: () => ["judge"],
+        logger,
+      });
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      expect(logger.review).toHaveBeenCalledWith("authorizer_chain_delegated", {
+        requestId: "req-1",
+        links: ["judge"],
+      });
+    });
+
+    it("does not report an unregistrable link as an unregistered one", async () => {
+      const logger = makeAuthorizerLog();
+      const selection = makeRelayingSelection({
+        getAuthorizerChain: () => ["model-judge"],
+        logger,
+      });
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      // A child cannot host a link at all (#699), so its absence is the design,
+      // not the misconfiguration `authorizer_chain_unregistered_link` reports.
+      expect(logger.review).not.toHaveBeenCalledWith(
+        "authorizer_chain_unregistered_link",
+        expect.anything(),
+      );
+    });
+
+    it("records nothing when no chain is configured", async () => {
+      const logger = makeAuthorizerLog();
+      const selection = makeRelayingSelection({ logger });
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      expect(logger.review).not.toHaveBeenCalledWith(
+        "authorizer_chain_delegated",
         expect.anything(),
       );
     });

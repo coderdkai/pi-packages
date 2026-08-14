@@ -79,15 +79,45 @@ export class AuthorizerSelection
   }
 
   /**
+   * The chain links for this ask.
+   *
+   * A node that adjudicates locally resolves its configured names; a relaying
+   * node resolves none. Its terminal hands the ask to a serving node, which
+   * resolves the request against its own recorded authority and escalates it
+   * through *its* chain over the same child-fixed facts (#635) — so running
+   * links here would adjudicate one ask twice, and a relaying node cannot host
+   * a link in the first place (#699). The delegation is recorded rather than
+   * reported as a fail-safe skip: an absent link is the design here, not the
+   * misconfiguration `authorizer_chain_unregistered_link` exists to surface.
+   */
+  private linksFor(
+    authority: SelectedAuthority,
+    requestId: string,
+  ): Authorizer[] {
+    const configured = this.deps.getAuthorizerChain();
+    if (configured.length === 0) {
+      return [];
+    }
+    if (!authority.adjudicatesLocally) {
+      this.deps.logger.review("authorizer_chain_delegated", {
+        requestId,
+        links: configured,
+      });
+      return [];
+    }
+    return this.resolveConfiguredLinks(configured);
+  }
+
+  /**
    * Resolve the operator's `authorizerChain` names to registered links, in
    * config order (ADR 0007 invariant 1). An unregistered name is skipped with a
    * warning (invariant 2 — more prompting, never less); each resolved link is
    * wrapped in the bounded-delegation envelope so an `allow` on an excluded
    * surface cannot exceed the operator's policy.
    */
-  private resolveConfiguredLinks(): Authorizer[] {
+  private resolveConfiguredLinks(configured: readonly string[]): Authorizer[] {
     const links: Authorizer[] = [];
-    for (const name of this.deps.getAuthorizerChain()) {
+    for (const name of configured) {
       const authorize = this.deps.authorizerRegistry.get(name);
       if (authorize === undefined) {
         this.deps.logger.review("authorizer_chain_unregistered_link", { name });
@@ -106,10 +136,11 @@ export class AuthorizerSelection
   /**
    * Escalate an ask through the composed chain and return its decision.
    *
-   * Resolves the configured links freshly (so a link registered any time before
+   * Resolves this ask's links freshly (so a link registered any time before
    * this first ask is honored) and composes them ahead of the selected
-   * terminal. With zero links the composed value **is** the terminal instance,
-   * so behavior is identical to a bare terminal escalation.
+   * terminal. With zero links — no chain configured, or a relaying node that
+   * delegates adjudication to the serving node — the composed value **is** the
+   * terminal instance, so behavior is identical to a bare terminal escalation.
    *
    * Rejects if no terminal has been selected — i.e. before the session was
    * activated. Implements {@link AskEscalator}.
@@ -124,7 +155,7 @@ export class AuthorizerSelection
       );
     }
     const chain = composeAuthorizerChain(
-      this.resolveConfiguredLinks(),
+      this.linksFor(authority, details.requestId),
       authority.terminal,
       this.deps.getPermissionQuery(),
       this.deps.logger,
