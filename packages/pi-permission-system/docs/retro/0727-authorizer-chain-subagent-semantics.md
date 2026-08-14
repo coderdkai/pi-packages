@@ -30,6 +30,28 @@ Produced a plan that settles the semantics (one chain per node, the relaying nod
 - Step 2 of the TDD order is a characterization test that is green on arrival.
   It is deliberate: the issue's core doubt is an invariant no test currently pins, because `forwarded-request-server.test.ts` injects a `{ escalate }` stub for the chain owner.
 
+## Stage: Implementation — TDD (2026-08-14T04:30:39Z)
+
+### Session summary
+
+Executed the plan in eight commits: two preparatory tidy commits from the `tidy-first-assessor`, the plan's four TDD steps, the docs commit, and one reviewer-driven fixup.
+`selectAuthorizer` now returns a `SelectedAuthority` value object, a relaying subagent node composes no chain links and records `authorizer_chain_delegated`, and an adjudicating node records `authorizer_chain_resolved` with the names it consulted.
+Test count went 2757 → 2769 (+12) in pi-permission-system; `check`, root `lint`, `test`, and `fallow dead-code` are all green.
+
+### Observations
+
+- The `tidy-first-assessor` caught a real gap in the plan's step 1: the extraction list (`makeDeps`, `makeInvokingPrompter`, `register`) was not self-contained.
+  `makePrompterApi` is a hard dependency of `makeAuthorizerSelectionDeps`'s own default and is called directly at four sites, and `makeDetection` was byte-identical in both test files.
+  It also proposed a second commit — migrating `authorizer.test.ts` onto the shared fixtures *before* the return-type change — which kept the compile-breaking step 3 a pure `.terminal` edit with no fixture untangling folded in.
+  Both landed; neither is in the plan's TDD Order, which is expected for tidy-first commits.
+- Step 2's characterization test was green on arrival, as planned.
+  Non-vacuity was measured, not argued: flipping `getAuthorizerChain` to `[]` made it fail with `denied_with_reason` missing, then the probe was reverted.
+- The relaying-node tests deliberately use the recording prompter rather than the invoking one.
+  Running the real `ParentAuthorizer` terminal would reach `resolvePermissionForwardingTarget`, which reads `process.env` and the filesystem; asserting `prompter.prompt` was called with `expect.any(ParentAuthorizer)` proves zero links were composed (with one link the composed value is an anonymous object) without any of that.
+- One deviation from the plan's ordering: the `authorizer_chain_resolved` tests were drafted alongside the step 4 tests and then pulled back out so the delegation fix and the observability addition stayed separate commits.
+- Pre-completion reviewer: WARN (1 non-blocking finding) — the extracted fixtures typed `prompt` as `ReturnType<typeof vi.fn>` rather than `Mock<Sig>`, a pre-existing pattern carried in verbatim.
+  Fixed in `7d285aed` rather than deferred, since the file is new in this change and two test files now import it.
+
 [#699]: https://github.com/gotgenes/pi-packages/issues/699
 [#702]: https://github.com/gotgenes/pi-packages/pull/702
 [#732]: https://github.com/gotgenes/pi-packages/issues/732
