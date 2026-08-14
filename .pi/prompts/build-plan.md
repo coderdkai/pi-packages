@@ -96,6 +96,9 @@ Do not bundle unrelated steps into one commit.
 If a step uncovers a problem the plan didn't anticipate, fix it as part of the same commit and note the deviation in the commit body.
 If the deviation is large, stop and ask.
 
+Before a decision record narrows or replaces a published contract (an event payload, a wire format, a service method), list that contract's current fields and their stability guarantees.
+A field the record never mentions is a field an implementer drops (Refs #737).
+
 ## After the last step
 
 1. If any `src/` or `test/` files were touched (even tangentially), run the full suite: `pnpm run test`.

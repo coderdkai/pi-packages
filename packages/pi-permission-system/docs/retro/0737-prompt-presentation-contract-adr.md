@@ -83,6 +83,7 @@ The seam itself has no issue yet: following the ADR 0007 precedent, the staging 
 [#292]: https://github.com/gotgenes/pi-packages/issues/292
 [#581]: https://github.com/gotgenes/pi-packages/issues/581
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
+[#635]: https://github.com/gotgenes/pi-packages/issues/635
 [#639]: https://github.com/gotgenes/pi-packages/issues/639
 [#642]: https://github.com/gotgenes/pi-packages/issues/642
 [#648]: https://github.com/gotgenes/pi-packages/issues/648
@@ -91,4 +92,99 @@ The seam itself has no issue yet: following the ADR 0007 precedent, the staging 
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#713]: https://github.com/gotgenes/pi-packages/issues/713
 [#716]: https://github.com/gotgenes/pi-packages/pull/716
+
+## Stage: Final Retrospective (2026-08-14T21:19:03Z)
+
+### Session summary
+
+All four lifecycle stages — planning, build, ship, and this retrospective — ran in a **single** session (131 assistant turns), rather than the multi-session flow `AGENTS.md` describes.
+The deliverable is ADR 0011, recording the prompt-presentation contract in five commits, shipped as `b182a992` with CI green and no release (every commit lands on a release-please `exclude-paths` directory).
+Two defects were introduced and caught inside the session — one by the plan's own reconcile step, one by the pre-completion reviewer — and both share a root cause worth naming.
+
+### Observations
+
+#### What went well
+
+The pre-completion reviewer earned its keep on a **docs-only** deliverable, which is novel.
+It did not return formatting nits; it found that the ADR's invariant core named only the requesting agent, so an implementer narrowing the broadcast literally would have dropped `requesterSessionId` — a field [#292] added, [#610] builds on, `docs/cross-extension-api.md` documents, and `permission-events.ts` guarantees against removal without a semver-major bump.
+That is a decision-record defect a human reviewer would plausibly have missed, on a change with no code to test.
+
+Verifying the `Explore` subagent's universal claim changed the ADR's evidence base.
+The subagent reported that `setToolsExpanded` affects "only COMPLETED tool results, not pending calls", with citations.
+A direct read of `../pi` found `getRenderContext` passes `expanded: this.expanded` into the **call** renderer too (`tool-execution.ts:115-133`, invoked at `:275`), and `read.ts:338` consumes it — so [#642]'s Ctrl+O genuinely expands a pending `write`/`read`.
+Had the claim been trusted, the ADR's full-text-access rule would have been written against a false constraint.
+This is `AGENTS.md`'s "a subagent's universal claim is the one to verify" paying off concretely.
+
+The prior-art survey turned an opinion into evidence.
+Claude Code carries **both** "render multi-line bash args in full" and "a subagent's large inline payload froze the terminal" as open reports — the two directions of [#716] and [#710] in one product — which is the empirical case that content rules alone cannot satisfy both.
+Codex's merged "tui: fix approval dialog for large commands" supplied a third option (O7) that the plan's option space did not contain.
+
+Model allocation across stages was well matched: `claude-opus-5` for the judgment-heavy planning and ADR deliberation (turns 1–104), `claude-sonnet-5` for the mechanical ship flow (turns 105–125), `claude-opus-5` again for this retrospective (turns 126–131).
+
+#### What caused friction (agent side)
+
+- `missing-context` — the ADR's §6 gave the `permissions:ui_prompt` broadcast the complete payload, contradicting `architecture.md:534`'s rule that the bus "receives the minimum needed to stay correlatable, because any loaded extension can observe it".
+  The plan had **already listed that exact passage** ("the cross-extension broadcast paragraph (line 534)") in its Module-Level Changes as a candidate to reconcile; the authoring step did not consult its own list.
+  Impact: a contradiction shipped into `5c47c211`, caught at Build Order step 5, requiring commit `4d14b75c` plus three `ask_user` rounds with the operator.
+
+- `missing-context` — narrowing the broadcast in `4d14b75c` did not enumerate what the broadcast currently carries, so `requesterSessionId` went unmentioned.
+  Impact: one extra commit (`be7973bf`) after the reviewer's WARN.
+  Same root cause as the item above: **a contract was decided without first enumerating its current fields and their guarantees.**
+
+- `instruction-violation` (user-caught) — dense context was packed into `ask_user` option descriptions instead of the message preceding the call.
+  The operator bounced two gates: once asking for prose first ("Give me deeper explanation here.
+  Don't pack it all in to an ask_user call") and once for concrete artifacts ("Please show me some examples of the different payloads").
+  `.pi/prompts/plan-issue.md:103` states this rule (Refs [#635]), but the violated gates ran under `/build-plan`, whose prompt contains **zero** `ask_user` guidance.
+  Impact: two extra deliberation rounds; no rework to the artifact.
+
+- `missing-context` — ship stage: queried the per-package block of `release-please-config.json` for `exclude-paths` and got `[]`, when the key is top-level.
+  Impact: one extra tool call, self-identified immediately, no rework.
+
+#### What caused friction (user side)
+
+No friction.
+Two operator interventions were decisive rather than corrective:
+
+- The round-1 note ("there should be a core structure sent, with the full set of information — it is the presentation or view or render layer which decides how that information is rendered") reframed the ADR from *choosing among content rules* to *complete payload plus bounded render*.
+  No offered option said that; the free-text note carried it.
+  This is a case for keeping `ask_user` options open-ended enough that a reframe can arrive alongside a selection.
+- "What does 'fidelity up' and 'disclosure down' mean?
+  Which way is up and down?"
+  was a redirecting question, not a correction, and it surfaced that a maxim in `architecture.md` had been ambiguous since it was written.
+
+### Diagnostic details
+
+- **Model-performance correlation** — main session as above.
+  The `Explore` subagent ran on `sonnet-5` (explicitly requested per `AGENTS.md`'s multi-hop-trace guidance) for a 79-tool-use trace of Pi internals; appropriate.
+  Both `pre-completion-reviewer` dispatches ran on `anthropic/claude-sonnet-5` per the agent's frontmatter; appropriate for a judgment-bearing review that found a real gap.
+  No mismatch found.
+
+- **`read_session` phantom model switches** — `.pi/prompts/retro.md:99` states that `[model change]` lines "are suppressed unless the switch actually ran a turn … no manual phantom-filtering is needed".
+  That holds only for an **unfiltered** call.
+  A `types`-filtered call bypasses the suppression: this session's filtered call rendered six switches, of which three (`opencode-go/deepseek-v4-flash`, `anthropic/claude-fable-5`, `anthropic/claude-haiku-4-5`, all within two seconds at `21:10:56`–`21:10:58`) never ran a turn.
+  An unfiltered call rendered exactly one marker, correctly suppressing all three.
+  Trusting the prompt's assurance would have produced a false finding that the session ran on three models it never used.
+
+- **`read_session` cannot reach early stages of a long session** — with all four lifecycle stages in one 131-turn session, `limit: 44` returned only the ship tail plus the retro, and there is no `offset` parameter.
+  Whole-session model attribution required parsing the raw `.jsonl` with a `python3` script.
+  This is a `pi-session-tools` capability gap, recorded below as a follow-up rather than fixed here.
+
+- **Escalation-delay tracking** — no sequence exceeded the five-call threshold.
+  The longest same-topic run was the four-call `read_session` investigation above, which changed approach (to raw `.jsonl`) on the third call.
+
+- **Feedback-loop gap analysis** — nothing notable; verification was incremental rather than end-loaded (`pnpm run check` + `pnpm run lint` at baseline, `rumdl check` on each file before its commit, `pnpm run lint` after each of the five commits).
+
+### Follow-ups
+
+1. `read_session` (in `pi-session-tools`) has no `offset`/`from` parameter, so a long single session's early turns are unreachable through the tool.
+   Worth filing against `pi-session-tools`; not implemented here (retro scope discipline).
+
+### Changes made
+
+1. `AGENTS.md` — new `### Clarification gates` subsection under `## Workflow`: present the substance in a message first, then call `ask_user` with options that reference it.
+   Generalized from the operator's framing, which is broader than the [#635] rule it replaces (that rule covered only behavior-change differentiators).
+2. `.pi/prompts/plan-issue.md:103` — shortened the [#635] copy to keep the planning-specific clause and point at `AGENTS.md` § Clarification gates, removing the duplication.
+3. `.pi/prompts/retro.md:99-100` — corrected the model-attribution instruction: attribute from an **unfiltered** `read_session` call, because a `types: ["model_change"]` filter bypasses the suppression and renders phantom switches.
+4. `.pi/prompts/build-plan.md:99-100` — added the contract-enumeration rule: list a published contract's current fields and stability guarantees before a decision record narrows or replaces it.
+
 [ADR 0010]: ../decisions/0010-permission-log-secret-exposure.md

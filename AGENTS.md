@@ -126,6 +126,11 @@ The `release-please` CI job pins a `last-release-sha` baseline in `release-pleas
 Do not remove either — without the baseline, release-please walks the default 500 commits every run and the deep walk fails with `Bad credentials` (secondary rate limit) on this monorepo.
 The write-back reads the release commit from a path-prefixed `<path>--sha` output, not a top-level `sha`: every component lives at a non-root path, so release-please emits no top-level `sha`.
 
+### Clarification gates
+
+Present the substance — concrete examples, before/after, trade-offs — in a message first, then call `ask_user` with options that reference it.
+An option list is a set of choices, not a briefing; context crammed into option descriptions gets bounced (Refs #635, #737).
+
 ### Background agent guardrails
 
 When delegating lint-fix or refactoring work to a background agent:
