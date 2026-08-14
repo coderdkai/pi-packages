@@ -76,6 +76,9 @@ The ADR now states that requester identity is a request fact rather than evidenc
 
 One naming decision worth carrying forward: the never-elided group is `request`, not `core`, because it should be named for what it holds rather than for its contract.
 No follow-up issues filed — all six dependants already have numbers, and the ADR's staging table records what each becomes.
+The seam itself has no issue yet: following the ADR 0007 precedent, the staging section defers its decomposition to the next `/plan-improvements pi-permission-system` pass, which files the concrete issues and sequences this work against the [#639] and [#686] keystones.
+
+[#686]: https://github.com/gotgenes/pi-packages/issues/686
 
 [#292]: https://github.com/gotgenes/pi-packages/issues/292
 [#581]: https://github.com/gotgenes/pi-packages/issues/581

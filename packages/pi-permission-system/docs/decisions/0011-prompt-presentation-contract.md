@@ -259,9 +259,14 @@ Fail-closed applies to presentation as it does to policy: if the facts cannot be
 
 The payload and the renderer seam are built first, and [#710] is fixed by construction rather than patched.
 
+The seam's own decomposition is deferred.
+Whether the payload, the dialog renderer, the log and broadcast renderers, and the agent-facing renderer land as one issue or several is a planning decision, and the concrete issues are filed by the next `/plan-improvements` pass when the phase is scoped — the same assignment ADR 0007 made for [#472].
+That pass also sequences this work against the other open keystones rather than assuming it runs next.
+The table below names what each existing item becomes under the contract, not the order in which the seam is built.
+
 | Item   | Becomes                                                                                                               |
 | ------ | --------------------------------------------------------------------------------------------------------------------- |
-| [#710] | fixed by the seam issue: a bounded dialog render over a complete payload                                              |
+| [#710] | fixed by construction when the seam lands: a bounded dialog render over a complete payload                            |
 | [#713] | a conformance requirement of the payload's invariant core, not a separate enhancement                                 |
 | [#716] | its rendering intent adopted in the dialog renderer, re-implemented under this contract, with authorship credited     |
 | [#656] | superseded: bounds live in the renderer, and its crash premise was fixed before the pull request was opened           |
@@ -269,6 +274,7 @@ The payload and the renderer seam are built first, and [#710] is fixed by constr
 | [#654] | a downstream package plus the annotator seam described in §8                                                          |
 
 [#292]: https://github.com/gotgenes/pi-packages/issues/292
+[#472]: https://github.com/gotgenes/pi-packages/issues/472
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#648]: https://github.com/gotgenes/pi-packages/issues/648
 [#654]: https://github.com/gotgenes/pi-packages/issues/654
