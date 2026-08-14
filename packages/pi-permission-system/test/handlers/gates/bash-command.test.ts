@@ -137,8 +137,25 @@ describe("resolveBashCommandCheck", () => {
     expect(result.matchedPattern).toBe("<unparseable-bash-command>");
     expect(result.command).toBe("( rm x )");
     expect(result.commandContext).toBeUndefined();
-    // The synthetic ask is returned without consulting the resolver.
-    expect(resolver.resolve).not.toHaveBeenCalled();
+    // The whole command is resolved once, to see whether a deny rule covers it.
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+    expect(resolver.resolve).toHaveBeenCalledWith({
+      kind: "tool",
+      surface: "bash",
+      input: { command: "( rm x )" },
+      agentName: undefined,
+    });
+  });
+
+  it("returns the explicit deny when an unparseable command matches a deny rule", () => {
+    const resolver = makeResolver(bashResult("deny", "( rm x )", "rm *"));
+
+    const result = resolveBashCommandCheck("( rm x )", [], undefined, resolver);
+
+    // The fail-closed ask must not mask a hard deny into an approvable prompt.
+    expect(result.state).toBe("deny");
+    expect(result.matchedPattern).toBe("rm *");
+    expect(result.command).toBe("( rm x )");
   });
 
   it("forwards the agent name to each sub-command check", () => {
