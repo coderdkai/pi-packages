@@ -94,9 +94,11 @@ export interface PermissionPrompterDeps {
  * `ParentAuthorizer`, `DenyingAuthorizer`) — this class no longer threads
  * `ExtensionContext` per call.
  *
- * Yolo-mode auto-approval happens upstream, at the composition stage
- * (`PermissionManager.check`'s `rewriteAsksToYolo`) — an `ask` never reaches
- * this class under yolo, so this class has no yolo-mode knowledge.
+ * Yolo-mode auto-approval happens upstream: at the composition stage
+ * (`PermissionManager.check`'s `rewriteAsksToYolo`) for a rule-driven ask, and
+ * at `GateRunner`'s auto-approve fast path (`resolveYoloGrant`) for an ask
+ * synthesized after resolution, which no rule rewrite can reach (#712) — an
+ * `ask` never reaches this class under yolo, so it has no yolo-mode knowledge.
  */
 export class PermissionPrompter implements PermissionPrompterApi {
   constructor(private readonly deps: PermissionPrompterDeps) {}
