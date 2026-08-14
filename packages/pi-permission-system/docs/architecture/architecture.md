@@ -366,6 +366,21 @@ sequenceDiagram
     Note over Gate: No prompt needed
 ```
 
+## Prompt presentation
+
+What a prompt must show, what a renderer may elide, and what bounds its size are settled by [ADR 0011](../decisions/0011-prompt-presentation-contract.md).
+The contract in one line: **the payload is complete, and elision is a property of a render, never of the payload**.
+
+A gate emits structured facts rather than a sentence.
+The payload's `request` group — requester and forwarded-ness, tool name and invoked tool name, gate surface and matched rule, the decision-relevant value, and for bash the unit that will actually run — is never elided by any renderer.
+`evidence` is complete on the payload and elided to fit each renderer's budget, with the elision marked but uncounted; an operator must still be able to reach the complete information while the decision is pending.
+The dialog is bounded by a row budget plus a per-field width cap, the review log by its own configured limits, and the `permissions:ui_prompt` broadcast receives the `request` facts only — the narrowest renderer, because the bus is the one channel an extension observes without the operator having named it.
+Denial text is a fifth render of the same facts under one extra rule: it identifies the call rather than reproducing it, since the agent already holds its own tool input.
+
+This is decided, not built.
+Today five sites still assemble a flat `message` string that travels unchanged to every consumer, `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound only the non-bash previews, and nothing bounds a render's height.
+The staged first step is the payload and the renderer seam, which fixes [#710] by construction; ADR 0011 records what each dependent item becomes under the contract.
+
 ## Two-phase checking
 
 ### Phase 1: Tool filtering (`before_agent_start`)
@@ -533,7 +548,7 @@ The bounded-delegation checkpoint reads the same facts, so a forwarded ask is ca
 
 A **cross-extension broadcast** — `permissions:ui_prompt` / `permissions:decision` on `pi.events` — receives the minimum needed to stay correlatable, because any loaded extension can observe it.
 
-Fidelity up, disclosure down.
+Maximum fidelity to the decider; minimum disclosure to the observer.
 Requester identity (`requesterCwd`, `principal`) crosses to neither: it is the serving node's own resolution input (ADR 0008 §3) and stays on the wire object, with the ask details carrying only the `forwarding` provenance.
 
 ### yolo is recorded authority
@@ -873,4 +888,5 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#502]: https://github.com/gotgenes/pi-packages/issues/502
 [#509]: https://github.com/gotgenes/pi-packages/issues/509
 [#555]: https://github.com/gotgenes/pi-packages/issues/555
+[#710]: https://github.com/gotgenes/pi-packages/issues/710
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
