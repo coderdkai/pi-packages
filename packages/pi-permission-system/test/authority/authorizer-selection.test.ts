@@ -8,22 +8,18 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  Authorizer,
-  AuthorizerVerdict,
-  AuthorizerSelectionDeps as SelectionCtorDeps,
-} from "#src/authority/authorizer";
+import type { Authorizer } from "#src/authority/authorizer";
 import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { AuthorizerSelection } from "#src/authority/authorizer-selection";
 import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
-import type {
-  PermissionPrompterApi,
-  PromptPermissionDetails,
-} from "#src/authority/permission-prompter";
-import { ServingSessionRegistry } from "#src/authority/serving-registry";
-import type { SubagentDetector } from "#src/authority/subagent-detection";
-import type { PermissionQuery } from "#src/service";
+import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import {
+  makeAuthorizerSelectionDeps as makeDeps,
+  makeInvokingPrompter,
+  makePrompterApi,
+  registerLink as register,
+} from "#test/helpers/authorizer-fixtures";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
 
 // ── Test helpers ──────────────────────────────────────────────────────────
@@ -48,16 +44,6 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
   } as unknown as ExtensionContext;
 }
 
-function makePrompterApi(): PermissionPrompterApi & {
-  prompt: ReturnType<typeof vi.fn>;
-} {
-  return {
-    prompt: vi
-      .fn<PermissionPrompterApi["prompt"]>()
-      .mockResolvedValue({ approved: true, state: "approved" }),
-  };
-}
-
 function makeDetails(): PromptPermissionDetails {
   return {
     requestId: "req-1",
@@ -67,65 +53,11 @@ function makeDetails(): PromptPermissionDetails {
   };
 }
 
-function makeDetection(isSubagent = false): SubagentDetector {
-  return { isSubagent: vi.fn(() => isSubagent) };
-}
-
-function makeQuery(): PermissionQuery {
-  return { checkPermission: vi.fn(), getToolPermission: vi.fn() };
-}
-
 /** Details whose gate-computed surface drives the delegation envelope. */
 function makeDetailsOn(surface: string): PromptPermissionDetails {
   return {
     ...makeDetails(),
     accessIntent: { surface, matchValues: ["/v"], boundaryValue: null },
-  };
-}
-
-/** A prompter that actually runs the passed authorizer, so a test can observe
- * the composed chain's decision (the real PermissionPrompter brackets log
- * entries around `authorizer.authorize(details)`). */
-function makeInvokingPrompter(): PermissionPrompterApi & {
-  prompt: ReturnType<typeof vi.fn>;
-} {
-  return {
-    prompt: vi.fn<PermissionPrompterApi["prompt"]>((authorizer, details) =>
-      authorizer.authorize(details),
-    ),
-  };
-}
-
-type SelectionDeps = SelectionCtorDeps & {
-  prompter: PermissionPrompterApi;
-  getPermissionQuery: () => PermissionQuery;
-  authorizerRegistry: AuthorizerRegistry;
-  getAuthorizerChain: () => string[];
-};
-
-function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
-  return {
-    detection: overrides.detection ?? makeDetection(),
-    events: overrides.events ?? {
-      emit: vi.fn(),
-      on: vi.fn().mockReturnValue(() => undefined),
-    },
-    getPromptPreferences:
-      overrides.getPromptPreferences ??
-      (() => ({ doublePressToConfirm: true })),
-    requestPermissionDecision:
-      overrides.requestPermissionDecision ??
-      vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
-    forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
-    registry: overrides.registry,
-    servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),
-    getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
-    logger: overrides.logger ?? makeAuthorizerLog(),
-    prompter: overrides.prompter ?? makePrompterApi(),
-    getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),
-    authorizerRegistry:
-      overrides.authorizerRegistry ?? new AuthorizerRegistry(),
-    getAuthorizerChain: overrides.getAuthorizerChain ?? (() => []),
   };
 }
 
@@ -219,15 +151,6 @@ describe("AuthorizerSelection", () => {
   });
 
   describe("chain resolution", () => {
-    /** Register a link returning a fixed verdict. */
-    function register(
-      registry: AuthorizerRegistry,
-      name: string,
-      verdict: AuthorizerVerdict,
-    ): void {
-      registry.register(name, () => Promise.resolve(verdict));
-    }
-
     it("consults a configured link before the terminal", async () => {
       const registry = new AuthorizerRegistry();
       register(registry, "judge", { kind: "deny", reason: "typo path" });
