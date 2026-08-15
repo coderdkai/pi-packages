@@ -48,3 +48,35 @@ Plan committed at `packages/pi-permission-system/docs/plans/0710-bounded-dialog-
 [#745]: https://github.com/gotgenes/pi-packages/issues/745
 [#746]: https://github.com/gotgenes/pi-packages/issues/746
 [ADR 0011]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/decisions/0011-prompt-presentation-contract.md
+
+## Stage: Implementation — TDD (2026-08-15T07:57:35Z)
+
+### Session summary
+
+Landed Phase 13 Step 2 in 15 commits: three tidy-first preparatory commits, nine planned cycles, and two commits answering the pre-completion review.
+The inline dialog and the `select`/`input` fallback now render the structured payload through `src/presentation/dialog-renderer.ts` under a row budget plus a per-field width cap, with `Ctrl+O` expanding to the complete request.
+Test count 2944 → 2978 (+34); `check`, root `lint` (0 findings), `fallow dead-code`, and `verify:public-types` all clean.
+
+### Observations
+
+- **The field cap, not the row budget, is what fixes [#710].**
+  The repro test passed the moment the per-field cap landed (cycle 3), before the row bound existed: the here-string is `request.value`, so capping it took the render from 205 rows to about 11.
+  The row budget bounds the *evidence* — which is exactly the division of labour the plan predicted, but it was worth seeing the cycle-3 test go green to know which mechanism carries the fix.
+- **The dedup rule surfaced a test expectation that was wrong, not code that was.**
+  Cycle 1's `path`-ask expectation asserted a `surface : path` line; the renderer dropped it because the value line's own label already says `path`.
+  The renderer was right and the expectation was fixed — but the pre-completion reviewer then correctly flagged that this omission is a *second* mechanism by which a core line can be absent, distinct from the width cap the docs described.
+  Both `architecture.md` and `docs/configuration.md` now state the redundancy rule beside the never-omitted rule so neither reads as the other.
+- **`Ctrl+O` needed no change to the host forward.**
+  The toggle went into `handleInput` at the one place that both knows the component and already treats the keystroke as handled, so `handleToolsExpandAction` is untouched and [#642]'s invariant holds by construction rather than by care.
+- **Plan deviations, all small:**
+  the `Paint` seam shipped as `HighlightPaint = (text: string) => string` rather than the plan's `(role, text)` — no caller ever needed a `"label"` role, and an unused parameter would have been speculative;
+  the seam was introduced in cycle 5 (where it is used) rather than cycle 1 (where it would have been dead);
+  `authorizer.ts`, `permission-dialog.test.ts`, `config-schema.test.ts`, and `config-reporter.test.ts` were listed in Module-Level Changes but needed no edit;
+  and `config-pipeline.test.ts` was edited but not listed — it is the strongest place to pin the #332/#347 config-drop class, which the plan named as a risk without naming its test.
+- **The tidy-first assessor found two `PromptPreferences` construction sites the plan's own grep obligation missed** (both inline in `local-user-authorizer.test.ts`), which is the same class of miss [#744]'s retro recorded.
+  Landing the shared fixture first turned cycle 7's widening into a one-line change; the `PermissionPromptView` cast removal turned a would-be runtime surprise into a compile error.
+- **One self-inflicted friction point:** an `Edit` call used a fabricated absolute path with a doubled package segment, which this package's own `external_directory` gate blocked with a message naming the correct path.
+  Same mistake the [#744] session recorded — the gate caught it both times.
+- **Pre-completion reviewer: WARN** (no FAILs).
+  Both findings were addressed rather than deferred: the documentation-precision nit on the redundancy rule, and a local variable in `coreFacts` named `value` while holding a label.
+  Its third note (the narrower `Paint` type, the unlisted test file) is recorded above as a deviation.
