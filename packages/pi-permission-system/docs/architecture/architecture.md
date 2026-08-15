@@ -377,9 +377,10 @@ The payload's `request` group — requester and forwarded-ness, tool name and in
 The dialog is bounded by a row budget plus a per-field width cap, the review log by its own configured limits, and the `permissions:ui_prompt` broadcast receives the `request` facts only — the narrowest renderer, because the bus is the one channel an extension observes without the operator having named it.
 Denial text is a fifth render of the same facts under one extra rule: it identifies the call rather than reproducing it, since the agent already holds its own tool input.
 
-This is decided, not built.
-Today five sites still assemble a flat `message` string that travels unchanged to every consumer, `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound only the non-bash previews, and nothing bounds a render's height.
-The staged first step is the payload and the renderer seam, which fixes [#710] by construction; ADR 0011 records what each dependent item becomes under the contract.
+The payload exists; the bounded renderers do not yet.
+Every gate emits a `PromptPayload` (`src/presentation/`), and `PromptPermissionDetails` requires one, so the six former assembly sites are gone — but each consumer still reads a flat `message`, rendered from the payload by the transitional `renderLegacyMessage`.
+So `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound only the non-bash previews, and nothing bounds a render's height until the dialog renderer lands ([#710]).
+ADR 0011 records what each dependent item becomes under the contract.
 
 ## Two-phase checking
 
@@ -754,7 +755,8 @@ src/
 │       ├── nested-execution.ts Shared nested-execution vocabulary for both bash surfaces: `NESTED_EXECUTION_CONTEXTS` (substitution node type → `BashCommandContext`), `EXECUTION_HOST_TYPES` (node types that are not commands or argument values but whose subtree can host a command that really runs — redirects, heredoc/herestring bodies), and `forEachNestedExecution(node, visit)`, which searches strictly within a subtree and does not descend past a context it finds. Constraint: the command surface and the path surface must share one definition of a nested execution, or a command gated on one surface escapes the other (#741)
 │       ├── shell-variable-expansion.ts Pure plain-reference resolver: `resolvePlainVariableExpansion(node): string | null` — `$HOME`/`${HOME}` → `os.homedir()`, `$PWD`/`${PWD}` → `.` (the base-relative marker, so the resolver's existing `resolveBase` applies it after `cd` folding). Plainness is structural (exactly one `variable_name` child, otherwise only delimiters), so an operator form (`${HOME:-/tmp}`, `${#HOME}`) is rejected without enumerating bash's expansion operators. Constraint: the resolvable set is closed at `HOME`/`PWD` — widening it is an ADR 0009 amendment, and the expansion vocabulary lives only here, never in the classifiers
 │       ├── token-collection.ts Bash argument/flag tokenizer: `collectPathCandidateTokens`, `collectCommandTokens`, `collectRedirectTokens`, `extractCommandName` (exported); private `PATTERN_FIRST_COMMANDS` table and pattern/generic collectors, plus `collectEmbeddedOptionValues` — emits the inline value of an `--opt=value` argument as its own token, read from the argument nodes (a pattern-first collector classifies a flag and never emits it), so an option-embedded path is classified by the ordinary shape rules without per-command option tables (#645). Also projects the operands of a command hosted in a redirect destination or an interpolating heredoc body; the `EXECUTION_HOST_TYPES` dispatch sits above the `SKIP_SUBTREE_TYPES` check because `heredoc_body` is in both sets and the host reading must win — its prose stays out of the path surface while its substitution's operands enter it (#741)
-│       ├── command-enumeration.ts Bash command enumerator: `collectCommands` (exported) + the descend/skip/wrapper tables; owns the `BashCommand` interface including the `wrapperKind` discriminant (`"opaque-payload"` for `bash -c`/`eval`, `"indirection"` for sudo/env/xargs/find -exec/…); strips leading `variable_assignment` prefixes from command units. Constraint: `COMMAND_ENUM_SKIP` holds only genuinely inert types (`comment`, `heredoc_end`) — a node that is not a command but can host one belongs in `EXECUTION_HOST_TYPES`, and conflating the two questions is the bypass #741 fixed
+│       ├── command-enumeration.ts Bash command enumerator: `collectCommands` (exported) + the descend/skip tables and the node→`CommandWord` adapter; owns the `BashCommand` interface including the `wrapperKind` discriminant and the display-only `executedUnit`; strips leading `variable_assignment` prefixes from command units. Constraint: `COMMAND_ENUM_SKIP` holds only genuinely inert types (`comment`, `heredoc_end`) — a node that is not a command but can host one belongs in `EXECUTION_HOST_TYPES`, and conflating the two questions is the bypass #741 fixed
+│       ├── wrapper-analysis.ts Pure word-based wrapper interpretation: `classifyWrapperWords` (the `WrapperKind` discriminant — `"opaque-payload"` for `bash -c`/`eval`, `"indirection"` for sudo/env/xargs/find -exec/…) and `executedUnitOf` (the command a wrapper actually runs), over the shared wrapper vocabulary. Constraint: both answers read one vocabulary — the shape that floors a unit to `ask` and the shape that names its inner command cannot drift. `executedUnitOf` is display-only and fails to `null` rather than to a guess, so it never weakens a gate
 │       ├── bash-path-resolver.ts  `BashPathResolver` class (constructed with a `PathNormalizer` and an optional `workdir`): `resolve(rootNode): ResolvedBashPaths` walks the AST once, tagging each path-candidate token with the `EffectiveBase` in force at its position, and returns `{ externalPaths: AccessPath[], ruleCandidates: BashPathRuleCandidate[] }`; routes every path through the injected `PathNormalizer`. Both projections fall back to the shared `probeBareToken` for a token the shape gates reject, admitting it only when `normalizer.entryExists` confirms it names a real entry and the effective base is known; `projectRuleCandidates` passes `this.normalizer.flavor` so a win32 backslash-relative token is recognized like its `/` form; `projectExternalPaths` decides outside-cwd from the `AccessPath`'s canonical boundary via `collectIfExternal`, treating a literal-only bash token as unconditionally external. Constraint: consults no ruleset — candidacy is a filesystem question and the decision belongs to the gates (ADR 0009). The subtlest region in the package
 │       ├── msys-bash-tokens.ts  Pure win32 bash-token shape classifier: `classifyWin32BashToken(token): BashTokenShape` (`device` | `drive-mount` with translated `windowsPath` | `posix-absolute` | `plain`); no filesystem, no `process.platform` read; the return type of `PathFlavor.bashTokenShape`, consumed by `PathNormalizer.forBashToken`/`interpretBashCdTarget`
 │       ├── token-classification.ts Pure token classifiers: `classifyTokenAsPathCandidate` (strict: `/`, `~/`, `..`, Windows drive-letter), `classifyTokenAsRuleCandidate(token, flavor)` (broader: also dot-files, relative paths, the drive-letter backslash form, and — under the win32 flavor — a backslash-relative token), and `classifyBareTokenCandidate(token)` (prelude-only: returns any token whose shape does not rule out a path, for the resolver to probe). Constraint: policy-free — no classifier consults the ruleset (ADR 0009)
@@ -776,7 +778,6 @@ src/
 │       ├── skill-read.ts     describeSkillReadGate - pure descriptor factory
 │       ├── skill-input.ts    describeSkillInputGate - pure descriptor factory; takes a pre-computed check result so the runner reuses the caller's check
 │       ├── external-directory.ts describeExternalDirectoryGate - pure descriptor/bypass factory; builds an `AccessPath`, delegates policy resolution to `resolveExternalDirectoryPolicy`, uses `accessPath.boundaryValue()` for the outside-CWD boundary and infra-read checks, and discloses `accessPath.resolvedAlias()` when it names a location distinct from the typed path
-│       ├── external-directory-messages.ts External-directory ask-prompt formatting; both tool and bash prompts append `(resolves to '<canonical>')` via the shared `resolvesToSuffix` helper when the resolved path differs from the displayed one
 │       ├── external-directory-policy.ts Shared external-directory policy check for both gates: `resolveExternalDirectoryPolicy(path, resolver, agentName)` emits an `access-path` `AccessIntent` on the `external_directory` surface; `selectUncoveredExternalPaths(paths, resolver, agentName)` resolves a set, keeps the not-allowed entries, and selects the worst via `pickMostRestrictive`
 │       ├── bash-external-directory.ts describeBashExternalDirectoryGate - pure descriptor/bypass factory over the injected `BashProgram` (`externalPaths()`); delegates the per-path alias matching and worst-uncovered selection to `selectUncoveredExternalPaths`
 │       ├── bash-path.ts      describeBashPathGate - pure descriptor/bypass factory for bash path rules over the injected `BashProgram` (`pathRuleCandidates()`); evaluates each candidate's `AccessPath` via an `access-path` `AccessIntent` and selects the worst uncovered token via `pickMostRestrictive`, keeping the raw token for prompts/logs/approvals and `path.value()` for the approval pattern
@@ -815,7 +816,14 @@ src/
 ├── system-prompt-sanitizer.ts Narrow Available tools section + filter guidelines to the active set
 ├── skill-prompt-sanitizer.ts  Skill prompt filtering by policy
 ├── denial-messages.ts         Centralized denial message formatter - DenialContext type, EXTENSION_TAG, formatDenyReason/formatUnavailableReason/formatUserDeniedReason
-├── permission-prompts.ts      User-facing ask-prompt formatting + pre-check error messages
+├── permission-prompts.ts      Agent-facing pre-check reasons (missing tool name, unknown tool) refused before any permission check runs
+├── presentation/             Prompt presentation: the payload a gate emits, and the renders over it (ADR 0011)
+│   ├── prompt-payload.ts     `PromptPayload` (the `kind` discriminant, the `request` invariant core, the complete `evidence` list, the `annotations` slot) + `localRequester`/`findEvidence`/`allEvidence`. Constraint: the payload is complete by contract — it never truncates and never decides what a human sees, so elision is a property of a render (ADR 0011 §2)
+│   ├── tool-ask-payload.ts   `buildToolAskPayload` — the bash, MCP, and generic-tool asks; carries the invoked tool name when a shell alias re-exposes bash (#574) and the wrapper's executed unit (#713)
+│   ├── path-ask-payload.ts   `buildPathAskPayload`, `buildExternalDirectoryAskPayload`, `buildBashExternalDirectoryAskPayload` — each escaping path carries its canonical alias as that evidence entry's `detail`, so a bounded render cannot show a path while eliding what it resolves to
+│   ├── skill-ask-payload.ts  `buildSkillAskPayload`, `buildSkillPathAskPayload` — the skill is the decision-relevant value (it is what the policy names); a skill read carries the path it was reached through as evidence
+│   ├── forwarded-ask-payload.ts `buildForwardedAskPayload` — the serving node's payload for an ask forwarded up from a subagent; carries the child's still-pre-rendered sentence as one evidence entry until the payload replaces `message` on the wire
+│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string every consumer still reads, rendered from the payload alone. Transitional: it goes when the last `message` reader does
 ├── tool-input-preview.ts              Pure tool-input text utilities (truncation, line counting, count formatting), serialization + default constants; `serializeToolInputPreview` (prompt, unredacted) and `serializeRedactedToolInputPreview` (log) are separate entry points because the input is flattened to a string before the writer sees its keys
 ├── tool-input-prompt-formatters.ts    Pure per-tool prompt formatters (edit/write/read) + getPromptPath helper
 ├── tool-preview-formatter.ts          ToolPreviewFormatter class - config-dependent prompt + log formatting; seam-first dispatch consults ToolInputFormatterLookup before built-in switch
@@ -863,7 +871,7 @@ src/
 ### Findings (planned 2026-08-15)
 
 The declared candidate is [ADR 0011](../decisions/0011-prompt-presentation-contract.md) (the prompt-presentation contract), whose Staging section assigns its decomposition to this planning pass.
-The cause is a structural fusion of presentation with decision-making, recorded in the [Prompt presentation](#prompt-presentation) section above: five sites assemble a flat prompt `message` string (`formatAskPrompt`'s three branches, the skill prompts, the external-directory prompts, the per-tool previews, and the parent-side forwarded prefix) that travels unchanged to every consumer — the inline dialog, the `select`/`input` fallback, the review log, the `permissions:ui_prompt` broadcast, and the forwarded wire.
+The cause is a structural fusion of presentation with decision-making, recorded in the [Prompt presentation](#prompt-presentation) section above: six sites assemble a flat prompt `message` string (`formatAskPrompt`'s three branches, the skill prompts, the external-directory prompts, `formatPathAskPrompt`, the per-tool previews, and the parent-side forwarded prefix) that travels unchanged to every consumer — the inline dialog, the `select`/`input` fallback, the review log, the `permissions:ui_prompt` broadcast, and the forwarded wire.
 Because the payload is a pre-rendered sentence, elision is a payload property rather than a render property: the bash branch has no cap, nothing bounds height ([#710]), a forwarded ask is assembled twice under two configs, and every denial path echoes unbounded input into the agent's context.
 The phase implements the contract's staged first step — the complete payload and the renderer seam — so [#710] is fixed by construction and [#713] becomes a conformance requirement of the payload's invariant core rather than a separate enhancement.
 
@@ -876,6 +884,8 @@ Directory check: the spine rewrites the ~8 cohesive presentation modules at the 
 Open-issue sweep dispositions (user-decided):
 
 - [#710] — adopted as Step 2 (the bounded local renderers are its fix by construction).
+- PR [#738] (highlight the flagged element in TUI prompts) — swept in during Step 1 planning, having been filed the day before this phase was scoped.
+  Highlighting is a **render** concern under ADR 0011, so its intent is adopted in Step 2's dialog renderer with authorship credited, and the PR closes as superseded rather than being rebased — the same disposition [#716] received.
 - [#713] — its inner-command fact enters the payload in Step 1 and becomes visible in every render in Step 2; it closes with Step 2.
 - [#721] / [#735] — adopted as Step 5: out-of-process forwarding liveness; [#735]'s scenario 1 (dead parent) is resolved by it, while scenario 2 (a parent whose turn is occupied) stays with the [#722] diagnosis, which remains open and out of scope.
 - [#726] — adopted as Step 6 (decision provenance).
@@ -894,10 +904,10 @@ No decline, so the regular rotation continues.
 
 | Metric                                                                  | Baseline (2026-08-15) | Phase 13 target |
 | ----------------------------------------------------------------------- | --------------------- | --------------- |
-| Flat-assembler sites (`formatAskPrompt` references in `src/`)           | 4                     | 0               |
+| Flat-assembler sites (`formatAskPrompt` references in `src/`)           | 4                     | 0 ✅            |
 | Forwarded-wire `message: string` field (`permission-forwarding.ts`)     | 1                     | 0               |
 | Broadcast `message: string` field (`permission-ui-prompt.ts`)           | 1                     | 0               |
-| `src/presentation/` domain directory present                            | 0                     | 1               |
+| `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
 | Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1               |
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1             |
 | Model-judge resolves `agentDir` via `getAgentDir` (`config-loader.ts`)  | 0                     | ≥ 1             |
@@ -922,7 +932,7 @@ The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows
 
 ### Steps
 
-#### Step 1: `PromptPayload` and its builders — the five assembly sites become one payload ([#744])
+#### ✅ Step 1: `PromptPayload` and its builders — the assembly sites become one payload ([#744])
 
 **Cause:** presentation is fused with decision-making — each gate renders its facts into a sentence at the point of decision, so no consumer downstream can render under its own budget; the flat `message` string is the fusion made concrete.
 
@@ -931,6 +941,10 @@ The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows
   The payload's `request.executedUnit` carries the inner command of an unstrippable wrapper — [#713]'s fact, entering here.
   Tidy-first prep commit: extract the scout's duplicated fixtures (`makePermissionCheckResult`, a shared `ToolPreviewFormatter` factory) into `test/helpers/` and migrate the three presentation test files.
 - **Outcome:** every ask has a complete structured payload; `grep -rn "formatAskPrompt" packages/pi-permission-system/src --include="*.ts" | wc -l` goes 4 → 0; `ls packages/pi-permission-system/src | grep -c presentation` goes 0 → 1; behavior is unchanged (the derived `message` is byte-compatible or near-compatible, pinned by existing tests).
+- **Landed:** both metrics hit their targets, and `message` is byte-identical — every former assembler's string assertion now runs against `renderLegacyMessage`, which reads the payload alone, so the suite is the proof the payload is complete.
+  `PromptPermissionDetails.payload` is **required**, making "every ask carries a complete payload" a compile-time guarantee rather than a convention.
+  Planning found a **sixth** assembler the issue and ADR 0011 both omit — `formatPathAskPrompt`, with two consumers — and found that [#713]'s fact had no source at all: `classifyWrapperCommand` only flagged a wrapper, so the new `wrapper-analysis.ts` resolves what one actually runs.
+  Three departures from ADR 0011 §2's illustrative type are documented at their declarations: a `kind` discriminant, `| null` over `| undefined` (the payload goes on the JSON wire in Step 3), and `commandContext` as a request fact.
 - **Impact 5 / Risk 2 / Priority 20.**
 
 Release: batch "presentation-payload"
@@ -1018,7 +1032,7 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["Step 1 (#744): PromptPayload + builders"] --> S2["Step 2 (#710): bounded local renderers"]
+    S1["✅ Step 1 (#744): PromptPayload + builders"] --> S2["Step 2 (#710): bounded local renderers"]
     S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
     S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
@@ -1079,6 +1093,7 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#713]: https://github.com/gotgenes/pi-packages/issues/713
 [#716]: https://github.com/gotgenes/pi-packages/pull/716
+[#738]: https://github.com/gotgenes/pi-packages/pull/738
 [#721]: https://github.com/gotgenes/pi-packages/issues/721
 [#722]: https://github.com/gotgenes/pi-packages/issues/722
 [#726]: https://github.com/gotgenes/pi-packages/issues/726
