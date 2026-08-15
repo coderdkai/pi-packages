@@ -1,5 +1,4 @@
 import { classifyToolKind } from "./access-intent/tool-kind";
-import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 
 // NOTE: the ask prompts are now payload builders under src/presentation/;
 // denial text lives in denial-messages.ts. This module retains only the
@@ -25,22 +24,3 @@ export function formatUnknownToolReason(
 
   return `Tool '${toolName}' is not registered in this runtime and was blocked before permission checks.${mcpHint} Registered tools: ${availableList}.`;
 }
-
-export function formatSkillAskPrompt(
-  skillName: string,
-  agentName?: string,
-): string {
-  const subject = agentName ? `Agent '${agentName}'` : "Current agent";
-  return `${subject} requested skill '${skillName}'. Allow loading this skill?`;
-}
-
-export function formatSkillPathAskPrompt(
-  skill: SkillPromptEntry,
-  readPath: string,
-  agentName?: string,
-): string {
-  const subject = agentName ? `Agent '${agentName}'` : "Current agent";
-  return `${subject} requested access to skill '${skill.name}' via '${readPath}'. Allow this read?`;
-}
-
-// formatSkillPathDenyReason has been moved to denial-messages.ts.

@@ -1,22 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   formatMissingToolNameReason,
-  formatSkillAskPrompt,
-  formatSkillPathAskPrompt,
   formatUnknownToolReason,
 } from "#src/permission-prompts";
-import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
-
-function skillEntry(name: string): SkillPromptEntry {
-  return {
-    name,
-    description: "A skill",
-    location: `/skills/${name}/SKILL.md`,
-    state: "ask",
-    normalizedLocation: `/skills/${name}/SKILL.md`,
-    normalizedBaseDir: `/skills/${name}`,
-  };
-}
 
 describe("formatMissingToolNameReason", () => {
   test("mentions missing tool name and pi.getAllTools()", () => {
@@ -53,41 +39,6 @@ describe("formatUnknownToolReason", () => {
     const tools = Array.from({ length: 15 }, (_, i) => `tool${i}`);
     const result = formatUnknownToolReason("ghost", tools);
     expect(result).toContain("...");
-  });
-});
-
-describe("formatSkillAskPrompt", () => {
-  test("includes skill name and agent name", () => {
-    const result = formatSkillAskPrompt("librarian", "my-agent");
-    expect(result).toContain("librarian");
-    expect(result).toContain("Agent 'my-agent'");
-  });
-
-  test("uses 'Current agent' without agent name", () => {
-    const result = formatSkillAskPrompt("librarian");
-    expect(result).toContain("Current agent");
-    expect(result).toContain("librarian");
-  });
-});
-
-describe("formatSkillPathAskPrompt", () => {
-  test("includes skill name, read path, and agent name", () => {
-    const result = formatSkillPathAskPrompt(
-      skillEntry("librarian"),
-      "/skills/librarian/SKILL.md",
-      "my-agent",
-    );
-    expect(result).toContain("librarian");
-    expect(result).toContain("/skills/librarian/SKILL.md");
-    expect(result).toContain("Agent 'my-agent'");
-  });
-
-  test("uses 'Current agent' without agent name", () => {
-    const result = formatSkillPathAskPrompt(
-      skillEntry("librarian"),
-      "/skills/librarian/SKILL.md",
-    );
-    expect(result).toContain("Current agent");
   });
 });
 
