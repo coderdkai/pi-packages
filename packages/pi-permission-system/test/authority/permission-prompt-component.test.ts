@@ -5,10 +5,12 @@ import type {
   RequestPermissionOptions,
 } from "#src/authority/permission-dialog";
 import {
+  type PermissionPromptUi,
   type PermissionPromptView,
   presentInlinePermissionPrompt,
   requestPermissionDecision,
 } from "#src/authority/permission-prompt-component";
+import { makePromptPreferences } from "#test/helpers/prompt-view-fixtures";
 
 // ── Fake TUI view harness ────────────────────────────────────────────────────
 
@@ -65,18 +67,33 @@ function makeFakeView(doublePressToConfirm: boolean, expandKey = CTRL_O) {
       );
     });
   };
-  const view = {
-    mode: "tui",
-    doublePressToConfirm,
-    ui: {
-      select: vi.fn(),
-      input: vi.fn(),
-      custom,
-      getToolsExpanded,
-      setToolsExpanded,
-    },
-  } as unknown as PermissionPromptView;
+  const view = makeView("tui", doublePressToConfirm, {
+    select: vi.fn(),
+    input: vi.fn(),
+    custom,
+    getToolsExpanded,
+    setToolsExpanded,
+  });
   return { view, captured, getToolsExpanded, setToolsExpanded };
+}
+
+/**
+ * The view the dispatcher and the inline component take.
+ *
+ * Typed as `PermissionPromptView` so a field added to it is a compile error
+ * here; the cast is confined to the `ui` double, whose generic `custom` a
+ * plain `vi.fn()` cannot satisfy.
+ */
+function makeView(
+  mode: PermissionPromptView["mode"],
+  doublePressToConfirm: boolean,
+  ui: unknown,
+): PermissionPromptView {
+  return {
+    mode,
+    ui: ui as PermissionPromptUi,
+    ...makePromptPreferences({ doublePressToConfirm }),
+  };
 }
 
 const ARROW_DOWN = "\u001b[B";
@@ -259,11 +276,11 @@ describe("presentInlinePermissionPrompt", () => {
     it("falls back to the select flow outside TUI mode", async () => {
       const custom = vi.fn();
       const select = vi.fn().mockResolvedValue("Yes");
-      const view = {
-        mode: "rpc",
-        doublePressToConfirm: true,
-        ui: { select, input: vi.fn(), custom },
-      } as unknown as PermissionPromptView;
+      const view = makeView("rpc", true, {
+        select,
+        input: vi.fn(),
+        custom,
+      });
 
       const decision = await requestPermissionDecision(view, "Title", "Msg");
 
