@@ -773,13 +773,13 @@ src/
 │   ├── lifecycle.ts          SessionLifecycleHandler (session: `PermissionSession` + resolver + serviceLifecycle + audit); writes the decision-audit summary on `session_shutdown`
 │   ├── before-agent-start.ts AgentPrepHandler (session + resolver + toolRegistry + `warmParser: () => void`); shouldExposeTool pure helper; recomputes the active set + system-prompt override every fire; fire-and-forget `warmParser()` triggers the tree-sitter warm-up
 │   ├── permission-gate-handler.ts PermissionGateHandler (session + toolRegistry + pipeline + skillInputPipeline + runner); `handleToolCall` returns the internal total `GateOutcome`; validateRequestedTool + getEventInput + extractSkillNameFromInput pure helpers
-│   ├── tool-call-boundary.ts `createFailClosedToolCall(gate, reporter, audit, tracer)` - the only `pi.on("tool_call")` target and sole `GateOutcome` → SDK-shape translator; owns the `try/catch → block` (the SDK's `emitToolCall` does not catch a throwing handler), writes a `gate_error` review entry on throw, and emits a `debugLog`-gated `permission.decision` trace per call
+│   ├── tool-call-boundary.ts `createFailClosedToolCall(gate, reporter, audit, tracer)` - the only `pi.on("tool_call")` target and sole `GateOutcome` → SDK-shape translator; owns the `try/catch → block` (the SDK's `emitToolCall` does not catch a throwing handler), writes a `gate_error` review entry on throw with its own minted request id (the throw may come from anywhere in the pipeline, so no gate's id is available) via a helper that swallows so the block stays unconditional, and emits a `debugLog`-gated `permission.decision` trace per call
 │   └── gates/               Pure descriptor factories + runner
 │       ├── types.ts          GateOutcome, ToolCallContext
-│       ├── descriptor.ts     GateDescriptor (with DenialContext), GateBypass, GateResult types
-│       ├── runner.ts         GateRunner class — constructed with `ScopedPermissionResolver`, `SessionApprovalRecorder`, `AskEscalator` (the single-method ask-escalation seam), `DecisionReporter`, plus a live `isYoloEnabled` reader (read per gate; the sole place a post-resolution ask is reconciled with yolo); `run(gate, agentName, toolCallId)` dispatches null / bypass / descriptor
+│       ├── descriptor.ts     GateDescriptor (with DenialContext), GateBypass, GateResult types, plus `DecisionEventFacts` (a decision event minus the `requestId` only the runner can supply — the type that routes every emit through the runner's stamping site)
+│       ├── runner.ts         GateRunner class — constructed with `ScopedPermissionResolver`, `SessionApprovalRecorder`, `AskEscalator` (the single-method ask-escalation seam), `DecisionReporter`, plus a live `isYoloEnabled` reader (read per gate; the sole place a post-resolution ask is reconciled with yolo); `run(gate, agentName)` dispatches null / bypass / descriptor and mints the request id before the branch, so a request that never prompts is identified exactly as one that does; its private `emitDecision` is the sole site stamping that id onto a `DecisionEventFacts`
 │       ├── tool-call-gate-pipeline.ts `ToolCallGateInputs` interface (`getActiveSkillEntries`, `getInfrastructureReadDirs`, `getToolPreviewLimits`, `getPathNormalizer`, `getShellToolAliases`) + `ToolCallGatePipeline` class — constructed with `ScopedPermissionResolver` + `ToolCallGateInputs`; owns bash-command extraction + the single `BashProgram.parse`, `ToolPreviewFormatter` construction, the infra-dir list, the six gate producers, and the run loop; `evaluate(tcc, runner)` returns the first block outcome or allow
-│       ├── skill-input-gate-pipeline.ts `SkillInputGateInputs` + `GateNotifier` interfaces + `SkillInputGatePipeline` class — owns the raw `checkPermission` pre-check, deny notify, `describeSkillInputGate` descriptor, request-id mint, and `runner.run`; `evaluate(skillName, agentName, notifier, runner)` makes the `input` path symmetric with the `tool_call` path
+│       ├── skill-input-gate-pipeline.ts `SkillInputGateInputs` + `GateNotifier` interfaces + `SkillInputGatePipeline` class — owns the raw `checkPermission` pre-check, deny notify, `describeSkillInputGate` descriptor, and `runner.run`; `evaluate(skillName, agentName, notifier, runner)` makes the `input` path symmetric with the `tool_call` path
 │       ├── helpers.ts        deriveDecisionValue, deriveResolution, buildDecisionEvent, resolveYoloGrant (the standing yolo grant covering a resolved check — a ruleset-rewritten allow or, under yolo, a residual ask)
 │       ├── skill-read.ts     describeSkillReadGate - pure descriptor factory
 │       ├── skill-input.ts    describeSkillInputGate - pure descriptor factory; takes a pre-computed check result so the runner reuses the caller's check
@@ -800,6 +800,7 @@ src/
 ├── service-lifecycle.ts      `ServiceLifecycle` interface + `PermissionServiceLifecycle` class — owns the process-global service publish (child-gated), ready emit, and session teardown ordering
 ├── service.ts                PermissionsService interface, Symbol.for() accessor (cross-extension API); public surface published as a self-contained dist/public.d.ts bundle
 ├── permission-events.ts      Event channel constants, payload types, emit helpers
+├── permission-request-id.ts  `createPermissionRequestId()` — the one mint for a permission request's `perm-<uuid>` id; distinct from the host's `toolCallId`, which stays alongside it as the join back to the Pi transcript
 ├── permission-ui-prompt.ts   Centralized construction for `permissions:ui_prompt` event payloads - `buildUiPrompt` is the single builder for direct and forwarded asks, keeping the emitted contract shape in one place
 ├── config-store.ts           `ConfigStore` class — owns `config` + `lastConfigWarning`; `ConfigReader`, `SessionConfigStore`, `CommandConfigStore` narrow interfaces
 ├── config-loader.ts          File I/O, format detection, strict zod validation (fail-closed) for config files
@@ -859,7 +860,7 @@ src/
 │   ├── subagent-lifecycle-events.ts subscribeSubagentLifecycle() - subscribes to @gotgenes/pi-subagents child lifecycle events; registers/unregisters child sessions in SubagentSessionRegistry (ADR 0002)
 │   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId`/`getCwd` - shared by the escalation and serving roles
 │   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + `resolvePermissionForwardingTarget`, which returns the resolved session id together with its `self`/`registry`/`env` provenance (only a `registry` target is in-process, so only it may be judged against the serving registry)
-│   ├── approval-escalator.ts  `ParentAuthorizer` class - `TerminalAuthorizer` for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction; every abandonment path (unresolvable target, unusable directories, unwritable request, unserved in-process target, unreadable response, timeout) denies with `confirmationUnavailable` plus a path-naming `denialReason` and discards the request so a late answer cannot arrive
+│   ├── approval-escalator.ts  `ParentAuthorizer` class - `TerminalAuthorizer` for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction; adopts the requester's `requestId` as the forwarded request's `id` (falling back to a fresh mint when it could not safely name a file — at a relay hop that id came off disk); every abandonment path (unresolvable target, unusable directories, unwritable request, unserved in-process target, unreadable response, timeout) denies with `confirmationUnavailable` plus a path-naming `denialReason` and discards the request so a late answer cannot arrive
 │   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy.resolve(intent: ForwardedAccessIntent)` is intent-shaped (agent-scoped to `principal.agentName`, child-fixed `matchValues` used as-is, never re-derived through this session's `PathNormalizer`/cwd), floors to `ask` when `accessIntent` is absent (version skew); projects the request's access facts onto the escalated ask (`surface`/`matchValues`/`boundaryValue` only — `requesterCwd`/`principal` stay off the ask details, and the bounded-delegation checkpoint's exclusion reads the projected gate surface, #635); one-hop canary
 │   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` field), location derivation, atomic JSON writes (owner-only; `rename` preserves the temp file's mode)
 │   └── forwarding-manager.ts  `ForwardingController` interface + `ForwardingManager` class - drives the forwarded-permission inbox polling lifecycle; tells `ForwardedRequestServer.processInbox`, and publishes the polled session id to the `ServingAnnouncer` plus a `forwarded_permission.serving_started`/`serving_stopped` review entry
@@ -923,8 +924,8 @@ No decline, so the regular rotation continues.
 | `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
 | Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1               |
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1             |
-| Ad-hoc request-id mint sites in `src/`                                  | 2                     | 1               |
-| `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2               |
+| Request-id mint sites in `src/`                                         | 2                     | 1 ✅            |
+| `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2 ✅            |
 | Model-judge resolves `agentDir` via `getAgentDir` (`config-loader.ts`)  | 0                     | ≥ 1             |
 | Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0               |
 | fallow health score                                                     | 88 (A)                | ≥ 88            |
@@ -939,7 +940,7 @@ Recompute commands (run from the repo root):
 - Presentation directory: `ls packages/pi-permission-system/src | grep -c presentation`
 - Liveness module: `ls packages/pi-permission-system/src/authority | grep -c "forwarding-liveness"`
 - Provenance sites: `grep -rn "decidedBy" packages/pi-permission-system/src | wc -l`
-- Ad-hoc id mint sites: `grep -rn "Math.random().toString(36)" packages/pi-permission-system/src --include="*.ts" | wc -l`
+- Id mint sites: `grep -rnE "Math\.random\(\)\.toString\(36\)|randomUUID\(\)" packages/pi-permission-system/src --include="*.ts" | wc -l`
 - Event request ids: `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts`
 - Model-judge agentDir: `grep -c "getAgentDir" packages/pi-permission-model-judge/src/config-loader.ts`
 - Ambient path import: `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts`
@@ -1051,16 +1052,23 @@ Release: independent
 
 Release: independent
 
-#### Step 9: A minted request id, carried on every decision ([#752])
+#### ✅ Step 9: A minted request id, carried on every decision ([#752])
 
 **Cause:** there is no permission request id — there are three conventions, and none covers a request that never prompts.
 The tool-call gates borrow the SDK's `toolCallId`, the skill-input gate mints its own, and the escalation edge mints a third that discards the one it was handed; the id attaches inside `promptForApproval`, so session-approved, yolo, infrastructure-auto-allowed and policy-blocked resolutions carry no id at all, and `PermissionDecisionEvent` carries none ever.
 
 - **Smell:** Category C (a fact established at request creation dies before its consumers), the same shape as Step 6.
-- **Target:** a single mint at the top of `GateRunner.run` shared by the bypass and descriptor branches; the id carried on the three non-prompting review-log writes and added to `PermissionDecisionEvent`; `GateBypass.decision` becomes an `Omit<PermissionDecisionEvent, "requestId">` so the three descriptor-built event literals need no edits; `createSkillInputRequestId` deleted and `GateRunner.run`'s third parameter narrowed to `toolCallId: string | null`.
+- **Target:** a single mint at the top of `GateRunner.run` shared by the bypass and descriptor branches; the id carried on the non-prompting review-log writes and added to `PermissionDecisionEvent`; `GateBypass.decision` becomes an `Omit<PermissionDecisionEvent, "requestId">` so a gate keeps emitting only what it knows; `createSkillInputRequestId` deleted.
   `toolCallId` keeps flowing untouched — it is the join back to the Pi transcript, and a distinct fact from the request id.
-- **Outcome:** every permission request is correlatable from creation regardless of how it resolves; `grep -rn "Math.random().toString(36)" packages/pi-permission-system/src --include="*.ts" | wc -l` goes 2 → 1; `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts` goes 1 → 2.
+- **Outcome:** every permission request is correlatable from creation regardless of how it resolves; the mint-site count goes 2 → 1; `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts` goes 1 → 2.
   Additive for consumers, so it needs no major bump of its own.
+- **Landed:** both metrics hit their targets, and three of the issue's own shape claims did not survive the code.
+  The non-prompting writes are **four**, not three — `policy_denied` is written by `applyPermissionGate` from the log context the runner hands it, so injecting the id there covers it.
+  Exactly **one** `GateBypass` carries a `decision` (the infrastructure-read bypass), not three; the other two carry only a `log`.
+  And `run`'s third parameter is **deleted**, not narrowed: `requestId: toolCallId` was its only reader.
+  The forwarding edge stopped minting its third id and adopts the one it is handed, so a forwarded ask carries one id from the child's gate to the human's decision — which supersedes Step 3's planned `requesterRequestId` wire field.
+  Two decisions beyond the issue: `randomUUID` over the package's `<ts>-<rand>-<pid>` convention (Node has no UUIDv7 — `randomUUID({ version: 7 })` silently returns a v4), and a filename-safety guard on the adopted id, since adoption is what first lets an inbound id name an outbound file.
+  The gate-error boundary's missing `permissions:decision` was found here and filed as [#753].
 - **Impact 3 / Risk 1 / Priority 15.**
 
 Release: independent
@@ -1086,7 +1094,7 @@ flowchart TD
     S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
     S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
-    S9["Step 9 (#752): minted request id"] --> S3
+    S9["✅ Step 9 (#752): minted request id"] --> S3
     S9 --> S10["Step 10 (#610): cross-session correlation"]
     S3 --> S10
     S4 --> S10
@@ -1187,4 +1195,5 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
+[#753]: https://github.com/gotgenes/pi-packages/issues/753
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md

@@ -154,6 +154,13 @@ No cycle: the presentation layer does not import the authority layer.
 
 ### The correlation join
 
+Superseded by [#752], which landed first.
+The forwarding edge stopped minting its own wire id and adopts `details.requestId` instead, so `ForwardedPermissionRequest.id` **is** the child's request id — there is no second id left for `requesterRequestId` to relay.
+Treat this subsection and its TDD step as done: drop the field and the step, and keep only the `forwarded_permission.request_created` review entry, which already names the id.
+If implementation finds a case where the two must differ (a relay that re-identifies the request), reintroduce the field with that case recorded.
+
+The original rationale follows, for the record.
+
 `requesterRequestId` rides here because this step already rewrites the wire type, the writer, the tolerant reader, and the fixtures — the four places it would otherwise have to reopen.
 It is deliberately identity-agnostic: `ParentAuthorizer.authorize` already holds `details.requestId`, and the field relays whatever that is, so Step 9's choice of a minted id versus the borrowed `toolCallId` changes nothing here.
 
