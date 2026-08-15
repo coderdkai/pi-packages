@@ -380,8 +380,10 @@ Denial text is a fifth render of the same facts under one extra rule: it identif
 The payload exists, and the human-facing renderers are bounded.
 Every gate emits a `PromptPayload` (`src/presentation/`), and `PromptPermissionDetails` requires one, so the six former assembly sites are gone.
 `renderPromptDialog` renders it for the inline dialog and the `select`/`input` fallback under `promptMaxRows` plus `promptFieldMaxWidth`, and `Ctrl+O` expands the dialog to the complete request.
-The cap applies to the `request` facts too: never elided means never *omitted* — each keeps its line, and a long one is shortened, marked, and reachable in full.
+The cap applies to the `request` facts too: never elided means never *omitted* — a long one is shortened, marked, and reachable in full rather than dropped.
 Without that reading a bounded render is unreachable, since the decision-relevant value is itself the pathological field in the reported case ([#710]).
+A fact an adjacent line already states is not repeated — a bash ask's gate surface is its tool name, and a path ask's is the word its value line is labelled with — so the render spends a line only where it adds something.
+That is a redundancy rule, not an elision: the fact is still on screen, which is what §3 requires.
 
 The wire, the broadcast, and the review log still read the flat `message` that `renderLegacyMessage` derives from the payload, so `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound the non-bash previews the payload carries as evidence.
 ADR 0011 records what each dependent item becomes under the contract.

@@ -140,6 +140,7 @@ While you are typing a denial reason it is not intercepted, so a rebound printab
 
 The prompt renders one fact per line, with the requesting agent (and, for a forwarded subagent ask, its session), the tool, the gate surface, the matched rule, the decision-relevant value, and — for a wrapper such as `xargs` — the command that will actually run.
 Those facts are always present: a budget may shorten a long one, never drop it.
+A fact the line above already states is not repeated — a bash ask shows `tool : bash` without a second `surface : bash` line, and a path ask's `path :` line names the surface itself.
 
 Everything else is evidence — the full command a gated sub-command came from, the working directory a path escaped, the tool-input preview — and it is what gives way when the render does not fit.
 A shortened field or a dropped entry is marked with an ellipsis, and `Ctrl+O` shows the complete request.
