@@ -128,7 +128,9 @@ If a plan's quantitative target (LOC, clone count, complexity) does not fall out
    If the issue completes a numbered roadmap step, prefix `✅` on both the step heading and its Mermaid diagram node — a `Landed:` detail line is not a substitute for the `✅`.
    Flip the phase status row only when every step in the phase is done.
 8. Commit doc updates as `docs: <summary>`.
-9. **Do not edit `CHANGELOG.md`** — release-please owns it and will generate entries from your Conventional Commit messages on the next release.
+9. Preview the changelog: `git log --format='%s' <plan-commit>..HEAD | grep -E '^(feat|fix)'`.
+   Every surviving line must name a user-observable outcome — a line describing an internal seam means that commit should have been `refactor:`; retype it now, while nothing is pushed.
+10. **Do not edit `CHANGELOG.md`** — release-please owns it and will generate entries from your Conventional Commit messages on the next release.
 
 ## Pre-completion review
 
