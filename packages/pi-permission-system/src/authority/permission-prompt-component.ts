@@ -3,12 +3,7 @@ import type {
   ExtensionUIContext,
   KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  type Component,
-  matchesKey,
-  truncateToWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+import { type Component, matchesKey } from "@earendil-works/pi-tui";
 import {
   type PermissionPromptDecision,
   type RequestPermissionOptions,
@@ -22,6 +17,7 @@ import {
   type PromptViewState,
   reducePrompt,
 } from "#src/authority/permission-prompt-decision";
+import { fitLinesToWidth } from "#src/presentation/line-fitting";
 
 /**
  * Inline `ctx.ui.custom` permission dialog for TUI sessions.
@@ -163,7 +159,7 @@ class PermissionPromptComponent implements Component {
   }
 
   render(width: number): string[] {
-    return fitToWidth(this.renderStep(), width);
+    return fitLinesToWidth(this.renderStep(), width);
   }
 
   private renderStep(): string[] {
@@ -305,24 +301,6 @@ class PermissionPromptComponent implements Component {
     lines.push(this.theme.fg("muted", "↑/↓ move · enter confirm · esc back"));
     return lines;
   }
-}
-
-/**
- * Fit rendered lines to the terminal width, satisfying the `ctx.ui.custom`
- * contract that every returned line be a single visual row no wider than
- * `width`. Long lines (e.g. a wide tool-preview message) are wrapped rather
- * than clipped so no content is lost; the final `truncateToWidth` guards the
- * edge cases `wrapTextWithAnsi` cannot split (a lone wide grapheme).
- */
-function fitToWidth(lines: string[], width: number): string[] {
-  if (width <= 0) {
-    return [];
-  }
-  return lines.flatMap((line) =>
-    wrapTextWithAnsi(line, width).map((wrapped) =>
-      truncateToWidth(wrapped, width),
-    ),
-  );
 }
 
 function isPrintable(data: string): boolean {
