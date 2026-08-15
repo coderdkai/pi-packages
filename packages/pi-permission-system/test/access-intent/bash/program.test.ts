@@ -36,6 +36,26 @@ describe("BashProgram", () => {
       realpathSync.mockImplementation((p: string) => p);
     });
 
+    describe("operands of nested commands hosted in a redirect (#741)", () => {
+      it("projects the operand of a redirect-hosted command", async () => {
+        const program = await BashProgram.parse(
+          "echo hi > $(cat /etc/shadow)",
+          normalizer,
+        );
+        expect(program.pathRuleCandidates().map(({ token }) => token)).toEqual([
+          "/etc/shadow",
+        ]);
+      });
+
+      it("does not promote a bare inner token that names nothing", async () => {
+        const program = await BashProgram.parse(
+          "echo hi > $(rm nonexistent-file)",
+          normalizer,
+        );
+        expect(program.pathRuleCandidates()).toEqual([]);
+      });
+    });
+
     it("adds absolute and relative policy values for relative tokens", async () => {
       const program = await BashProgram.parse("cat src/foo.ts", normalizer);
       const candidates = program.pathRuleCandidates();
@@ -283,6 +303,30 @@ describe("BashProgram", () => {
       expect(program.externalPaths().map((p) => p.value())).toContain(
         "/etc/hosts",
       );
+    });
+
+    describe("operands of nested commands hosted in a redirect (#741)", () => {
+      it.each([
+        ["a redirect destination", "echo hi > $(cat /etc/shadow)"],
+        ["an appending destination", "echo hi >> $(cat /etc/shadow)"],
+        ["an input process substitution", "cat < <(cat /etc/shadow)"],
+        ["a concatenated destination", "echo hi > ${DIR}/$(cat /etc/shadow)"],
+      ])("projects an operand hosted in %s", async (_label, command) => {
+        const program = await BashProgram.parse(command, normalizer);
+        expect(program.externalPaths().map((p) => p.value())).toContain(
+          "/etc/shadow",
+        );
+      });
+
+      it("still projects a plain redirect destination", async () => {
+        const program = await BashProgram.parse(
+          "echo hi > /etc/passwd",
+          normalizer,
+        );
+        expect(program.externalPaths().map((p) => p.value())).toContain(
+          "/etc/passwd",
+        );
+      });
     });
 
     describe("bare tokens escaping the tree via symlink (#645)", () => {

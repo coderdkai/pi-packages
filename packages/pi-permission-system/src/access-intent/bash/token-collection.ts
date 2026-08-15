@@ -1,5 +1,9 @@
 import { basename } from "node:path";
 import {
+  forEachNestedExecution,
+  NESTED_EXECUTION_CONTEXTS,
+} from "#src/access-intent/bash/nested-execution";
+import {
   ARG_NODE_TYPES,
   resolveNodeText,
   SKIP_SUBTREE_TYPES,
@@ -50,6 +54,15 @@ export function collectCommandTokens(node: TSNode): string[] {
 
 /**
  * Collect redirect-destination tokens from a `file_redirect` node.
+ *
+ * The destination itself is an argument value (`> out.txt`), but it can also
+ * host a command that really runs (`> $(cat /etc/shadow)`, `< <(cmd)`), whose
+ * own operands are path candidates too — so each child is both read for its
+ * text and searched for nested executions (#741).
+ *
+ * Both passes are needed: a substitution can be the destination outright, or be
+ * concatenated into it (`> ${DIR}/$(cmd)`), and a `concatenation` is itself an
+ * argument node.
  */
 export function collectRedirectTokens(node: TSNode): string[] {
   const tokens: string[] = [];
@@ -59,7 +72,30 @@ export function collectRedirectTokens(node: TSNode): string[] {
     if (ARG_NODE_TYPES.has(child.type)) {
       tokens.push(resolveNodeText(child));
     }
+    tokens.push(...collectHostedExecutionTokens(child));
   }
+  return tokens;
+}
+
+/**
+ * Collect the path-candidate tokens of every command nested inside `node`'s
+ * execution contexts, reading none of the host subtree's own text.
+ *
+ * This is what lets a heredoc body contribute its substitution's operands while
+ * its prose stays out of the path surface entirely.
+ *
+ * `node` may be a context outright (`> $(cmd)`) or merely contain one
+ * (`> ${DIR}/$(cmd)`); `forEachNestedExecution` searches strictly within a
+ * subtree, so the first case is checked here.
+ */
+function collectHostedExecutionTokens(node: TSNode): string[] {
+  if (NESTED_EXECUTION_CONTEXTS.has(node.type)) {
+    return collectPathCandidateTokens(node);
+  }
+  const tokens: string[] = [];
+  forEachNestedExecution(node, (contextNode) => {
+    tokens.push(...collectPathCandidateTokens(contextNode));
+  });
   return tokens;
 }
 
