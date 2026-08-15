@@ -19,11 +19,24 @@ export function renderPromptDialog(
   payload: PromptPayload,
   budget: DialogBudget,
 ): DialogView {
-  const facts = [...coreFacts(payload), ...evidenceFacts(payload)];
-  const capped = facts.map((fact) => capField(fact, budget.fieldMaxWidth));
+  const core = coreFacts(payload).map((fact) =>
+    capField(fact, budget.fieldMaxWidth),
+  );
+  const evidence = evidenceFacts(payload).map((fact) =>
+    capField(fact, budget.fieldMaxWidth),
+  );
+  const blocks = layout([...core, ...evidence]).map((block) =>
+    fitLinesToWidth(block, budget.width),
+  );
+  const fitted = fitToRows(
+    blocks.slice(0, core.length).flat(),
+    blocks.slice(core.length),
+    budget.maxRows,
+  );
   return {
-    lines: fitLinesToWidth(layout(capped), budget.width),
-    elided: capped.some((fact) => fact.clipped),
+    lines: fitted.lines,
+    elided:
+      fitted.dropped || [...core, ...evidence].some((fact) => fact.clipped),
   };
 }
 
@@ -87,6 +100,49 @@ function capField(fact: Fact, fieldMaxWidth: number): CappedFact {
     clipped: true,
   };
 }
+
+/**
+ * Fit the rendered blocks into the row budget.
+ *
+ * The core is exempt and the evidence is what gives way: §3 outranks §5, so a
+ * core that alone overruns the budget still renders whole — the field cap is
+ * what bounds it, and the row budget is what bounds the evidence. A drop costs
+ * one row for its marker, taken only when there is something to mark.
+ */
+function fitToRows(
+  core: readonly string[],
+  evidence: readonly (readonly string[])[],
+  maxRows: number,
+): { lines: string[]; dropped: boolean } {
+  const total = evidence.reduce((rows, block) => rows + block.length, 0);
+  if (core.length + total <= maxRows) {
+    return { lines: [...core, ...evidence.flat()], dropped: false };
+  }
+  const limit = maxRows - ELISION_MARKER_ROWS;
+  const lines = [...core];
+  for (const block of evidence) {
+    // An entry is shown whole or not at all: half a path is worse evidence
+    // than none, and the reader cannot tell the halves apart.
+    if (lines.length + block.length > limit) {
+      break;
+    }
+    lines.push(...block);
+  }
+  if (lines.length < maxRows) {
+    lines.push(ELISION_MARKER);
+  }
+  return { lines, dropped: true };
+}
+
+/**
+ * What an elision states: that there is more, and nothing else.
+ *
+ * Character and line counts were considered and rejected (ADR 0011 §4) — they
+ * are a number the operator cannot act on, and they spend budget the evidence
+ * itself should hold.
+ */
+const ELISION_MARKER = "\u2026";
+const ELISION_MARKER_ROWS = 1;
 
 /**
  * The invariant core (ADR 0011 §3), in reading order: who is asking, what they
@@ -214,10 +270,10 @@ function forwardedValueLabel(surface: string): string {
  * continues under the column rather than back at the margin, so the eye can
  * still tell a continuation from the next fact.
  */
-function layout(facts: readonly Fact[]): string[] {
+function layout(facts: readonly Fact[]): string[][] {
   const width = Math.max(0, ...facts.map((fact) => fact.label.length));
   const indent = " ".repeat(width + 3);
-  return facts.flatMap((fact) =>
+  return facts.map((fact) =>
     fact.text
       .split("\n")
       .map((line, index) =>

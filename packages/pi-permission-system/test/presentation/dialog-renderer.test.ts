@@ -348,6 +348,142 @@ describe("renderPromptDialog", () => {
     });
   });
 
+  describe("the row budget", () => {
+    /** A tool ask with `count` evidence entries, each one row wide. */
+    function askWithEvidence(count: number) {
+      return makePromptPayload({
+        kind: "tool",
+        request: {
+          ...makePromptPayload().request,
+          surface: "fetch",
+          toolName: "fetch",
+          value: "fetch",
+          matchedPattern: "*",
+        },
+        evidence: Array.from({ length: count }, (_, index) => ({
+          label: "input",
+          text: `entry ${index}`,
+          detail: null,
+        })),
+      });
+    }
+
+    it("drops evidence that does not fit and marks the drop", () => {
+      const view = renderPromptDialog(askWithEvidence(6), {
+        maxRows: 5,
+        fieldMaxWidth: 200,
+        width: 200,
+      });
+
+      expect(view.lines).toEqual([
+        "tool  : fetch",
+        "rule  : *",
+        "input : entry 0",
+        "input : entry 1",
+        "…",
+      ]);
+      expect(view.elided).toBe(true);
+    });
+
+    it("marks nothing when every entry fits", () => {
+      const view = renderPromptDialog(askWithEvidence(2), {
+        maxRows: 5,
+        fieldMaxWidth: 200,
+        width: 200,
+      });
+
+      expect(view.lines).toHaveLength(4);
+      expect(view.elided).toBe(false);
+    });
+
+    it("counts rows after wrapping to the width", () => {
+      const payload = makePromptPayload({
+        kind: "tool",
+        request: {
+          ...makePromptPayload().request,
+          surface: "fetch",
+          toolName: "fetch",
+          value: "fetch",
+          matchedPattern: "*",
+        },
+        evidence: [{ label: "input", text: "a".repeat(60), detail: null }],
+      });
+
+      // The same entry is one row at a wide width and four once wrapped, so
+      // the identical budget admits it only in the first case.
+      expect(
+        renderPromptDialog(payload, {
+          maxRows: 5,
+          fieldMaxWidth: 200,
+          width: 200,
+        }),
+      ).toEqual({
+        lines: ["tool  : fetch", "rule  : *", `input : ${"a".repeat(60)}`],
+        elided: false,
+      });
+
+      const wrapped = renderPromptDialog(payload, {
+        maxRows: 5,
+        fieldMaxWidth: 200,
+        width: 20,
+      });
+      expect(wrapped.lines).toEqual(["tool  : fetch", "rule  : *", "…"]);
+      expect(wrapped.elided).toBe(true);
+    });
+
+    it("renders the whole core when it alone exceeds the budget", () => {
+      const view = renderPromptDialog(askWithEvidence(3), {
+        maxRows: 1,
+        fieldMaxWidth: 200,
+        width: 200,
+      });
+
+      expect(view.lines).toEqual(["tool  : fetch", "rule  : *"]);
+      expect(view.elided).toBe(true);
+    });
+
+    it("bounds the reported forwarded here-string ask (#710)", () => {
+      const body = Array.from(
+        { length: 200 },
+        () => "- a finding line about some module in the codebase",
+      ).join("\n");
+      const command = `@'\n${body}\n'@ | Out-File -FilePath report.md`;
+      const budget = { maxRows: 24, fieldMaxWidth: 400, width: 120 };
+
+      const view = renderPromptDialog(
+        makePromptPayload({
+          kind: "forwarded",
+          request: {
+            ...makePromptPayload().request,
+            requester: {
+              agentName: "scout",
+              forwarded: true,
+              sessionId: "abc123",
+            },
+            surface: "bash",
+            toolName: null,
+            value: command,
+            matchedPattern: null,
+          },
+          evidence: [
+            {
+              label: "requested",
+              text: `Subagent 'scout' requested bash command '${command}'.`,
+              detail: null,
+            },
+          ],
+        }),
+        budget,
+      );
+
+      expect(view.lines.length).toBeLessThanOrEqual(budget.maxRows);
+      expect(view.lines[0]).toBe("subagent  : scout · session abc123");
+      expect(view.lines[1]).toBe("surface   : bash");
+      expect(view.lines[2]).toBe("command   : @'");
+      expect(view.elided).toBe(true);
+    });
+  });
+
   describe("a forwarded ask", () => {
     it("names the requesting subagent and its session", () => {
       expect(
