@@ -922,7 +922,7 @@ The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows
 
 ### Steps
 
-#### Step 1: `PromptPayload` and its builders — the five assembly sites become one payload
+#### Step 1: `PromptPayload` and its builders — the five assembly sites become one payload ([#744])
 
 **Cause:** presentation is fused with decision-making — each gate renders its facts into a sentence at the point of decision, so no consumer downstream can render under its own budget; the flat `message` string is the fusion made concrete.
 
@@ -946,7 +946,7 @@ Release: batch "presentation-payload"
 
 Release: batch "presentation-payload"
 
-#### Step 3: The cross-boundary swap — payload replaces `message` on the wire and the broadcast
+#### Step 3: The cross-boundary swap — payload replaces `message` on the wire and the broadcast ([#745])
 
 **Cause:** same cause at the two cross-boundary contracts — the forwarded wire relays the child's prose (assembled under the child's config) and the broadcast ships the full sentence to any unconsented observer, so consistency across local and forwarded asks is structurally unattainable and the bus over-discloses.
 
@@ -958,7 +958,7 @@ Release: batch "presentation-payload"
 
 Release: batch "presentation-contract"
 
-#### Step 4: The agent-facing and review-log renderers
+#### Step 4: The agent-facing and review-log renderers ([#746])
 
 **Cause:** the same unbounded payload that took over the viewport is echoed verbatim into the agent's context on every denial (the human's constraint is rows; the agent's is tokens), and the review log persists prompt wording as a side effect of assembly rather than as a configured render.
 
@@ -1018,9 +1018,9 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["Step 1: PromptPayload + builders"] --> S2["Step 2: bounded local renderers (#710)"]
-    S2 --> S3["Step 3: cross-boundary swap (feat!)"]
-    S2 --> S4["Step 4: agent + review-log renderers"]
+    S1["Step 1 (#744): PromptPayload + builders"] --> S2["Step 2 (#710): bounded local renderers"]
+    S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
+    S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
     S5["Step 5: forwarding liveness (#721)"]
     S7["Step 7: model-judge agentDir (#732)"]
@@ -1086,6 +1086,9 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#735]: https://github.com/gotgenes/pi-packages/issues/735
 [#736]: https://github.com/gotgenes/pi-packages/issues/736
 [#742]: https://github.com/gotgenes/pi-packages/issues/742
+[#744]: https://github.com/gotgenes/pi-packages/issues/744
+[#745]: https://github.com/gotgenes/pi-packages/issues/745
+[#746]: https://github.com/gotgenes/pi-packages/issues/746
 [#645]: https://github.com/gotgenes/pi-packages/issues/645
 [#655]: https://github.com/gotgenes/pi-packages/issues/655
 [#658]: https://github.com/gotgenes/pi-packages/issues/658
