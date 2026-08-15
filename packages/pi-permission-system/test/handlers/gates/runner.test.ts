@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DenialContext } from "#src/denial-messages";
 import { EXTENSION_TAG } from "#src/denial-messages";
 import type { GateBypass } from "#src/handlers/gates/descriptor";
+import type { PermissionDecisionEvent } from "#src/permission-events";
 import { SessionApproval } from "#src/session-approval";
 import {
   makeDenialDescriptor,
@@ -529,7 +530,10 @@ describe("GateRunner.run — null and bypass dispatch", () => {
     };
     const bypass: GateBypass = { action: "allow", decision };
     await runner.run(bypass, null);
-    expect(deps.reporter.emitDecision).toHaveBeenCalledWith(decision);
+    expect(deps.reporter.emitDecision).toHaveBeenCalledWith({
+      ...decision,
+      requestId: expect.stringMatching(/^perm-/),
+    });
     expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
   });
 
@@ -561,15 +565,19 @@ function makeRecordingRunner(
     event: string;
     details: Record<string, unknown>;
   }> = [];
+  const decisions: PermissionDecisionEvent[] = [];
   const { runner, deps } = makeGateRunner({
     ...overrides,
     reporter: {
       writeReviewLog: (event, details) => {
         reviewWrites.push({ event, details });
       },
+      emitDecision: (event) => {
+        decisions.push(event);
+      },
     },
   });
-  return { runner, deps, reviewWrites };
+  return { runner, deps, reviewWrites, decisions };
 }
 
 describe("GateRunner — request identity", () => {
@@ -639,5 +647,62 @@ describe("GateRunner — request identity", () => {
     expect(reviewWrites[0].details.requestId).not.toBe(
       reviewWrites[1].details.requestId,
     );
+  });
+
+  it("stamps the session-approved entry and its decision event with one id", async () => {
+    const { runner, reviewWrites, decisions } = makeRecordingRunner({
+      resolveResult: makeCheckResult({
+        source: "session",
+        matchedPattern: "git *",
+      }),
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(decisions[0].requestId).toBe(reviewWrites[0].details.requestId);
+  });
+
+  it("stamps the auto-approved entry and its decision event with one id", async () => {
+    const { runner, reviewWrites, decisions } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
+      yolo: true,
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(decisions[0].requestId).toBe(reviewWrites[0].details.requestId);
+  });
+
+  it("stamps the policy-denied entry and its decision event with one id", async () => {
+    const { runner, reviewWrites, decisions } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(decisions[0].requestId).toBe(reviewWrites[0].details.requestId);
+  });
+
+  it("stamps a bypass's log entry and decision event with one id", async () => {
+    const { runner, reviewWrites, decisions } = makeRecordingRunner();
+    const bypass: GateBypass = {
+      action: "allow",
+      log: {
+        event: "permission_request.infrastructure_auto_allowed",
+        details: { path: "/x" },
+      },
+      decision: {
+        surface: "read",
+        value: "/x",
+        result: "allow",
+        resolution: "infrastructure_auto_allowed",
+        origin: null,
+        agentName: null,
+        matchedPattern: null,
+      },
+    };
+    await runner.run(bypass, null);
+    expect(decisions[0].requestId).toMatch(/^perm-/);
+    expect(decisions[0].requestId).toBe(reviewWrites[0].details.requestId);
+  });
+
+  it("stamps an allow decision event even when nothing is written to the log", async () => {
+    const { runner, decisions } = makeRecordingRunner();
+    await runner.run(makeDescriptor(), null);
+    expect(decisions[0].requestId).toMatch(/^perm-/);
   });
 });

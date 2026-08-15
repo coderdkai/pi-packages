@@ -11,7 +11,11 @@ import { createPermissionRequestId } from "#src/permission-request-id";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { PermissionCheckResult } from "#src/types";
-import type { GateDescriptor, GateResult } from "./descriptor";
+import type {
+  DecisionEventFacts,
+  GateDescriptor,
+  GateResult,
+} from "./descriptor";
 import { isGateBypass } from "./descriptor";
 import {
   buildDecisionEvent,
@@ -64,7 +68,7 @@ export class GateRunner {
         });
       }
       if (gate.decision) {
-        this.reporter.emitDecision(gate.decision);
+        this.emitDecision(requestId, gate.decision);
       }
       return { action: "allow" };
     }
@@ -72,6 +76,14 @@ export class GateRunner {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * The one place a decision event acquires its request id, so no emit path
+   * can be added that forgets it.
+   */
+  private emitDecision(requestId: string, facts: DecisionEventFacts): void {
+    this.reporter.emitDecision({ requestId, ...facts });
+  }
 
   private async runDescriptor(
     descriptor: GateDescriptor,
@@ -109,7 +121,8 @@ export class GateRunner {
         resolution: "session_approved",
         sessionApprovalPattern: check.matchedPattern,
       });
-      this.reporter.emitDecision(
+      this.emitDecision(
+        requestId,
         buildDecisionEvent(
           descriptor.decision,
           check,
@@ -131,7 +144,8 @@ export class GateRunner {
         ...logContext,
         resolution: "auto_approved",
       });
-      this.reporter.emitDecision(
+      this.emitDecision(
+        requestId,
         buildDecisionEvent(
           descriptor.decision,
           yoloGrant,
@@ -186,7 +200,8 @@ export class GateRunner {
       gateResult.action === "allow" && gateResult.sessionApproval !== undefined;
 
     // 5. Emit decision event
-    this.reporter.emitDecision(
+    this.emitDecision(
+      requestId,
       buildDecisionEvent(
         descriptor.decision,
         check,

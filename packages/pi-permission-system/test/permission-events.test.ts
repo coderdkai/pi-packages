@@ -120,6 +120,7 @@ describe("emitDecisionEvent", () => {
     overrides: Partial<PermissionDecisionEvent> = {},
   ): PermissionDecisionEvent {
     return {
+      requestId: "perm-00000000-0000-4000-8000-000000000000",
       surface: "bash",
       value: "git status",
       result: "allow",
@@ -130,6 +131,13 @@ describe("emitDecisionEvent", () => {
       ...overrides,
     };
   }
+
+  it("carries the request id that identifies the decided request", () => {
+    const bus = makeEventBus();
+    emitDecisionEvent(bus, makeDecisionEvent({ requestId: "perm-abc" }));
+    const payload = bus.emit.mock.calls[0][1] as PermissionDecisionEvent;
+    expect(payload.requestId).toBe("perm-abc");
+  });
 
   it("emits on the permissions:decision channel", () => {
     const bus = makeEventBus();
