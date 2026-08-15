@@ -1,0 +1,171 @@
+import { describeBashCommandContext } from "#src/denial-messages";
+import { fitLinesToWidth } from "#src/presentation/line-fitting";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
+
+/**
+ * Render a {@link PromptPayload} for a human deciding an ask (ADR 0011 §5).
+ *
+ * The payload is complete by contract, so this is where elision happens: the
+ * dialog and the `select`/`input` fallback both render through here under
+ * their own budget, which is what makes a bounded prompt a property of the
+ * render rather than of what the gate assembled.
+ *
+ * The layout is one fact per line, `label : value`, labels aligned. A fact
+ * whose text an earlier line already carries is not repeated — a bash ask's
+ * gate surface is its tool name, and a generic tool ask's value is the tool —
+ * so every line the render spends states something new.
+ */
+export function renderPromptDialog(
+  payload: PromptPayload,
+  budget: DialogBudget,
+): DialogView {
+  const lines = layout(coreFacts(payload));
+  return { lines: fitLinesToWidth(lines, budget.width), elided: false };
+}
+
+/** How much room a renderer has. */
+export interface DialogBudget {
+  /** Maximum rendered rows. */
+  readonly maxRows: number;
+  /** Maximum characters of any one field's text. */
+  readonly fieldMaxWidth: number;
+  /** Terminal width the lines are wrapped to, so a row count is meaningful. */
+  readonly width: number;
+}
+
+/** What a renderer produced, and whether it had to leave anything out. */
+export interface DialogView {
+  /** Wrapped to the budget's width: each entry is one visual row. */
+  readonly lines: readonly string[];
+  /** True when any field was shortened or any entry dropped. */
+  readonly elided: boolean;
+}
+
+/**
+ * The budget that elides nothing — the complete view an operator must be able
+ * to reach while the decision is pending (ADR 0011 §4).
+ */
+export function completeViewBudget(width: number): DialogBudget {
+  return {
+    maxRows: Number.POSITIVE_INFINITY,
+    fieldMaxWidth: Number.POSITIVE_INFINITY,
+    width,
+  };
+}
+
+/** One rendered fact. */
+interface Fact {
+  readonly label: string;
+  readonly text: string;
+}
+
+/**
+ * The invariant core (ADR 0011 §3), in reading order: who is asking, what they
+ * called, what gated it, the decision-relevant value, and what will actually
+ * run.
+ */
+function coreFacts(payload: PromptPayload): Fact[] {
+  const { request } = payload;
+  const facts: Fact[] = [];
+  const requester = requesterFact(payload);
+  if (requester) {
+    facts.push(requester);
+  }
+  if (request.toolName !== null) {
+    facts.push({ label: "tool", text: toolText(payload) });
+  }
+  const value = valueLabel(payload);
+  if (request.surface !== request.toolName && request.surface !== value) {
+    facts.push({ label: "surface", text: request.surface });
+  }
+  if (request.matchedPattern !== null) {
+    facts.push({ label: "rule", text: request.matchedPattern });
+  }
+  if (request.value !== "" && request.value !== request.toolName) {
+    facts.push({ label: value, text: request.value });
+  }
+  if (request.executedUnit !== null) {
+    facts.push({ label: "runs", text: request.executedUnit });
+  }
+  const context = describeBashCommandContext(
+    request.commandContext ?? undefined,
+  );
+  if (context !== undefined) {
+    facts.push({ label: "context", text: context });
+  }
+  return facts;
+}
+
+/**
+ * Who is asking.
+ *
+ * A forwarded ask always names its requester — that the ask came from a
+ * subagent is itself a core fact — while an unnamed local requester states
+ * nothing, and a line asserting the default would spend a row saying so.
+ */
+function requesterFact(payload: PromptPayload): Fact | undefined {
+  const { agentName, forwarded, sessionId } = payload.request.requester;
+  if (!forwarded) {
+    return agentName ? { label: "agent", text: agentName } : undefined;
+  }
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || intentional: a version-skewed request carries "" rather than null
+  const name = agentName || "unknown";
+  return {
+    label: "subagent",
+    text: sessionId ? `${name} · session ${sessionId}` : name,
+  };
+}
+
+/** The gated tool, and the name the agent actually called when they differ. */
+function toolText(payload: PromptPayload): string {
+  const { toolName, invokedToolName } = payload.request;
+  return invokedToolName === null
+    ? String(toolName)
+    : `${String(toolName)} (invoked as ${invokedToolName})`;
+}
+
+/** What the decision-relevant value is called, per ask shape. */
+function valueLabel(payload: PromptPayload): string {
+  switch (payload.kind) {
+    case "bash":
+    case "bash_external_directory":
+      return "command";
+    case "mcp":
+      return "target";
+    case "tool":
+      return "tool";
+    case "path":
+    case "external_directory":
+      return "path";
+    case "skill":
+    case "skill_read":
+      return "skill";
+    case "forwarded":
+      return forwardedValueLabel(payload.request.surface);
+  }
+}
+
+/**
+ * A forwarded request carries the child's *display* projection — its tool name
+ * as the surface — rather than the child's own payload, so the label is
+ * inferred from it and falls back to a neutral one.
+ *
+ * Dissolves when the payload replaces `message` on the wire (#745): the
+ * serving node will then hold the child's real `kind`.
+ */
+function forwardedValueLabel(surface: string): string {
+  switch (surface) {
+    case "bash":
+      return "command";
+    case "skill":
+      return "skill";
+    default:
+      return "value";
+  }
+}
+
+/** Align the labels into a `label : value` column. */
+function layout(facts: readonly Fact[]): string[] {
+  const width = Math.max(0, ...facts.map((fact) => fact.label.length));
+  return facts.map((fact) => `${fact.label.padEnd(width)} : ${fact.text}`);
+}
