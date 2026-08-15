@@ -46,14 +46,50 @@ export function renderPromptDialog(
   };
 }
 
-/** How much room a renderer has. */
-export interface DialogBudget {
+/**
+ * How much room a render has, as the operator configured it.
+ *
+ * Separate from the terminal width, which only the component rendering a frame
+ * knows — the configured half is read once per ask, the width once per frame.
+ */
+export interface RenderBudget {
   /** Maximum rendered rows. */
   readonly maxRows: number;
   /** Maximum characters of any one field's text. */
   readonly fieldMaxWidth: number;
+}
+
+/** A {@link RenderBudget} against the width its rows are counted at. */
+export interface DialogBudget extends RenderBudget {
   /** Terminal width the lines are wrapped to, so a row count is meaningful. */
   readonly width: number;
+}
+
+/**
+ * The budget when the operator configures neither field.
+ *
+ * Twenty-four rows plus the decision options and the hint fit a thirty-row
+ * terminal; four hundred characters is roughly four wrapped rows, which is what
+ * actually bounds a here-string command.
+ */
+export const DEFAULT_RENDER_BUDGET: RenderBudget = {
+  maxRows: 24,
+  fieldMaxWidth: 400,
+};
+
+/** The two prompt-budget knobs, as the extension config carries them. */
+export interface PromptBudgetConfig {
+  readonly promptMaxRows?: number;
+  readonly promptFieldMaxWidth?: number;
+}
+
+/** The configured budget, falling back per field to {@link DEFAULT_RENDER_BUDGET}. */
+export function resolveRenderBudget(config: PromptBudgetConfig): RenderBudget {
+  return {
+    maxRows: config.promptMaxRows ?? DEFAULT_RENDER_BUDGET.maxRows,
+    fieldMaxWidth:
+      config.promptFieldMaxWidth ?? DEFAULT_RENDER_BUDGET.fieldMaxWidth,
+  };
 }
 
 /**
