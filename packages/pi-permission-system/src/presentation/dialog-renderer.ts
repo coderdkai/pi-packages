@@ -19,7 +19,7 @@ export function renderPromptDialog(
   payload: PromptPayload,
   budget: DialogBudget,
 ): DialogView {
-  const lines = layout(coreFacts(payload));
+  const lines = layout([...coreFacts(payload), ...evidenceFacts(payload)]);
   return { lines: fitLinesToWidth(lines, budget.width), elided: false };
 }
 
@@ -94,6 +94,20 @@ function coreFacts(payload: PromptPayload): Fact[] {
     facts.push({ label: "context", text: context });
   }
   return facts;
+}
+
+/**
+ * The decision evidence, in payload order.
+ *
+ * An entry's `detail` rides its own line rather than becoming a second entry,
+ * so an elision can never show a path while dropping what it resolves to.
+ */
+function evidenceFacts(payload: PromptPayload): Fact[] {
+  return payload.evidence.map((entry) => ({
+    label: entry.label,
+    text:
+      entry.detail === null ? entry.text : `${entry.text} → ${entry.detail}`,
+  }));
 }
 
 /**

@@ -186,6 +186,86 @@ describe("renderPromptDialog", () => {
     });
   });
 
+  describe("evidence", () => {
+    it("renders each entry under the core, sharing the label column", () => {
+      expect(
+        render({
+          kind: "bash",
+          request: requestFacts({
+            surface: "bash",
+            toolName: "bash",
+            value: "rm -rf build",
+            matchedPattern: "rm *",
+          }),
+          evidence: [
+            {
+              label: "full command",
+              text: "npm run clean && rm -rf build",
+              detail: null,
+            },
+          ],
+        }),
+      ).toEqual([
+        "tool         : bash",
+        "rule         : rm *",
+        "command      : rm -rf build",
+        "full command : npm run clean && rm -rf build",
+      ]);
+    });
+
+    it("keeps an entry's detail on the entry's own line", () => {
+      expect(
+        render({
+          kind: "bash_external_directory",
+          request: requestFacts({
+            surface: "external_directory",
+            toolName: "bash",
+            value: "cat /etc/hosts /tmp/x",
+            matchedPattern: "*",
+          }),
+          evidence: [
+            { label: "working directory", text: "/repo", detail: null },
+            {
+              label: "external path",
+              text: "/etc/hosts",
+              detail: "/private/etc/hosts",
+            },
+            { label: "external path", text: "/tmp/x", detail: null },
+          ],
+        }),
+      ).toEqual([
+        "tool              : bash",
+        "surface           : external_directory",
+        "rule              : *",
+        "command           : cat /etc/hosts /tmp/x",
+        "working directory : /repo",
+        "external path     : /etc/hosts → /private/etc/hosts",
+        "external path     : /tmp/x",
+      ]);
+    });
+
+    it("renders a skill read's path", () => {
+      expect(
+        render({
+          kind: "skill_read",
+          request: requestFacts({
+            surface: "skill",
+            toolName: null,
+            value: "deploy",
+            matchedPattern: null,
+          }),
+          evidence: [
+            {
+              label: "read path",
+              text: "/skills/deploy/SKILL.md",
+              detail: null,
+            },
+          ],
+        }),
+      ).toEqual(["skill     : deploy", "read path : /skills/deploy/SKILL.md"]);
+    });
+  });
+
   describe("a forwarded ask", () => {
     it("names the requesting subagent and its session", () => {
       expect(
