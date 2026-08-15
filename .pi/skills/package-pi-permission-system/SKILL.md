@@ -104,6 +104,7 @@ The `permission` object uses deep-shallow merge; scalar fields use simple replac
   A field on the runtime type but not the merge intermediate is silently dropped before runtime (the #332 / #347 bug class).
   After #356, omitting a field from `UnifiedPermissionConfig` that `normalizePermissionSystemConfig` reads is a **compile error** — `normalizePermissionSystemConfig` reads fields directly from the typed `UnifiedPermissionConfig` parameter, so `tsc` catches the gap immediately.
 - When a config example sets a policy for `write`, include the same policy for `edit` — both tools modify files and users expect them gated together.
+- `promptMaxRows` (24) and `promptFieldMaxWidth` (400) bound what an ask prompt renders; `resolveRenderBudget` (`src/presentation/dialog-renderer.ts`) owns their defaults, so neither belongs in `DEFAULT_EXTENSION_CONFIG`.
 
 ## Log writes
 
@@ -114,6 +115,9 @@ The boundary to repeat verbatim in any doc or reply: a value bound to a sensitiv
 Redaction is applied at **two** points, and the second is not redundant — `getToolInputPreviewForLog` flattens tool input to a string before the writer sees it, so `serializeRedactedToolInputPreview` (`src/tool-input-preview.ts`) is the only place its keys still exist.
 Never redact `formatToolInputForPrompt`: the user must see the real input to decide.
 Governing record: `docs/decisions/0010-permission-log-secret-exposure.md` (Refs #647).
+
+The dialog's size bounds are not redaction and must not be conflated with it: `renderPromptDialog` (`src/presentation/dialog-renderer.ts`) applies a *quantity* cap uniformly, never reads a value to decide what to hide, and keeps the complete text one keystroke away (`Ctrl+O`).
+A proposed bound that inspects the value to choose what to shorten has become redaction by another name (Refs #710).
 
 ## Cross-Extension Integration
 

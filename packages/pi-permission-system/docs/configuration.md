@@ -36,7 +36,7 @@ See [migration/0644-project-trust-gating.md](migration/0644-project-trust-gating
 4. Project agent frontmatter
 
 The `permission` object uses deep-shallow merge: string-vs-string replaces; both-object shallow-merges pattern maps; string-vs-object the override wins entirely.
-Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`, `doublePressToConfirm`, `forwardingTimeoutMs`) use simple replacement.
+Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`, `doublePressToConfirm`, `forwardingTimeoutMs`, `promptMaxRows`, `promptFieldMaxWidth`) use simple replacement.
 
 **Invalid higher-precedence scope fails closed.**
 If a non-global scope (project config, global agent frontmatter, or project agent frontmatter) is present but fails to load or validate, it no longer contributes an empty scope that silently inherits the lower scope's rules.
@@ -106,6 +106,8 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
 | `yoloMode`                  | `false`  | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                                                                         |
 | `doublePressToConfirm`      | `true`   | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.                                                  |
 | `forwardingTimeoutMs`       | `600000` | How long a subagent waits for the parent session to answer a forwarded permission request, in milliseconds. A child whose in-process parent is not draining its inbox gives up in ~2 s regardless. |
+| `promptMaxRows`             | `24`     | Max rows a permission prompt renders before eliding its evidence. The request's own facts are never elided by this budget; `Ctrl+O` expands the prompt to the complete request.                    |
+| `promptFieldMaxWidth`       | `400`    | Max characters of any one field shown in a permission prompt. This is what bounds a single long field (a here-string command, say) that would otherwise fill the prompt through wrapping.          |
 | `toolInputPreviewMaxLength` | `200`    | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.                                                    |
 | `toolTextSummaryMaxLength`  | `80`     | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                                                              |
 | `piInfrastructureReadPaths` | `[]`     | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME`/`${HOME}` expansion and wildcard patterns (`*`, `?`).                                     |
@@ -129,9 +131,21 @@ Arrow keys / `j`/`k` move the highlight, `enter` confirms the highlighted option
 With `doublePressToConfirm` enabled (the default), a letter hotkey **arms** its action and shows a `Press y again to approve.` hint; press the same key again to commit.
 Set `doublePressToConfirm` to `false` to commit on the first press.
 
-Pi's tool-expansion binding (`app.tools.expand`, `Ctrl+O` by default) stays live while the dialog is open, so you can expand a truncated tool preview before deciding.
+Pi's tool-expansion binding (`app.tools.expand`, `Ctrl+O` by default) stays live while the dialog is open.
+It expands both the prompt itself — to the complete request, unbounded by `promptMaxRows` and `promptFieldMaxWidth` — and the host's pending tool call, so one keystroke shows you everything before you decide.
 It only toggles the display — it never resolves, commits, or arms the pending decision.
 While you are typing a denial reason it is not intercepted, so a rebound printable key still reaches the reason editor.
+
+### What a prompt shows
+
+The prompt renders one fact per line, with the requesting agent (and, for a forwarded subagent ask, its session), the tool, the gate surface, the matched rule, the decision-relevant value, and — for a wrapper such as `xargs` — the command that will actually run.
+Those facts are always present: a budget may shorten a long one, never drop it.
+
+Everything else is evidence — the full command a gated sub-command came from, the working directory a path escaped, the tool-input preview — and it is what gives way when the render does not fit.
+A shortened field or a dropped entry is marked with an ellipsis, and `Ctrl+O` shows the complete request.
+Raise `promptMaxRows` to see more evidence inline; raise `promptFieldMaxWidth` to see more of a long command.
+
+Non-TUI contexts render the same facts under the same budget, without the colour or the expansion.
 
 Non-TUI contexts (RPC / frontend-driven sessions) keep the single-select prompt and are unaffected by `doublePressToConfirm`.
 

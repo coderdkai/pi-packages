@@ -377,9 +377,13 @@ The payload's `request` group — requester and forwarded-ness, tool name and in
 The dialog is bounded by a row budget plus a per-field width cap, the review log by its own configured limits, and the `permissions:ui_prompt` broadcast receives the `request` facts only — the narrowest renderer, because the bus is the one channel an extension observes without the operator having named it.
 Denial text is a fifth render of the same facts under one extra rule: it identifies the call rather than reproducing it, since the agent already holds its own tool input.
 
-The payload exists; the bounded renderers do not yet.
-Every gate emits a `PromptPayload` (`src/presentation/`), and `PromptPermissionDetails` requires one, so the six former assembly sites are gone — but each consumer still reads a flat `message`, rendered from the payload by the transitional `renderLegacyMessage`.
-So `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound only the non-bash previews, and nothing bounds a render's height until the dialog renderer lands ([#710]).
+The payload exists, and the human-facing renderers are bounded.
+Every gate emits a `PromptPayload` (`src/presentation/`), and `PromptPermissionDetails` requires one, so the six former assembly sites are gone.
+`renderPromptDialog` renders it for the inline dialog and the `select`/`input` fallback under `promptMaxRows` plus `promptFieldMaxWidth`, and `Ctrl+O` expands the dialog to the complete request.
+The cap applies to the `request` facts too: never elided means never *omitted* — each keeps its line, and a long one is shortened, marked, and reachable in full.
+Without that reading a bounded render is unreachable, since the decision-relevant value is itself the pathological field in the reported case ([#710]).
+
+The wire, the broadcast, and the review log still read the flat `message` that `renderLegacyMessage` derives from the payload, so `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound the non-bash previews the payload carries as evidence.
 ADR 0011 records what each dependent item becomes under the contract.
 
 ## Two-phase checking
@@ -823,7 +827,9 @@ src/
 │   ├── path-ask-payload.ts   `buildPathAskPayload`, `buildExternalDirectoryAskPayload`, `buildBashExternalDirectoryAskPayload` — each escaping path carries its canonical alias as that evidence entry's `detail`, so a bounded render cannot show a path while eliding what it resolves to
 │   ├── skill-ask-payload.ts  `buildSkillAskPayload`, `buildSkillPathAskPayload` — the skill is the decision-relevant value (it is what the policy names); a skill read carries the path it was reached through as evidence
 │   ├── forwarded-ask-payload.ts `buildForwardedAskPayload` — the serving node's payload for an ask forwarded up from a subagent; carries the child's still-pre-rendered sentence as one evidence entry until the payload replaces `message` on the wire
-│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string every consumer still reads, rendered from the payload alone. Transitional: it goes when the last `message` reader does
+│   ├── dialog-renderer.ts    `renderPromptDialog(payload, budget, paint)` — the bounded render for the inline dialog and the `select`/`input` fallback: aligned one-fact-per-line layout, a per-field width cap, a row budget over the evidence, and whole-token highlighting of the flagged element. Also `RenderBudget`/`DEFAULT_RENDER_BUDGET`/`resolveRenderBudget` (the configured budget) and `completeViewBudget` (the complete view). Constraint: the row budget bounds evidence and the field cap bounds the core — a core fact is shortened, never dropped (ADR 0011 §3 over §5)
+│   ├── line-fitting.ts       `fitLinesToWidth` — wrap-then-truncate to a terminal width, so each line is one visual row; shared by the `ctx.ui.custom` dialog, whose contract requires it, and by the renderer, which cannot count rows before wrapping
+│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string the wire, the broadcast, and the review log still read, rendered from the payload alone. Transitional: it goes when the last `message` reader does
 ├── tool-input-preview.ts              Pure tool-input text utilities (truncation, line counting, count formatting), serialization + default constants; `serializeToolInputPreview` (prompt, unredacted) and `serializeRedactedToolInputPreview` (log) are separate entry points because the input is flattened to a string before the writer sees its keys
 ├── tool-input-prompt-formatters.ts    Pure per-tool prompt formatters (edit/write/read) + getPromptPath helper
 ├── tool-preview-formatter.ts          ToolPreviewFormatter class - config-dependent prompt + log formatting; seam-first dispatch consults ToolInputFormatterLookup before built-in switch
@@ -883,10 +889,11 @@ Directory check: the spine rewrites the ~8 cohesive presentation modules at the 
 
 Open-issue sweep dispositions (user-decided):
 
-- [#710] — adopted as Step 2 (the bounded local renderers are its fix by construction).
+- [#710] — adopted as Step 2 (the bounded local renderers are its fix by construction); closed with it.
 - PR [#738] (highlight the flagged element in TUI prompts) — swept in during Step 1 planning, having been filed the day before this phase was scoped.
   Highlighting is a **render** concern under ADR 0011, so its intent is adopted in Step 2's dialog renderer with authorship credited, and the PR closes as superseded rather than being rebased — the same disposition [#716] received.
-- [#713] — its inner-command fact enters the payload in Step 1 and becomes visible in every render in Step 2; it closes with Step 2.
+  Both were adopted and credited when Step 2 landed.
+- [#713] — its inner-command fact enters the payload in Step 1 and becomes visible in every render in Step 2 (the `runs` line); it closed with Step 2.
 - [#721] / [#735] — adopted as Step 5: out-of-process forwarding liveness; [#735]'s scenario 1 (dead parent) is resolved by it, while scenario 2 (a parent whose turn is occupied) stays with the [#722] diagnosis, which remains open and out of scope.
 - [#726] — adopted as Step 6 (decision provenance).
 - [#732] — adopted as Step 7 (model-judge `agentDir` fix).
@@ -949,13 +956,18 @@ The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows
 
 Release: batch "presentation-payload"
 
-#### Step 2: Bounded local renderers — the dialog and fallback render the payload under a budget ([#710])
+#### ✅ Step 2: Bounded local renderers — the dialog and fallback render the payload under a budget ([#710])
 
 **Cause:** same cause, consumed at the human's decision surface — with no renderer layer, the dialog shows whatever the assembler produced, so a subagent's oversized tool input takes over the parent's viewport and the operator decides blind or scrolls away the transcript.
 
 - **Smell:** Category C, with the user-visible symptom filed as the [#710] bug.
 - **Target:** new `src/presentation/dialog-renderer.ts` rendering the payload for the inline TUI dialog and the `select`/`input` fallback under a row budget plus a per-field width cap (ADR 0011 §5), with marked elision and a reachable complete view (§4); [#716]'s aligned one-fact-per-line rendering intent adopted here; the invariant core (§3) — including `executedUnit` — always visible, which closes [#713]; the row-budget config field follows the established `config-schema.ts` → `extension-config.ts` → `mergeUnifiedConfigs()` path (the #332/#347 drop class) with `pnpm run gen:schema`.
 - **Outcome:** a forwarded ask with pathological input renders within the budget with the complete view reachable; [#710] and [#713] close; the local prompt path no longer reads `details.message`.
+- **Landed:** the reported ask — a 200-line here-string, measured at 202 rows locally and 205 forwarded, identically at widths 80/120/160 — renders inside the 24-row default with its request facts intact.
+  Planning settled the reading that makes that possible: §3's "never elided" means never *omitted*, so the field cap applies to the core and §5's own here-string rationale is coherent with it.
+  The row budget therefore bounds evidence and the field cap bounds the core, with an entry admitted whole or dropped.
+  `Ctrl+O` gained the dialog's own expansion alongside its host forward ([#642]) rather than a second binding, and the hint names it only when the render dropped something.
+  PR [#738]'s highlight target is derived from the payload rather than carried as a `PromptPermissionDetails` field, so it cannot drift from the rendered text.
 - **Impact 5 / Risk 3 / Priority 15.**
 
 Release: batch "presentation-payload"
@@ -1032,7 +1044,7 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["✅ Step 1 (#744): PromptPayload + builders"] --> S2["Step 2 (#710): bounded local renderers"]
+    S1["✅ Step 1 (#744): PromptPayload + builders"] --> S2["✅ Step 2 (#710): bounded local renderers"]
     S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
     S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
@@ -1105,6 +1117,7 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#745]: https://github.com/gotgenes/pi-packages/issues/745
 [#746]: https://github.com/gotgenes/pi-packages/issues/746
 [#645]: https://github.com/gotgenes/pi-packages/issues/645
+[#642]: https://github.com/gotgenes/pi-packages/issues/642
 [#655]: https://github.com/gotgenes/pi-packages/issues/655
 [#658]: https://github.com/gotgenes/pi-packages/issues/658
 [#680]: https://github.com/gotgenes/pi-packages/issues/680
