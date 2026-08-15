@@ -8,56 +8,30 @@ import {
 } from "#src/permission-prompts";
 import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolInputFormatterLookup } from "#src/tool-input-formatter-registry";
-import {
-  TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
-  TOOL_INPUT_PREVIEW_MAX_LENGTH,
-  TOOL_TEXT_SUMMARY_MAX_LENGTH,
-} from "#src/tool-input-preview";
-import { ToolPreviewFormatter } from "#src/tool-preview-formatter";
+import type { ToolPreviewFormatter } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
+import {
+  makePermissionCheckResult,
+  makeToolPreviewFormatter,
+} from "#test/helpers/presentation-fixtures";
 
 function makeFormatter(
   lookup?: ToolInputFormatterLookup,
 ): ToolPreviewFormatter {
-  return new ToolPreviewFormatter(
-    {
-      toolInputPreviewMaxLength: TOOL_INPUT_PREVIEW_MAX_LENGTH,
-      toolTextSummaryMaxLength: TOOL_TEXT_SUMMARY_MAX_LENGTH,
-      toolInputLogPreviewMaxLength: TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
-    },
-    lookup,
-  );
+  return makeToolPreviewFormatter({}, lookup);
 }
 
 function makeMcpLookup(preview: string): ToolInputFormatterLookup {
   return { get: (name) => (name === "mcp" ? () => preview : undefined) };
 }
 
-function toolResult(
-  toolName: string,
-  overrides: Partial<PermissionCheckResult> = {},
-): PermissionCheckResult {
-  return {
-    toolName,
-    state: "ask",
-    source: "tool",
-    origin: "builtin",
-    ...overrides,
-  };
-}
+const toolResult = makePermissionCheckResult;
 
 function mcpResult(
   target: string,
   overrides: Partial<PermissionCheckResult> = {},
 ): PermissionCheckResult {
-  return {
-    toolName: "mcp",
-    target,
-    state: "ask",
-    source: "tool",
-    origin: "builtin",
-    ...overrides,
-  };
+  return makePermissionCheckResult("mcp", { target, ...overrides });
 }
 
 function skillEntry(name: string): SkillPromptEntry {
