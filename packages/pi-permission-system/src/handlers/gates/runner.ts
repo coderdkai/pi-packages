@@ -94,11 +94,14 @@ export class GateRunner {
       });
     }
 
+    // The fields every review-log write for this gate shares, whatever the
+    // resolution — built once so a field added here reaches all of them.
+    const logContext = { ...descriptor.logContext, agentName };
+
     // 2. Session-hit fast path
     if (check.source === "session") {
       this.reporter.writeReviewLog("permission_request.session_approved", {
-        ...descriptor.logContext,
-        agentName,
+        ...logContext,
         resolution: "session_approved",
         sessionApprovalPattern: check.matchedPattern,
       });
@@ -121,8 +124,7 @@ export class GateRunner {
     const yoloGrant = resolveYoloGrant(check, this.isYoloEnabled());
     if (yoloGrant) {
       this.reporter.writeReviewLog("permission_request.auto_approved", {
-        ...descriptor.logContext,
-        agentName,
+        ...logContext,
         resolution: "auto_approved",
       });
       this.reporter.emitDecision(
@@ -171,7 +173,7 @@ export class GateRunner {
       },
       writeLog: (event, details) =>
         this.reporter.writeReviewLog(event, details),
-      logContext: { ...descriptor.logContext, agentName },
+      logContext,
       messages,
     });
 
