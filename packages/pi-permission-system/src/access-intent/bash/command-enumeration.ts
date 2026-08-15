@@ -1,4 +1,7 @@
-import { forEachNestedExecution } from "#src/access-intent/bash/nested-execution";
+import {
+  EXECUTION_HOST_TYPES,
+  forEachNestedExecution,
+} from "#src/access-intent/bash/nested-execution";
 import type { TSNode } from "#src/access-intent/bash/parser";
 import type { BashCommandContext } from "#src/types";
 
@@ -50,14 +53,19 @@ const COMMAND_ENUM_DESCEND = new Set([
 ]);
 
 /**
- * Named node types skipped during command enumeration: redirect targets,
- * comments, and heredoc bodies — none is a command to evaluate.
+ * Named node types abandoned during command enumeration: they are neither
+ * commands nor able to host one, so nothing in their subtree ever runs.
+ *
+ * A redirect is deliberately NOT listed here. Its destination is not a command,
+ * but its subtree can host a substitution that really executes, so it is an
+ * {@link EXECUTION_HOST_TYPES} member instead — conflating the two is the
+ * bypass #741 fixed.
+ *
  * Anonymous tokens (chain operators `&&`/`;`/`|`, substitution and subshell
  * delimiters `$(`/`)`/`` ` ``/`(`) are filtered by the `isNamed` guard, not
  * listed here.
  */
 const COMMAND_ENUM_SKIP = new Set([
-  "file_redirect",
   "heredoc_redirect",
   "herestring_redirect",
   "comment",
@@ -108,6 +116,13 @@ function collectCommandsInto(
     );
     // A command's text already contains any substitution; descend its subtree
     // to ALSO emit the inner commands of command/process substitutions.
+    collectHostedCommands(node, out);
+    return;
+  }
+
+  if (EXECUTION_HOST_TYPES.has(node.type)) {
+    // Not a command itself, but its subtree can host one that really runs
+    // (`> $(rm x)`, `< <(rm c)`). Emit only what it hosts (#741).
     collectHostedCommands(node, out);
     return;
   }

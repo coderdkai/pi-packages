@@ -895,6 +895,60 @@ describe("BashProgram", () => {
       expect(program.commands()).toEqual([{ text: "npm install" }]);
     });
 
+    describe("commands hosted in a redirect target (#741)", () => {
+      it.each([
+        ["echo hi > $(rm x)", "echo hi", "rm x"],
+        ["echo hi >> $(rm b)", "echo hi", "rm b"],
+        ["echo hi 2> `rm d`", "echo hi", "rm d"],
+        ["echo hi &> $(rm q)", "echo hi", "rm q"],
+      ])("descends into %s", async (command, enclosing, inner) => {
+        const program = await BashProgram.parse(command, normalizer);
+        expect(program.commands()).toEqual([
+          { text: enclosing },
+          { text: inner, context: "command_substitution" },
+        ]);
+      });
+
+      it("descends into a process substitution read as input", async () => {
+        const program = await BashProgram.parse("cat < <(rm c)", normalizer);
+        expect(program.commands()).toEqual([
+          { text: "cat" },
+          { text: "rm c", context: "process_substitution" },
+        ]);
+      });
+
+      it("descends into a substitution concatenated into the destination", async () => {
+        const program = await BashProgram.parse(
+          "echo hi > ${DIR}/$(rm z)",
+          normalizer,
+        );
+        expect(program.commands()).toEqual([
+          { text: "echo hi" },
+          { text: "rm z", context: "command_substitution" },
+        ]);
+      });
+
+      it("descends into a redirect on a chained command", async () => {
+        const program = await BashProgram.parse(
+          "cd /p && echo hi > $(rm x)",
+          normalizer,
+        );
+        expect(program.commands()).toEqual([
+          { text: "cd /p" },
+          { text: "echo hi" },
+          { text: "rm x", context: "command_substitution" },
+        ]);
+      });
+
+      it("leaves a plain redirect destination unenumerated", async () => {
+        const program = await BashProgram.parse(
+          "echo hi > out.txt",
+          normalizer,
+        );
+        expect(program.commands()).toEqual([{ text: "echo hi" }]);
+      });
+    });
+
     it("descends into command substitution, tagging the inner command", async () => {
       const program = await BashProgram.parse("echo $(rm -rf foo)", normalizer);
       expect(program.commands()).toEqual([

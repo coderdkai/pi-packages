@@ -23,6 +23,22 @@ export const NESTED_EXECUTION_CONTEXTS: ReadonlyMap<
 ] satisfies [string, BashCommandContext][]);
 
 /**
+ * AST node types that are neither commands nor argument values themselves, but
+ * whose subtree can host a nested execution context that really runs.
+ *
+ * A redirect destination is the motivating case: tree-sitter-bash parses
+ * `echo hi > $(rm x)` with the `file_redirect` as a *sibling* of the `command`,
+ * so a consumer that abandons the redirect never sees the substitution inside
+ * it — the bypass #741 fixed.
+ *
+ * Membership means "do not read this subtree's own text, but do descend it for
+ * executions"; each consumer keeps its own handling of the destination tokens.
+ */
+export const EXECUTION_HOST_TYPES: ReadonlySet<string> = new Set([
+  "file_redirect",
+]);
+
+/**
  * Visit every nested execution context in `node`'s subtree, in source order.
  *
  * The walk does not descend *past* a context it finds: `visit` receives the
