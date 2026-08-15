@@ -328,6 +328,11 @@ Quotes are respected (an operator inside `'…'` or `"…"` does not split the c
 Commands nested inside command substitution (`$(…)`, backticks), process substitution (`<(…)`/`>(…)`), and subshells (`( … )`) are evaluated against the bash patterns too, in addition to their enclosing command — since those inner commands really execute.
 So `echo $(rm -rf foo)` evaluates both `echo $(rm -rf foo)` and the inner `rm -rf foo`; if `rm *` is denied, the whole invocation is denied.
 The deny reason and the approval prompt note the nested origin (e.g. `inside command substitution`).
+
+This holds wherever the substitution appears, not only in argument position.
+A substitution in a **redirect target** (`echo hi > $(rm *.txt)`, `cat < <(rm c)`, ``echo hi 2> `rm d` ``) and one in an **interpolating heredoc body** (`cat <<EOF` with `$(rm e)` in the body) are evaluated the same way.
+A quoted heredoc delimiter (`<<'EOF'` or `<<"EOF"`) does not interpolate, so its body is literal text and nothing in it is evaluated as a command.
+The enclosing command is still matched without its redirect, so a rule like `npm install` keeps matching `npm install > out.txt`.
 Control-flow bodies (`if`/`while`/`for`/`case`) and `{ … }` brace groups are not descended into; their contents are matched as part of the enclosing statement's text.
 
 A leading environment-variable assignment prefix is stripped before matching, so the rule gates the underlying command rather than the prefix.
