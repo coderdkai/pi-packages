@@ -10,6 +10,9 @@ import {
   presentInlinePermissionPrompt,
   requestPermissionDecision,
 } from "#src/authority/permission-prompt-component";
+import { DEFAULT_RENDER_BUDGET } from "#src/presentation/dialog-renderer";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 import { makePromptPreferences } from "#test/helpers/prompt-view-fixtures";
 
 // ── Fake TUI view harness ────────────────────────────────────────────────────
@@ -100,6 +103,25 @@ const ARROW_DOWN = "\u001b[B";
 const ENTER = "\r";
 const ESCAPE = "\u001b";
 
+/** A path ask; `path : /repo/secret.txt` is its decision-relevant line. */
+function makeAsk(value = "/repo/secret.txt"): PromptPayload {
+  return makePromptPayload({
+    kind: "path",
+    request: {
+      ...makePromptPayload().request,
+      surface: "path",
+      toolName: "read",
+      value,
+      matchedPattern: null,
+    },
+  });
+}
+
+const ASK = makeAsk();
+
+/** Title, blank separator, four decision options, blank, hint. */
+const DECISION_CHROME_ROWS = 8;
+
 async function runPrompt(
   doublePressToConfirm: boolean,
   keys: string[],
@@ -109,7 +131,7 @@ async function runPrompt(
   const promise = presentInlinePermissionPrompt(
     view,
     "Permission Required",
-    "Allow read of secret.txt?",
+    ASK,
     options,
   );
   for (const key of keys) {
@@ -121,16 +143,13 @@ async function runPrompt(
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe("presentInlinePermissionPrompt", () => {
-  it("renders inline (not as an overlay) with the message and hotkey labels", () => {
+  it("renders inline (not as an overlay) with the request facts and hotkey labels", () => {
     const { view, captured } = makeFakeView(true);
-    void presentInlinePermissionPrompt(
-      view,
-      "Permission Required",
-      "Allow read of secret.txt?",
-    );
+    void presentInlinePermissionPrompt(view, "Permission Required", ASK);
     expect(captured.options).toEqual({ overlay: false });
     const text = captured.component?.render(80).join("\n") ?? "";
-    expect(text).toContain("Allow read of secret.txt?");
+    expect(text).toContain("tool : read");
+    expect(text).toContain("path : /repo/secret.txt");
     expect(text).toContain("Yes");
     expect(text).toContain("No, provide reason");
     expect(text).toContain("y");
@@ -139,11 +158,10 @@ describe("presentInlinePermissionPrompt", () => {
 
   it("clips every rendered line to the terminal width", () => {
     const { view, captured } = makeFakeView(true);
-    const longMessage = `Run ${"ls -t ~/.pi/agent/sessions/".repeat(20)}`;
     void presentInlinePermissionPrompt(
       view,
       "Permission Required",
-      longMessage,
+      makeAsk(`~/.pi/agent/sessions/${"a".repeat(300)}`),
     );
     const width = 40;
     const lines = captured.component?.render(width) ?? [];
@@ -166,7 +184,7 @@ describe("presentInlinePermissionPrompt", () => {
       const promise = presentInlinePermissionPrompt(
         view,
         "Permission Required",
-        "Allow?",
+        ASK,
       );
       let settled = false;
       void promise.then(() => {
@@ -225,7 +243,7 @@ describe("presentInlinePermissionPrompt", () => {
 
     it("rejects an empty reason and shows an error, then accepts a real one", async () => {
       const { view, captured } = makeFakeView(false);
-      const promise = presentInlinePermissionPrompt(view, "T", "M");
+      const promise = presentInlinePermissionPrompt(view, "T", ASK);
       captured.component?.handleInput("r"); // opens reason step
       captured.component?.handleInput(ENTER); // empty submit -> rejected
       const text = captured.component?.render(80).join("\n") ?? "";
@@ -266,11 +284,48 @@ describe("presentInlinePermissionPrompt", () => {
   describe("requestPermissionDecision dispatch", () => {
     it("renders the inline dialog in TUI mode", async () => {
       const { view, captured } = makeFakeView(true);
-      const promise = requestPermissionDecision(view, "Title", "Message");
+      const promise = requestPermissionDecision(view, "Title", ASK);
       expect(captured.component).toBeDefined();
       captured.component?.handleInput("y");
       captured.component?.handleInput("y");
       expect(await promise).toEqual({ approved: true, state: "approved" });
+    });
+
+    it("bounds a pathological forwarded ask instead of filling the viewport", () => {
+      const { view, captured } = makeFakeView(true);
+      const body = Array.from(
+        { length: 200 },
+        () => "- a finding line about some module in the codebase",
+      ).join("\n");
+      const command = `@'\n${body}\n'@ | Out-File -FilePath report.md`;
+
+      void presentInlinePermissionPrompt(
+        view,
+        "Permission Required (Subagent)",
+        makePromptPayload({
+          kind: "forwarded",
+          request: {
+            ...makePromptPayload().request,
+            requester: {
+              agentName: "scout",
+              forwarded: true,
+              sessionId: "abc123",
+            },
+            surface: "bash",
+            toolName: null,
+            value: command,
+            matchedPattern: null,
+          },
+          evidence: [{ label: "requested", text: command, detail: null }],
+        }),
+      );
+      const lines = captured.component?.render(120) ?? [];
+
+      // The same ask renders 205 rows through the unbounded flat message.
+      expect(lines.length).toBeLessThanOrEqual(
+        DEFAULT_RENDER_BUDGET.maxRows + DECISION_CHROME_ROWS,
+      );
+      expect(lines).toContain("subagent  : scout · session abc123");
     });
 
     it("falls back to the select flow outside TUI mode", async () => {
@@ -282,10 +337,13 @@ describe("presentInlinePermissionPrompt", () => {
         custom,
       });
 
-      const decision = await requestPermissionDecision(view, "Title", "Msg");
+      const decision = await requestPermissionDecision(view, "Title", ASK);
 
       expect(custom).not.toHaveBeenCalled();
-      expect(select).toHaveBeenCalledTimes(1);
+      expect(select).toHaveBeenCalledWith(
+        "Title\ntool : read\npath : /repo/secret.txt",
+        expect.any(Array),
+      );
       expect(decision).toEqual({ approved: true, state: "approved" });
     });
   });
@@ -323,7 +381,7 @@ describe("presentInlinePermissionPrompt", () => {
     it("toggles tool expansion without settling the decision", async () => {
       const { view, captured, getToolsExpanded, setToolsExpanded } =
         makeFakeView(true);
-      const promise = presentInlinePermissionPrompt(view, "Title", "Message");
+      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
       let settled = false;
       void promise.then(() => {
         settled = true;
@@ -350,7 +408,7 @@ describe("presentInlinePermissionPrompt", () => {
       const promise = presentInlinePermissionPrompt(
         view,
         "Title",
-        "Message",
+        ASK,
         scopeOptions,
       );
 
@@ -369,7 +427,7 @@ describe("presentInlinePermissionPrompt", () => {
       // Bound to a printable key on purpose: the default Ctrl+O is dropped by
       // the reason editor's isPrintable guard anyway, so it cannot discriminate.
       const { view, captured, setToolsExpanded } = makeFakeView(false, "e");
-      const promise = presentInlinePermissionPrompt(view, "Title", "Message");
+      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
 
       captured.component?.handleInput("r"); // decision -> reason
       captured.component?.handleInput("e"); // typed literally, not an app action

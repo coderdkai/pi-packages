@@ -9,10 +9,15 @@
  */
 
 import type { PromptPreferences } from "#src/authority/permission-prompt-component";
+import { DEFAULT_RENDER_BUDGET } from "#src/presentation/dialog-renderer";
 
 /** The live prompt preferences, override-driven. */
 export function makePromptPreferences(
   overrides: Partial<PromptPreferences> = {},
 ): PromptPreferences {
-  return { doublePressToConfirm: true, ...overrides };
+  return {
+    doublePressToConfirm: true,
+    budget: DEFAULT_RENDER_BUDGET,
+    ...overrides,
+  };
 }

@@ -17,7 +17,12 @@ import {
   type PromptViewState,
   reducePrompt,
 } from "#src/authority/permission-prompt-decision";
+import {
+  type RenderBudget,
+  renderPromptDialog,
+} from "#src/presentation/dialog-renderer";
 import { fitLinesToWidth } from "#src/presentation/line-fitting";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 
 /**
  * Inline `ctx.ui.custom` permission dialog for TUI sessions.
@@ -39,15 +44,16 @@ export type PermissionPromptUi = Pick<
 type PromptKeybindings = Pick<KeybindingsManager, "matches">;
 
 /** The resolved presentation context selected once per activation. */
-export interface PermissionPromptView {
+export interface PermissionPromptView extends PromptPreferences {
   mode: ExtensionContext["mode"];
   ui: PermissionPromptUi;
-  doublePressToConfirm: boolean;
 }
 
 /** Live prompt-behavior preferences read at prompt time (see `doublePressToConfirm`). */
 export interface PromptPreferences {
   doublePressToConfirm: boolean;
+  /** How much room a render has; the terminal width is added per frame. */
+  budget: RenderBudget;
 }
 
 /**
@@ -60,14 +66,29 @@ export interface PromptPreferences {
 export function requestPermissionDecision(
   view: PermissionPromptView,
   title: string,
-  message: string,
+  payload: PromptPayload,
   options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
   if (view.mode === "tui") {
-    return presentInlinePermissionPrompt(view, title, message, options);
+    return presentInlinePermissionPrompt(view, title, payload, options);
   }
-  return requestPermissionDecisionFromUi(view.ui, title, message, options);
+  // The fallback renders once and cannot re-render, so it neither paints nor
+  // offers an expansion; it substitutes a nominal width for the terminal size
+  // it is never told, and the host's own select wraps from there.
+  const rendered = renderPromptDialog(payload, {
+    ...view.budget,
+    width: FALLBACK_RENDER_WIDTH,
+  });
+  return requestPermissionDecisionFromUi(
+    view.ui,
+    title,
+    rendered.lines.join("\n"),
+    options,
+  );
 }
+
+/** The width the `select`/`input` fallback renders against. */
+const FALLBACK_RENDER_WIDTH = 80;
 
 /** Minimal theme surface the dialog uses; satisfied by the real SDK theme. */
 interface PromptTheme {
@@ -88,7 +109,7 @@ const OPTION_ORDER: readonly PromptKey[] = ["y", "s", "n", "r"];
 export function presentInlinePermissionPrompt(
   view: PermissionPromptView,
   title: string,
-  message: string,
+  payload: PromptPayload,
   options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
   const config: PromptModelConfig = {
@@ -102,7 +123,8 @@ export function presentInlinePermissionPrompt(
         theme,
         config,
         title,
-        message,
+        payload,
+        view.budget,
         (data) => handleToolsExpandAction(data, keybindings, view.ui),
         () => {
           tui.requestRender();
@@ -146,7 +168,8 @@ class PermissionPromptComponent implements Component {
     private readonly theme: PromptTheme,
     private readonly config: PromptModelConfig,
     private readonly title: string,
-    private readonly message: string,
+    private readonly payload: PromptPayload,
+    private readonly budget: RenderBudget,
     private readonly handleAppAction: (data: string) => boolean,
     private readonly requestRender: () => void,
     private readonly done: (decision: PermissionPromptDecision) => void,
@@ -159,18 +182,32 @@ class PermissionPromptComponent implements Component {
   }
 
   render(width: number): string[] {
-    return fitLinesToWidth(this.renderStep(), width);
+    return fitLinesToWidth(this.renderStep(width), width);
   }
 
-  private renderStep(): string[] {
+  private renderStep(width: number): string[] {
     switch (this.state.step) {
       case "decision":
-        return this.renderDecision();
+        return this.renderDecision(width);
       case "reason":
-        return this.renderReason();
+        return this.renderReason(width);
       case "scope":
         return this.renderScope();
     }
+  }
+
+  /**
+   * The ask itself, bounded to the budget at this frame's width.
+   *
+   * Rendered per frame rather than once, because the row budget is a function
+   * of the width the host gives us, which a resize changes.
+   */
+  private renderAsk(width: number): string[] {
+    return [
+      ...renderPromptDialog(this.payload, { ...this.budget, width }, (text) =>
+        this.theme.fg("warning", text),
+      ).lines,
+    ];
   }
 
   handleInput(data: string): void {
@@ -243,8 +280,12 @@ class PermissionPromptComponent implements Component {
     this.requestRender();
   }
 
-  private renderDecision(): string[] {
-    const lines = [this.theme.fg("accent", this.title), this.message, ""];
+  private renderDecision(width: number): string[] {
+    const lines = [
+      this.theme.fg("accent", this.title),
+      ...this.renderAsk(width),
+      "",
+    ];
     for (const key of OPTION_ORDER) {
       const label = key === "s" ? this.config.sessionLabel : OPTION_LABELS[key];
       const selected = this.state.highlightedKey === key;
@@ -263,10 +304,10 @@ class PermissionPromptComponent implements Component {
     return lines;
   }
 
-  private renderReason(): string[] {
+  private renderReason(width: number): string[] {
     const lines = [
       this.theme.fg("accent", this.title),
-      this.message,
+      ...this.renderAsk(width),
       "",
       `Reason (required): ${this.reasonBuffer}\u2588`,
     ];

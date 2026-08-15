@@ -113,16 +113,17 @@ describe("LocalUserAuthorizer", () => {
     });
   });
 
-  it("calls requestPermissionDecision with the threaded view, title, and message", async () => {
+  it("calls requestPermissionDecision with the threaded view, title, and payload", async () => {
     const { deps, ui, decisionFn } = makeDeps();
     const authorizer = new LocalUserAuthorizer(deps);
+    const details = makeDetails();
 
-    await authorizer.authorize(makeDetails());
+    await authorizer.authorize(details);
 
     expect(decisionFn).toHaveBeenCalledWith(
       { mode: "tui", ui, ...makePromptPreferences() },
       "Permission Required",
-      "Allow read?",
+      details.payload,
       undefined,
     );
   });
@@ -138,7 +139,7 @@ describe("LocalUserAuthorizer", () => {
     expect(decisionFn).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
-      expect.any(String),
+      expect.anything(),
       { sessionLabel: "Yes, for 'read' tool" },
     );
   });
@@ -206,20 +207,19 @@ describe("LocalUserAuthorizer", () => {
     it("uses the '(Subagent)' dialog title when the ask is forwarded", async () => {
       const { deps, ui, decisionFn } = makeDeps();
       const authorizer = new LocalUserAuthorizer(deps);
+      const details = makeDetails({
+        forwarding: {
+          requesterAgentName: "Explore",
+          requesterSessionId: "child-session",
+        },
+      });
 
-      await authorizer.authorize(
-        makeDetails({
-          forwarding: {
-            requesterAgentName: "Explore",
-            requesterSessionId: "child-session",
-          },
-        }),
-      );
+      await authorizer.authorize(details);
 
       expect(decisionFn).toHaveBeenCalledWith(
         { mode: "tui", ui, ...makePromptPreferences() },
         "Permission Required (Subagent)",
-        "Allow read?",
+        details.payload,
         undefined,
       );
     });
@@ -243,7 +243,7 @@ describe("LocalUserAuthorizer", () => {
       expect(decisionFn).toHaveBeenCalledWith(
         expect.anything(),
         "Permission Required (Subagent)",
-        expect.any(String),
+        expect.anything(),
         {
           sessionScope: {
             subagentLabel: "This subagent ('Explore') only",
@@ -270,7 +270,7 @@ describe("LocalUserAuthorizer", () => {
       expect(decisionFn).toHaveBeenCalledWith(
         expect.anything(),
         expect.any(String),
-        expect.any(String),
+        expect.anything(),
         undefined,
       );
     });

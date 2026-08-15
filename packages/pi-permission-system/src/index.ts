@@ -38,6 +38,7 @@ import { PermissionManager } from "./permission-manager";
 import { PermissionResolver } from "./permission-resolver";
 import { PermissionSession } from "./permission-session";
 import { LocalPermissionsService } from "./permissions-service";
+import { resolveRenderBudget } from "./presentation/dialog-renderer";
 import { PermissionServiceLifecycle } from "./service-lifecycle";
 import { PermissionSessionLogger } from "./session-logger";
 import { SessionRules } from "./session-rules";
@@ -115,6 +116,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     events: pi.events,
     getPromptPreferences: () => ({
       doublePressToConfirm: configStore.current().doublePressToConfirm,
+      budget: resolveRenderBudget(configStore.current()),
     }),
     requestPermissionDecision,
     forwardingDir: paths.forwardingDir,
