@@ -226,15 +226,18 @@ function coreFacts(payload: PromptPayload): Fact[] {
   if (request.toolName !== null) {
     facts.push({ label: "tool", text: toolText(payload) });
   }
-  const value = valueLabel(payload);
-  if (request.surface !== request.toolName && request.surface !== value) {
+  // The surface is stated already when it *is* the tool name (a bash ask) or
+  // when it is the word the value line is labelled with (a path ask reads
+  // `path : /tmp/x`), so a line for it would repeat rather than add.
+  const label = valueLabel(payload);
+  if (request.surface !== request.toolName && request.surface !== label) {
     facts.push({ label: "surface", text: request.surface });
   }
   if (request.matchedPattern !== null) {
     facts.push({ label: "rule", text: request.matchedPattern });
   }
   if (request.value !== "" && request.value !== request.toolName) {
-    facts.push({ label: value, text: request.value });
+    facts.push({ label, text: request.value });
   }
   if (request.executedUnit !== null) {
     facts.push({ label: "runs", text: request.executedUnit });
