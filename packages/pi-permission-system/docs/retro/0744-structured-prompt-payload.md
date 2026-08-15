@@ -38,6 +38,38 @@ Plan committed at `packages/pi-permission-system/docs/plans/0744-structured-prom
   `tool-preview-formatter.ts` stays at the `src/` root — it also serves `getPermissionLogContext` on the review-log path, which Step 4 owns; its prompt output becomes an evidence entry instead.
   Gating the extracted inner command ([#713]'s second option) is explicitly declined so the wrapper floor stands unchanged.
 
+## Stage: Implementation — TDD (2026-08-15T06:38:38Z)
+
+### Session summary
+
+Landed the `PromptPayload` seam across 12 commits: two tidy-first prep commits, eight `refactor:` cycles, one `docs:`, and one `test:` follow-up from the pre-completion review.
+All six ask-prompt assembly sites are dissolved into `src/presentation/` builders, `message` is rendered from the payload alone by a single transitional `renderLegacyMessage`, and `PromptPermissionDetails.payload` is required.
+Test count 2836 → 2944 (+108); both roadmap metrics hit target (`formatAskPrompt` refs 4 → 0, `src/presentation/` 0 → 1); behavior byte-identical.
+
+### Observations
+
+- **The tidy-first assessor earned its keep twice.**
+  It found that `test/helpers/gate-fixtures.ts` and `test/handlers/gates/runner.test.ts` would break when `payload` became required — both absent from the plan's inventory — and that the plan's "six authority test files" was really five with local factories (plus two with inline literals).
+  It also caught a live divergence: three of those factories default `agentName: null` and two default `"test-agent"` **and assert it**, so a naive fold would have silently flipped assertions.
+  Landing `makePromptDetails` as a prep commit turned the type-tightening cycle into a one-line change.
+- **Plan deviation — module scope.**
+  The plan named `executed-unit.ts`.
+  Implementing it revealed that nesting (`sudo timeout 5 xargs grep foo`) requires re-classifying each remainder, which would have meant a **second** wrapper classifier beside `classifyWrapperCommand` — connascence of algorithm on a gating-critical vocabulary.
+  Shipped instead as `wrapper-analysis.ts` owning both questions, with `classifyWrapperCommand` reduced to a node adapter.
+  Cost one extra commit; the classification is now directly unit-testable without a parse, which it never was.
+- **The issue's own premise was wrong twice, and both were caught at planning.**
+  There is a **sixth** assembler (`formatPathAskPrompt`, two consumers) that the issue and ADR 0011 both omit, and [#713]'s `classifyAndExtractWrapper`/`payloadText`/`STRIPPABLE_WRAPPERS` do not exist — so `executedUnit` had no source at all and needed a new curated extraction module rather than a field read.
+- **`renderLegacyMessage` as a completeness proof worked exactly as intended.**
+  Because it reads the payload and nothing else, relocating the ~29 old string assertions onto it *is* the proof that the payload carries everything the sentences said.
+  Two builder bugs surfaced this way rather than in review: `getNonEmptyString` returns `null`, not `undefined` (my `=== undefined` guard emitted `(full command: 'null')`), and the first `wrapper-analysis` test helper tokenized `"rm -rf /"` into three words where tree-sitter emits one — a fixture bug that looked like five code failures.
+- **`| null` over `| undefined` throughout**, diverging from ADR 0011 §2's sketch, because step 3 puts the payload on the JSON wire; `accessFactsFromPath` already set that precedent for `boundaryValue`.
+  Likewise `kind` as an explicit discriminant: `(surface, source)` cannot separate the tool and bash external-directory asks.
+- **`PromptEvidence.detail`** was added beyond the ADR sketch so an escaping path and its canonical alias ride one entry — a bounded render cannot show the path while eliding what it resolves to.
+- **Pre-completion reviewer: PASS.**
+  Two non-blocking notes: the seven descriptor tests never gained the payload assertion the plan named, and the `find -exec` terminator is excluded where the plan said "up to and including" (deliberate, tested).
+  The first was addressed in a follow-up `test:` commit — but not as written: asserting mere presence is noise when `message` and `payload` come from one local and the field is required, so the tests pin *which kind and value* each gate emits, which is not structurally closed.
+- **Deferred to step 2 as planned:** nothing renders `executedUnit` or `invokedToolName` yet, and PR [#738]'s highlight intent is recorded in the roadmap for the dialog renderer, with the PR closing as superseded at ship time.
+
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#713]: https://github.com/gotgenes/pi-packages/issues/713
 [#716]: https://github.com/gotgenes/pi-packages/pull/716
