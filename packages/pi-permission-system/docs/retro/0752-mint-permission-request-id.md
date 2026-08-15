@@ -45,5 +45,39 @@ Filed [#753] for the gate-error path's missing `permissions:decision`, which sur
   The documented contract ("Unique ID for the permission request being prompted") is preserved and the old value was not even unique per request — one tool call raises up to six.
   `feat:` with a changelog note, not `feat!:`.
 
+## Stage: Implementation — TDD (2026-08-15T22:47:48Z)
+
+### Session summary
+
+Four TDD cycles plus one tidy-first prep commit and one docs commit, all five plan steps landed as written.
+Test count went 2978 → 2994 (+16: eight new runner request-identity cases, two `createPermissionRequestId` cases, three boundary cases, two forwarding-adoption cases, one decision-event case, minus the two deleted `createSkillInputRequestId` cases).
+Pre-completion reviewer: **PASS** — no warnings.
+
+### Observations
+
+- **The plan's three corrections to the issue all held up in code**, and the roadmap `Target:` text was corrected to match.
+  Four non-prompting write paths, not three; one `GateBypass.decision` literal, not three; and `run`'s third parameter deleted rather than narrowed.
+  Writing those into the plan before implementing meant the TDD steps had nothing to renegotiate.
+- **The tidy-first assessor's second recommendation was declined, and the reason generalizes.**
+  It proposed routing `runner.test.ts`'s 33 `runner.run` call sites through a `runGate` fixture wrapper to absorb the parameter deletion.
+  But the wrapper becomes a zero-value pass-through the moment the parameter is gone, and it hides the act under test — which the `testing` skill explicitly warns against.
+  Counting first showed the migration was 30 single-line substitutions plus 3 hand edits, well short of the scripted-regex trap the assessor invoked.
+  Measure the churn before accepting a permanent indirection to absorb it.
+- **The first recommendation was worth taking** and did exactly what Tidy First promises: extracting `runDescriptor`'s three `logContext` spreads into one declaration turned the feature commit's injection into a single added property.
+- **`DecisionEventFacts` is load-bearing, not cosmetic.**
+  Because `Omit<PermissionDecisionEvent, "requestId">` is not assignable to the full event, the compiler forces every emit through the runner's one stamping helper.
+  A future gate cannot add an emit path that forgets the id.
+- **The predicted compile error landed exactly where the plan said**, and only there: `test/decision-reporter.test.ts`'s full-literal factory.
+  `test/permission-events.test.ts`'s factory was pre-emptively fixed in the red step, and the two other files the plan listed (`external-directory.test.ts`, `helpers.test.ts`) needed no edit at all — the gate's bypass literal never carried a `requestId`, and `buildDecisionEvent`'s runtime output is unchanged by a return-type narrowing.
+  Both deviations were put to the reviewer explicitly rather than left to be rediscovered; it confirmed them.
+- **Minting inside the fail-closed `catch` was the one place this change could have done harm.**
+  The recording work moved into `recordGateError`, which swallows, so the `{ block: true }` return is unconditional — stronger than the pre-change code, where the same block was merely throw-free by construction.
+  A new test pins it with a throwing reporter.
+- **The metric row's recompute command was unreachable as written** and is now corrected to `grep -rnE "Math\.random\(\)\.toString\(36\)|randomUUID\(\)"`, verified to read 2 at the plan commit and 1 on `HEAD`.
+  Note the first attempt (`|randomUUID` without parens) read 2, because the import line matches too — a line-count metric over a symbol needs the call form.
+- **[#745]'s plan gained an amending note rather than an issue comment.**
+  Its `requesterRequestId` field is superseded: the forwarded request's `id` now *is* the child's request id.
+  A committed plan is what the next session follows, so that is where the correction belongs.
+
 [#745]: https://github.com/gotgenes/pi-packages/issues/745
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
