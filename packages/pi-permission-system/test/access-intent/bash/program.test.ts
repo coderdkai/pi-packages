@@ -949,6 +949,43 @@ describe("BashProgram", () => {
       });
     });
 
+    describe("commands hosted in a heredoc body (#741)", () => {
+      it("descends into an interpolating heredoc body", async () => {
+        const program = await BashProgram.parse(
+          "cat <<EOF\n$(rm e)\nEOF",
+          normalizer,
+        );
+        expect(program.commands()).toEqual([
+          { text: "cat" },
+          { text: "rm e", context: "command_substitution" },
+        ]);
+      });
+
+      it.each([
+        ["single-quoted", "cat <<'EOF'\n$(rm e)\nEOF"],
+        ["double-quoted", 'cat <<"EOF"\n$(rm e)\nEOF'],
+      ])("leaves a %s heredoc body literal, since it does not interpolate", async (_label, command) => {
+        const program = await BashProgram.parse(command, normalizer);
+        expect(program.commands()).toEqual([{ text: "cat" }]);
+      });
+
+      it("descends into a herestring substitution", async () => {
+        const program = await BashProgram.parse("cat <<< $(rm x)", normalizer);
+        expect(program.commands()).toEqual([
+          { text: "cat <<< $(rm x)" },
+          { text: "rm x", context: "command_substitution" },
+        ]);
+      });
+
+      it("leaves a heredoc body carrying no substitution unenumerated", async () => {
+        const program = await BashProgram.parse(
+          "cat <<EOF\nplain text\nEOF",
+          normalizer,
+        );
+        expect(program.commands()).toEqual([{ text: "cat" }]);
+      });
+    });
+
     it("descends into command substitution, tagging the inner command", async () => {
       const program = await BashProgram.parse("echo $(rm -rf foo)", normalizer);
       expect(program.commands()).toEqual([

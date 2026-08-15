@@ -31,11 +31,20 @@ export const NESTED_EXECUTION_CONTEXTS: ReadonlyMap<
  * so a consumer that abandons the redirect never sees the substitution inside
  * it — the bypass #741 fixed.
  *
+ * An interpolating heredoc body is the second case: `cat <<EOF` with `$(rm e)`
+ * in the body really runs `rm e`. Quoting needs no special handling here —
+ * tree-sitter-bash emits a `command_substitution` node under `heredoc_body`
+ * only for a bare `<<EOF`, never for `<<'EOF'` or `<<"EOF"`, so the parser
+ * already encodes the interpolation rule.
+ *
  * Membership means "do not read this subtree's own text, but do descend it for
  * executions"; each consumer keeps its own handling of the destination tokens.
  */
 export const EXECUTION_HOST_TYPES: ReadonlySet<string> = new Set([
   "file_redirect",
+  "heredoc_redirect",
+  "herestring_redirect",
+  "heredoc_body",
 ]);
 
 /**

@@ -56,22 +56,16 @@ const COMMAND_ENUM_DESCEND = new Set([
  * Named node types abandoned during command enumeration: they are neither
  * commands nor able to host one, so nothing in their subtree ever runs.
  *
- * A redirect is deliberately NOT listed here. Its destination is not a command,
- * but its subtree can host a substitution that really executes, so it is an
- * {@link EXECUTION_HOST_TYPES} member instead — conflating the two is the
- * bypass #741 fixed.
+ * A redirect and a heredoc body are deliberately NOT listed here. Neither is a
+ * command, but each can host a substitution that really executes, so both are
+ * {@link EXECUTION_HOST_TYPES} members instead — conflating the two questions
+ * ("is this a command?" and "can this host one?") is the bypass #741 fixed.
  *
  * Anonymous tokens (chain operators `&&`/`;`/`|`, substitution and subshell
  * delimiters `$(`/`)`/`` ` ``/`(`) are filtered by the `isNamed` guard, not
  * listed here.
  */
-const COMMAND_ENUM_SKIP = new Set([
-  "heredoc_redirect",
-  "herestring_redirect",
-  "comment",
-  "heredoc_body",
-  "heredoc_end",
-]);
+const COMMAND_ENUM_SKIP = new Set(["comment", "heredoc_end"]);
 
 /**
  * Enumerate the command units of a bash program, in source order.
