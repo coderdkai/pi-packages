@@ -904,7 +904,11 @@ Open-issue sweep dispositions (user-decided):
 - [#519] — kept open with recorded rationale (not a silent re-defer): still externally blocked on Pi SDK `UIContext` evolution; it closes or schedules when the SDK ships the capability.
 - [#639] — deferred to a later phase: first sweep since filing, and its policy-model design budget does not fit alongside the presentation spine.
 - [#742] — swept out of scope this phase by composition decision (first explicit sweep); it is the last member of the #306/#741 nested-command bypass family and is a strong candidate for the next phase's spine or an independent step.
-- Feature issues [#736], [#720], [#691], [#688], [#687], [#686], [#680], [#658], [#610], [#609], [#604], [#603], [#699] — out of scope for a structural phase; [#654] and [#648] become downstream packages over the annotator and evidence-formatter seams per ADR 0011 §8, which are themselves deferred until the payload exists.
+- [#610] — adopted mid-phase as Step 10, after a [#745] planning question surfaced the gap underneath it.
+  It was originally swept out as a feature issue; the sweep read the symptom (a parent-side consumer with no terminal signal) without reading the cause.
+  Tracing it found three id conventions and no id at all on any non-prompting path, so the local foundation split out as Step 9 ([#752]) and this issue narrowed to the cross-session half it actually reported.
+- [#752] — filed mid-phase as Step 9, the foundation Step 10 needs.
+- Feature issues [#736], [#720], [#691], [#688], [#687], [#686], [#680], [#658], [#609], [#604], [#603], [#699] — out of scope for a structural phase; [#654] and [#648] become downstream packages over the annotator and evidence-formatter seams per ADR 0011 §8, which are themselves deferred until the payload exists.
 
 Trajectory: Phase 12's maximum step priority was 20; this phase's is 20 (Step 1).
 No decline, so the regular rotation continues.
@@ -919,6 +923,8 @@ No decline, so the regular rotation continues.
 | `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
 | Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1               |
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1             |
+| Ad-hoc request-id mint sites in `src/`                                  | 2                     | 1               |
+| `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2               |
 | Model-judge resolves `agentDir` via `getAgentDir` (`config-loader.ts`)  | 0                     | ≥ 1             |
 | Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0               |
 | fallow health score                                                     | 88 (A)                | ≥ 88            |
@@ -933,11 +939,14 @@ Recompute commands (run from the repo root):
 - Presentation directory: `ls packages/pi-permission-system/src | grep -c presentation`
 - Liveness module: `ls packages/pi-permission-system/src/authority | grep -c "forwarding-liveness"`
 - Provenance sites: `grep -rn "decidedBy" packages/pi-permission-system/src | wc -l`
+- Ad-hoc id mint sites: `grep -rn "Math.random().toString(36)" packages/pi-permission-system/src --include="*.ts" | wc -l`
+- Event request ids: `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts`
 - Model-judge agentDir: `grep -c "getAgentDir" packages/pi-permission-model-judge/src/config-loader.ts`
 - Ambient path import: `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts`
 - Health/duplication/dead exports: `pnpm fallow health --score --workspace @gotgenes/pi-permission-system` / `pnpm fallow dupes --workspace @gotgenes/pi-permission-system` / `pnpm fallow dead-code --workspace @gotgenes/pi-permission-system`
 
 The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows grep for names the phase has not created yet; the step that creates each (Steps 1, 5, 6, 7 respectively) must either use the roadmap's name or update the metric row in the same commit.
+The two request-id rows were added mid-phase with Steps 9 and 10, so their baselines are measured at that point rather than at the phase-open snapshot.
 
 ### Steps
 
@@ -1042,6 +1051,33 @@ Release: independent
 
 Release: independent
 
+#### Step 9: A minted request id, carried on every decision ([#752])
+
+**Cause:** there is no permission request id — there are three conventions, and none covers a request that never prompts.
+The tool-call gates borrow the SDK's `toolCallId`, the skill-input gate mints its own, and the escalation edge mints a third that discards the one it was handed; the id attaches inside `promptForApproval`, so session-approved, yolo, infrastructure-auto-allowed and policy-blocked resolutions carry no id at all, and `PermissionDecisionEvent` carries none ever.
+
+- **Smell:** Category C (a fact established at request creation dies before its consumers), the same shape as Step 6.
+- **Target:** a single mint at the top of `GateRunner.run` shared by the bypass and descriptor branches; the id carried on the three non-prompting review-log writes and added to `PermissionDecisionEvent`; `GateBypass.decision` becomes an `Omit<PermissionDecisionEvent, "requestId">` so the three descriptor-built event literals need no edits; `createSkillInputRequestId` deleted and `GateRunner.run`'s third parameter narrowed to `toolCallId: string | null`.
+  `toolCallId` keeps flowing untouched — it is the join back to the Pi transcript, and a distinct fact from the request id.
+- **Outcome:** every permission request is correlatable from creation regardless of how it resolves; `grep -rn "Math.random().toString(36)" packages/pi-permission-system/src --include="*.ts" | wc -l` goes 2 → 1; `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts` goes 1 → 2.
+  Additive for consumers, so it needs no major bump of its own.
+- **Impact 3 / Risk 1 / Priority 15.**
+
+Release: independent
+
+#### Step 10: Cross-session prompt/decision correlation ([#610])
+
+**Cause:** a forwarded ask's prompt is emitted by the parent and its terminal decision by the child, on a different event bus for an out-of-process child — so a parent-side consumer that marks an agent blocked on `permissions:ui_prompt` has no public signal to clear it and can stay blocked forever.
+Measured on the review log: 53 of 57 `forwarded_permission.request_created` entries carry an id appearing on no `permission_request.*` entry, the child's ask and the request the parent serves joined by nothing but a one-millisecond timestamp gap.
+
+- **Smell:** Category C (boundary flaw — a lifecycle observable on one side of the forwarding edge and not the other).
+- **Target:** `src/authority/forwarded-request-server.ts` emits a parent-side `permissions:decision` after the serving session's human decision, reusing the request id its own `permissions:ui_prompt` carried; the child's originating `requestId`, which Step 3 puts on the wire, joins the two sides' log entries.
+  Silent policy resolutions stay silent — no prompt, no terminal event, unchanged.
+- **Outcome:** a direct prompt and its decision share one id; a forwarded prompt and its parent-side decision share one id on one bus; concurrent equivalent prompts stay independently correlatable.
+- **Impact 3 / Risk 2 / Priority 12.**
+
+Release: independent
+
 ### Step dependency diagram
 
 ```mermaid
@@ -1050,6 +1086,10 @@ flowchart TD
     S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
     S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
+    S9["Step 9 (#752): minted request id"] --> S3
+    S9 --> S10["Step 10 (#610): cross-session correlation"]
+    S3 --> S10
+    S4 --> S10
     S5["Step 5: forwarding liveness (#721)"]
     S7["Step 7: model-judge agentDir (#732)"]
     S8["Step 8: deriveApprovalPattern flavor (#655)"]
@@ -1061,12 +1101,19 @@ flowchart TD
 - **Track B — forwarding liveness:** Step 5 (touches `authority/` forwarding files only; disjoint from Track A apart from `approval-escalator.ts`, which Track A's Step 3 also edits — land Step 5 before or after Step 3, not concurrently).
 - **Track C — decision provenance:** Step 6, after Step 4.
 - **Track D — independent fixes:** Steps 7 and 8, any time.
+- **Track E — request identity:** Step 9, then Step 10 after Step 4.
+  Step 9 is disjoint from Track A apart from `permission-events.ts`, which Step 3 also edits (different interfaces in the same file) — land Step 9 **before** Step 3, not concurrently.
+  Step 3 then carries the child's `requestId` onto the forwarded-request wire while it is already rewriting that contract, so Step 10 finds both halves in place.
+  Step 10 and Step 6 both enrich the review-log write path; land them in sequence.
+
+The step numbers are discovery order, not execution order: Steps 9 and 10 were added mid-phase, and Step 9 runs before Step 3.
+The diagram above is the authority on sequencing.
 
 ### Release batches
 
 - **Batch "presentation-payload":** Steps 1, 2 (ship together; tail = Step 2; release vehicle = Step 2's `fix:` for [#710] — Step 1 is a hidden `refactor:`).
 - **Batch "presentation-contract":** Steps 3, 4 (ship together; tail = Step 4; release vehicle = Step 3's `feat!:` breaking release with the `message`-replacement migration note).
-- Independently releasable: Step 5 (`fix:`), Step 6 (`feat:`), Step 7 (`fix:`, model-judge component), Step 8 (`refactor:` — hidden type, batches into the next release).
+- Independently releasable: Step 5 (`fix:`), Step 6 (`feat:`), Step 7 (`fix:`, model-judge component), Step 8 (`refactor:` — hidden type, batches into the next release), Step 9 (`feat:`), Step 10 (`feat:`).
 
 ## Refactoring history
 
@@ -1139,4 +1186,5 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#609]: https://github.com/gotgenes/pi-packages/issues/609
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
+[#752]: https://github.com/gotgenes/pi-packages/issues/752
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md

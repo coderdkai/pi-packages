@@ -45,7 +45,32 @@ Filed [#751] for the `select`/`input` fallback's complete-view capability, which
 - **Scope decision worth revisiting if [#746] slips:** the payload's tool-input evidence is still truncated at the built-in 200 characters, so it is not yet "complete by contract" for a non-bash tool ask.
   That residual is knowingly carried and ships in the same release.
 
+### Addendum — request-id observability (same session)
+
+An operator question after the plan commit — "should every request have an ID when it gets created?"
+— opened a gap the phase sweep had missed, and reshaped part of this plan.
+
+- **Traced and measured before answering.**
+  There is no permission request id: three conventions (borrowed `toolCallId` at `runner.ts:162`, minted `skill-input-…` at `skill-input-gate-pipeline.ts:86`, a third minted at `approval-escalator.ts:253` that discards the one it was handed), and the id attaches inside `promptForApproval`, so no non-prompting resolution carries one.
+  `PermissionDecisionEvent` carries none ever.
+  Review-log measurement (7.3 MB, 9 417 entries; last 14 days = 766): 452 entries carry `toolCallId` but never `requestId`, and 53 of 57 `forwarded_permission.request_created` ids appear on no `permission_request.*` entry.
+- **The first cost estimate was wrong and the operator's follow-up corrected it.**
+  I initially framed the mint as the risky, identity-dependent part and the wire join as nearly free.
+  Once the operator committed to "our own id, keep passing `toolCallId`", re-measuring showed the mint is the *cheapest* piece — the two-field shape already exists on `PromptPermissionDetails`, `GateRunner.run` already takes `toolCallId` separately, and the change is largely one line plus a net deletion of `createSkillInputRequestId`.
+  Lesson: measure the change's real footprint before ranking options by cost, not after.
+- **Two `ask_user` answers came back in tension** ("mint slice before this issue" vs "[#610] at Step 9, after Step 4").
+  Surfacing the contradiction rather than reconciling it silently was right — the resolution was a third deliverable needing its own home, which no option had offered.
+- **A third-party issue was mishandled and then corrected.**
+  I retitled [#610] (filed by `hcrosse`) to cover mint-at-creation, then split the mint into [#752] and restored the original title, which described the narrowed scope accurately all along.
+  Retitling someone else's issue ahead of a settled decomposition was premature; the body was correctly left untouched throughout.
+- **Net roadmap change:** Phase 13 gains Step 9 ([#752], the minted id) and Step 10 ([#610], cross-session correlation), plus a Track E sequencing note — step numbers are discovery order, and Step 9 runs before Step 3.
+  This plan gained a second TDD step for `requesterRequestId` and a `Sequencing` subsection.
+- **[#610]'s original sweep disposition was wrong**, and the roadmap now records why: it was swept out as a feature issue on its symptom without the cause being traced.
+  Worth carrying into the next `/plan-improvements` sweep as a check — a user-reported observability gap may be a structural finding wearing a feature label.
+
+[#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#744]: https://github.com/gotgenes/pi-packages/issues/744
 [#746]: https://github.com/gotgenes/pi-packages/issues/746
 [#751]: https://github.com/gotgenes/pi-packages/issues/751
+[#752]: https://github.com/gotgenes/pi-packages/issues/752
