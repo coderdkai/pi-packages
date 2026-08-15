@@ -484,6 +484,86 @@ describe("renderPromptDialog", () => {
     });
   });
 
+  describe("highlighting the flagged element", () => {
+    /** A visible stand-in for the theme's warning colour. */
+    const mark = (text: string) => `[${text}]`;
+
+    it("paints the flagged value and its whole-token occurrences in evidence", () => {
+      expect(
+        renderPromptDialog(
+          makePromptPayload({
+            kind: "bash",
+            request: {
+              ...makePromptPayload().request,
+              surface: "bash",
+              toolName: "bash",
+              value: "ls",
+              matchedPattern: "*",
+            },
+            evidence: [
+              {
+                label: "full command",
+                text: "lsof | ls && /usr/bin/lsblk",
+                detail: null,
+              },
+            ],
+          }),
+          completeViewBudget(200),
+          mark,
+        ).lines,
+      ).toEqual([
+        "tool         : bash",
+        "rule         : *",
+        "command      : [ls]",
+        "full command : lsof | [ls] && /usr/bin/lsblk",
+      ]);
+    });
+
+    it("paints each escaping path rather than the command that referenced them", () => {
+      expect(
+        renderPromptDialog(
+          makePromptPayload({
+            kind: "bash_external_directory",
+            request: {
+              ...makePromptPayload().request,
+              surface: "external_directory",
+              toolName: "bash",
+              value: "cat /etc/hosts /etc/hostsbackup",
+              matchedPattern: "*",
+            },
+            evidence: [
+              { label: "working directory", text: "/repo", detail: null },
+              { label: "external path", text: "/etc/hosts", detail: null },
+            ],
+          }),
+          completeViewBudget(200),
+          mark,
+        ).lines,
+      ).toEqual([
+        "tool              : bash",
+        "surface           : external_directory",
+        "rule              : *",
+        "command           : cat [/etc/hosts] /etc/hostsbackup",
+        "working directory : /repo",
+        "external path     : [/etc/hosts]",
+      ]);
+    });
+
+    it("leaves the text untouched when no paint is supplied", () => {
+      expect(
+        render({
+          kind: "bash",
+          request: requestFacts({
+            surface: "bash",
+            toolName: "bash",
+            value: "ls",
+            matchedPattern: "*",
+          }),
+        }),
+      ).toEqual(["tool    : bash", "rule    : *", "command : ls"]);
+    });
+  });
+
   describe("a forwarded ask", () => {
     it("names the requesting subagent and its session", () => {
       expect(

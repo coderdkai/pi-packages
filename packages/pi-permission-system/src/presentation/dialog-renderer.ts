@@ -1,6 +1,9 @@
 import { describeBashCommandContext } from "#src/denial-messages";
 import { fitLinesToWidth } from "#src/presentation/line-fitting";
-import type { PromptPayload } from "#src/presentation/prompt-payload";
+import {
+  allEvidence,
+  type PromptPayload,
+} from "#src/presentation/prompt-payload";
 
 /**
  * Render a {@link PromptPayload} for a human deciding an ask (ADR 0011 §5).
@@ -18,6 +21,7 @@ import type { PromptPayload } from "#src/presentation/prompt-payload";
 export function renderPromptDialog(
   payload: PromptPayload,
   budget: DialogBudget,
+  paint: HighlightPaint = plainText,
 ): DialogView {
   const core = coreFacts(payload).map((fact) =>
     capField(fact, budget.fieldMaxWidth),
@@ -25,9 +29,11 @@ export function renderPromptDialog(
   const evidence = evidenceFacts(payload).map((fact) =>
     capField(fact, budget.fieldMaxWidth),
   );
-  const blocks = layout([...core, ...evidence]).map((block) =>
-    fitLinesToWidth(block, budget.width),
-  );
+  const blocks = layout(
+    [...core, ...evidence],
+    flaggedTexts(payload),
+    paint,
+  ).map((block) => fitLinesToWidth(block, budget.width));
   const fitted = fitToRows(
     blocks.slice(0, core.length).flat(),
     blocks.slice(core.length),
@@ -50,6 +56,14 @@ export interface DialogBudget {
   readonly width: number;
 }
 
+/**
+ * Paints the flagged element — the command, path, or target the rule fired on.
+ *
+ * A render concern, so the fallback and the review log pass nothing: only the
+ * TUI has a theme to paint with.
+ */
+export type HighlightPaint = (text: string) => string;
+
 /** What a renderer produced, and whether it had to leave anything out. */
 export interface DialogView {
   /** Wrapped to the budget's width: each entry is one visual row. */
@@ -68,6 +82,23 @@ export function completeViewBudget(width: number): DialogBudget {
     fieldMaxWidth: Number.POSITIVE_INFINITY,
     width,
   };
+}
+
+const plainText: HighlightPaint = (text) => text;
+
+/**
+ * What the ask is flagging.
+ *
+ * The decision-relevant value for every shape but one: a bash ask that escaped
+ * the working directory flags the paths it referenced, not the command that
+ * referenced them — the command is the context, and the paths are what the
+ * operator is ruling on.
+ */
+function flaggedTexts(payload: PromptPayload): string[] {
+  if (payload.kind === "bash_external_directory") {
+    return allEvidence(payload, "external path").map((entry) => entry.text);
+  }
+  return payload.request.value === "" ? [] : [payload.request.value];
 }
 
 /** One rendered fact. */
@@ -270,14 +301,65 @@ function forwardedValueLabel(surface: string): string {
  * continues under the column rather than back at the margin, so the eye can
  * still tell a continuation from the next fact.
  */
-function layout(facts: readonly Fact[]): string[][] {
+function layout(
+  facts: readonly Fact[],
+  flagged: readonly string[],
+  paint: HighlightPaint,
+): string[][] {
   const width = Math.max(0, ...facts.map((fact) => fact.label.length));
   const indent = " ".repeat(width + 3);
-  return facts.map((fact) =>
-    fact.text
+  return facts.map((fact) => {
+    // A fact that *is* the flagged element paints whole; any other line paints
+    // the whole-token occurrences of it, so `ls` stays plain inside `lsof`.
+    const highlight = flagged.includes(fact.text)
+      ? paint
+      : (line: string) => paintTokens(line, flagged, paint);
+    return fact.text
       .split("\n")
       .map((line, index) =>
-        index === 0 ? `${fact.label.padEnd(width)} : ${line}` : indent + line,
-      ),
+        index === 0
+          ? `${fact.label.padEnd(width)} : ${highlight(line)}`
+          : indent + highlight(line),
+      );
+  });
+}
+
+/** Characters a path, command, or target may contain, so a match is a whole token. */
+const TOKEN_CHARACTER = /[\w/.-]/;
+
+/** Paint every whole-token occurrence of each flagged text within one line. */
+function paintTokens(
+  line: string,
+  flagged: readonly string[],
+  paint: HighlightPaint,
+): string {
+  return flagged.reduce(
+    (painted, needle) => paintOccurrences(painted, needle, paint),
+    line,
   );
+}
+
+function paintOccurrences(
+  line: string,
+  needle: string,
+  paint: HighlightPaint,
+): string {
+  if (needle === "" || needle.includes("\n")) {
+    return line;
+  }
+  let result = "";
+  let cursor = 0;
+  for (
+    let at = line.indexOf(needle, cursor);
+    at !== -1;
+    at = line.indexOf(needle, cursor)
+  ) {
+    const end = at + needle.length;
+    const whole =
+      !TOKEN_CHARACTER.test(line[at - 1] ?? " ") &&
+      !TOKEN_CHARACTER.test(line[end] ?? " ");
+    result += line.slice(cursor, at) + (whole ? paint(needle) : needle);
+    cursor = end;
+  }
+  return result + line.slice(cursor);
 }
