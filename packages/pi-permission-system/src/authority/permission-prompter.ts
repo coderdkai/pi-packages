@@ -3,6 +3,7 @@ import type {
   ForwardedAccessFacts,
   ForwardedSessionApproval,
 } from "#src/authority/permission-forwarding";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 import type { ReviewLogger } from "#src/session-logger";
 import type { TerminalAuthorizer } from "./authorizer";
 
@@ -27,6 +28,15 @@ export interface PromptPermissionDetails {
   source: PermissionReviewSource;
   agentName: string | null;
   message: string;
+  /**
+   * The complete structured description of this ask (ADR 0011 §2).
+   *
+   * Every gate emits one; `message` is a render over it for the duration of the
+   * transition, so the two never disagree. Optional only until the last gate is
+   * migrated — it becomes required, which is what makes "every ask has a
+   * complete payload" a compile-time guarantee rather than a convention.
+   */
+  payload?: PromptPayload;
   toolCallId?: string;
   toolName?: string;
   skillName?: string;

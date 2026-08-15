@@ -115,6 +115,11 @@ export interface PromptAnnotation {
   readonly text: string;
 }
 
+/** The `requester` facts for an ask raised by this session. */
+export function localRequester(agentName: string | null): PromptRequester {
+  return { agentName, forwarded: false, sessionId: null };
+}
+
 /** Find the evidence entry a renderer knows by label. */
 export function findEvidence(
   payload: PromptPayload,
