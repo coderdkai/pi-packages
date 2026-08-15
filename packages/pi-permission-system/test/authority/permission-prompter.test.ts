@@ -6,6 +6,7 @@ import {
   type PermissionPrompterDeps,
   type PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
+import { makePromptDetails } from "#test/helpers/prompt-details-fixtures";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -19,17 +20,20 @@ function makeAuthorizer(
   };
 }
 
+/**
+ * This file's semantic defaults over the shared structural fixture: the review
+ * entries assert `agentName` and `toolName` on a no-override call.
+ */
 function makeDetails(
   overrides?: Partial<PromptPermissionDetails>,
 ): PromptPermissionDetails {
-  return {
+  return makePromptDetails({
     requestId: "req-123",
-    source: "tool_call",
     agentName: "test-agent",
     message: "Allow read?",
     toolName: "read",
     ...overrides,
-  };
+  });
 }
 
 function makeDeps(

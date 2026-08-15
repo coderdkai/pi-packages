@@ -3,20 +3,24 @@ import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type { requestPermissionDecision } from "#src/authority/permission-prompt-component";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import { makePromptDetails } from "#test/helpers/prompt-details-fixtures";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * This file's semantic defaults over the shared structural fixture: several
+ * cases assert `agentName` and `toolName` on a no-override call.
+ */
 function makeDetails(
   overrides?: Partial<PromptPermissionDetails>,
 ): PromptPermissionDetails {
-  return {
+  return makePromptDetails({
     requestId: "req-123",
-    source: "tool_call",
     agentName: "test-agent",
     message: "Allow read?",
     toolName: "read",
     ...overrides,
-  };
+  });
 }
 
 /** A `PermissionPromptUi` double; the tool-expansion accessors go unused here. */
