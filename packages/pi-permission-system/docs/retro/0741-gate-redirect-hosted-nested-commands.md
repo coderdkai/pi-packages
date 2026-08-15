@@ -44,6 +44,42 @@ Planning also uncovered a matching hole on the `path` / `external_directory` sur
   Command surface only → both surfaces (path gap measured), and redirect targets only → plus heredoc bodies (quoted-delimiter handling proved free).
   Both were put to the operator as `ask_user` decisions with the measurements presented first.
 
+## Stage: Implementation — TDD (2026-08-15T03:42:58Z)
+
+### Session summary
+
+Executed all seven planned TDD steps in order, landing seven commits: one preparatory `refactor:`, four `fix:` cycles (two per surface), one `test:` parity commit, and one `docs:` commit.
+The bypass is closed on both the bash command surface and the `path`/`external_directory` surface, for redirect targets and interpolating heredoc bodies alike.
+Test count went from 2784 to 2836 (+52) across 132 → 133 files; `check`, root `lint`, full `test`, and `fallow dead-code` are all green.
+
+### Observations
+
+- **The Tidy-First assessor found no work beyond the plan's own step 1**, confirming the plan had already identified the one real preparatory move (extracting the shared traversal before the path surface needed it).
+  It also usefully reported that `program.test.ts` already uses the `it.each` table convention the new cases needed, which shaped how the tests were written.
+- **One design detail the plan missed, caught by a failing test.**
+  `forEachNestedExecution` searches *strictly within* a subtree, so a substitution that **is** the redirect destination (`> $(cmd)`) was not found — only one concatenated into it (`> ${DIR}/$(cmd)`) was.
+  Step 4's first green attempt fixed 1 of 5 cases, which surfaced it immediately.
+  Resolved locally in `collectHostedExecutionTokens` with a `NESTED_EXECUTION_CONTEXTS.has(node.type)` check rather than making the shared traversal root-inclusive — changing the shared semantics to fix one caller would have been the wrong lever.
+- **Step 2 needed a correction mid-flight.**
+  The first edit shrank `COMMAND_ENUM_SKIP` to its final two-element form, which would have left `heredoc_redirect` falling through to the catch-all "emit whole" branch for one commit — emitting a heredoc as a command unit.
+  Caught before running tests by reasoning about the intermediate state; the skip set is now reduced in two steps, matching the two host-type additions.
+  A reminder that a mid-plan commit must be correct on its own, not just at the end.
+- **Quoted-heredoc handling really was free**, as planning predicted: no `heredoc_start` inspection shipped, and the negative tests pass purely because tree-sitter emits no `command_substitution` node for `<<'EOF'`.
+- **The riskiest step behaved.**
+  Step 4 extended `collectRedirectTokens`, which `bash-path-resolver.ts` calls directly at the [#454] pipeline first-stage fold.
+  The full suite passed unchanged, confirming the plan's decision to flag it as a required regression check rather than a refactor target.
+- **Pre-completion reviewer: WARN** (no FAILs).
+  All deterministic checks, commits, docs, design, invariants, Mermaid, and dead-code passed.
+  Two findings, both addressed:
+  1. Missing implementation-stage retro entry — this entry.
+  2. Substantive: the "nested-command bypass family" has more members than [#742] named.
+     `declaration_command` (`local x=$(rm y)`, `export X=$(rm x)`), `test_command` (`[[ $(rm x) ]]`), `unset_command`, and bare `variable_assignment` all emit one whole unit with no nested descent.
+     I verified this independently before acting: all are **pre-existing** (from [#306]'s original deferral), untouched by this change, and the *path* surface already projects most of them via generic recursion — only the command surface misses them.
+     [#742] was widened (title and body) with the measured table rather than filing a duplicate.
+- **Verifying the reviewer's finding was worth the probe.**
+  The report's framing ("the deferral is not the only remaining gap") could have read as a regression in this change; the measurement showed it was a pre-existing scope question, which changed the response from "fix now" to "widen the follow-up."
+
+[#454]: https://github.com/gotgenes/pi-packages/issues/454
 [#301]: https://github.com/gotgenes/pi-packages/issues/301
 [#306]: https://github.com/gotgenes/pi-packages/issues/306
 [#645]: https://github.com/gotgenes/pi-packages/issues/645
