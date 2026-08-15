@@ -43,7 +43,11 @@ type PromptFactory = (
 /** Pi's default binding for the `app.tools.expand` action. */
 const CTRL_O = "\u000f";
 
-function makeFakeView(doublePressToConfirm: boolean, expandKey = CTRL_O) {
+function makeFakeView(
+  doublePressToConfirm: boolean,
+  expandKey = CTRL_O,
+  budget = DEFAULT_RENDER_BUDGET,
+) {
   const captured: {
     component?: CapturedComponent;
     options?: unknown;
@@ -70,13 +74,18 @@ function makeFakeView(doublePressToConfirm: boolean, expandKey = CTRL_O) {
       );
     });
   };
-  const view = makeView("tui", doublePressToConfirm, {
-    select: vi.fn(),
-    input: vi.fn(),
-    custom,
-    getToolsExpanded,
-    setToolsExpanded,
-  });
+  const view = makeView(
+    "tui",
+    doublePressToConfirm,
+    {
+      select: vi.fn(),
+      input: vi.fn(),
+      custom,
+      getToolsExpanded,
+      setToolsExpanded,
+    },
+    budget,
+  );
   return { view, captured, getToolsExpanded, setToolsExpanded };
 }
 
@@ -91,11 +100,12 @@ function makeView(
   mode: PermissionPromptView["mode"],
   doublePressToConfirm: boolean,
   ui: unknown,
+  budget = DEFAULT_RENDER_BUDGET,
 ): PermissionPromptView {
   return {
     mode,
     ui: ui as PermissionPromptUi,
-    ...makePromptPreferences({ doublePressToConfirm }),
+    ...makePromptPreferences({ doublePressToConfirm, budget }),
   };
 }
 
@@ -421,6 +431,38 @@ describe("presentInlinePermissionPrompt", () => {
         approved: true,
         state: "approved_for_session",
       });
+    });
+
+    it("expands the dialog to the complete request and back", () => {
+      const { view, captured, setToolsExpanded } = makeFakeView(true, CTRL_O, {
+        maxRows: 24,
+        fieldMaxWidth: 10,
+      });
+      void presentInlinePermissionPrompt(
+        view,
+        "Title",
+        makeAsk("/repo/a/very/long/secret.txt"),
+      );
+      const bounded = captured.component?.render(120) ?? [];
+      expect(bounded).toContain("path : /repo/a/ve…");
+      expect(bounded.at(-1)).toContain("ctrl+o full request");
+
+      captured.component?.handleInput(CTRL_O);
+      const expanded = captured.component?.render(120) ?? [];
+      expect(expanded).toContain("path : /repo/a/very/long/secret.txt");
+      expect(expanded.at(-1)).toContain("ctrl+o collapse");
+      // The host's own tool expansion still follows the same keystroke (#642).
+      expect(setToolsExpanded).toHaveBeenCalledWith(true);
+
+      captured.component?.handleInput(CTRL_O);
+      expect(captured.component?.render(120)).toEqual(bounded);
+    });
+
+    it("advertises the affordance only when the render left something out", () => {
+      const { view, captured } = makeFakeView(true);
+      void presentInlinePermissionPrompt(view, "Title", ASK);
+
+      expect(captured.component?.render(120).at(-1)).not.toContain("ctrl+o");
     });
 
     it("does not intercept the expand key while a denial reason is typed", async () => {

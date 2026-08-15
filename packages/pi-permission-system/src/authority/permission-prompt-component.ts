@@ -18,6 +18,8 @@ import {
   reducePrompt,
 } from "#src/authority/permission-prompt-decision";
 import {
+  completeViewBudget,
+  type DialogView,
   type RenderBudget,
   renderPromptDialog,
 } from "#src/presentation/dialog-renderer";
@@ -163,6 +165,8 @@ function handleToolsExpandAction(
 class PermissionPromptComponent implements Component {
   private state: PromptViewState;
   private reasonBuffer = "";
+  /** Whether the operator asked to see the complete request (ADR 0011 §4). */
+  private expanded = false;
 
   constructor(
     private readonly theme: PromptTheme,
@@ -202,12 +206,34 @@ class PermissionPromptComponent implements Component {
    * Rendered per frame rather than once, because the row budget is a function
    * of the width the host gives us, which a resize changes.
    */
-  private renderAsk(width: number): string[] {
-    return [
-      ...renderPromptDialog(this.payload, { ...this.budget, width }, (text) =>
-        this.theme.fg("warning", text),
-      ).lines,
+  private renderAsk(width: number): DialogView {
+    return renderPromptDialog(
+      this.payload,
+      this.expanded ? completeViewBudget(width) : { ...this.budget, width },
+      (text) => this.theme.fg("warning", text),
+    );
+  }
+
+  /**
+   * The key hints, naming the expansion only when it would do something.
+   *
+   * An affordance advertised when there is nothing to expand is noise; one
+   * left unadvertised when the render dropped something is a decision made
+   * without the evidence.
+   */
+  private hint(view: DialogView): string {
+    const keys = [
+      "↑/↓ move",
+      "enter confirm",
+      "esc deny",
+      "press a letter, then again to confirm",
     ];
+    if (this.expanded) {
+      keys.push("ctrl+o collapse");
+    } else if (view.elided) {
+      keys.push("ctrl+o full request");
+    }
+    return this.theme.fg("muted", keys.join(" · "));
   }
 
   handleInput(data: string): void {
@@ -216,6 +242,10 @@ class PermissionPromptComponent implements Component {
       return;
     }
     if (this.handleAppAction(data)) {
+      // One "expand" for the operator: the host expands its pending tool call
+      // and the dialog expands its own render, on the same keystroke.
+      this.expanded = !this.expanded;
+      this.requestRender();
       return;
     }
     const event = this.toEvent(data);
@@ -281,11 +311,8 @@ class PermissionPromptComponent implements Component {
   }
 
   private renderDecision(width: number): string[] {
-    const lines = [
-      this.theme.fg("accent", this.title),
-      ...this.renderAsk(width),
-      "",
-    ];
+    const ask = this.renderAsk(width);
+    const lines = [this.theme.fg("accent", this.title), ...ask.lines, ""];
     for (const key of OPTION_ORDER) {
       const label = key === "s" ? this.config.sessionLabel : OPTION_LABELS[key];
       const selected = this.state.highlightedKey === key;
@@ -294,20 +321,14 @@ class PermissionPromptComponent implements Component {
       lines.push(selected ? this.theme.fg("accent", row) : row);
     }
     lines.push("");
-    lines.push(
-      this.state.hint ||
-        this.theme.fg(
-          "muted",
-          "↑/↓ move · enter confirm · esc deny · press a letter, then again to confirm",
-        ),
-    );
+    lines.push(this.state.hint || this.hint(ask));
     return lines;
   }
 
   private renderReason(width: number): string[] {
     const lines = [
       this.theme.fg("accent", this.title),
-      ...this.renderAsk(width),
+      ...this.renderAsk(width).lines,
       "",
       `Reason (required): ${this.reasonBuffer}\u2588`,
     ];
