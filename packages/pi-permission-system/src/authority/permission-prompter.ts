@@ -31,12 +31,11 @@ export interface PromptPermissionDetails {
   /**
    * The complete structured description of this ask (ADR 0011 §2).
    *
-   * Every gate emits one; `message` is a render over it for the duration of the
-   * transition, so the two never disagree. Optional only until the last gate is
-   * migrated — it becomes required, which is what makes "every ask has a
-   * complete payload" a compile-time guarantee rather than a convention.
+   * Required: every ask carries one, and the type is what guarantees it rather
+   * than a convention each gate has to remember. `message` is a render over it
+   * for the duration of the transition, so the two cannot disagree.
    */
-  payload?: PromptPayload;
+  payload: PromptPayload;
   toolCallId?: string;
   toolName?: string;
   skillName?: string;

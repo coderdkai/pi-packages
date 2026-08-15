@@ -24,8 +24,7 @@ export interface ToolAskFacts {
 }
 
 /**
- * Build the payload for the per-tool gate — the bash, MCP, and generic-tool
- * asks that `formatAskPrompt` used to assemble into three sentences.
+ * Build the payload for the per-tool gate: a bash, MCP, or generic-tool ask.
  *
  * The branch decides only the payload's `kind` and which fact is the
  * decision-relevant `value`; how any of it reads is a renderer's decision.

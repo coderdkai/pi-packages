@@ -18,8 +18,8 @@ import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
-
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 
 /**
  * Permission resolver mock with an optional default check result.
@@ -55,6 +55,7 @@ export function makeDescriptor(
       source: "tool_call",
       agentName: null,
       message: "Allow tool 'read'?",
+      payload: makePromptPayload(),
       toolCallId: "tc-1",
       toolName: "read",
     },
@@ -160,6 +161,18 @@ export function makeDenialDescriptor(
       source: "tool_call",
       agentName: null,
       message: "Allow tool 'write'?",
+      payload: makePromptPayload({
+        request: {
+          requester: { agentName: null, forwarded: false, sessionId: null },
+          surface: "write",
+          toolName: "write",
+          invokedToolName: null,
+          value: "write",
+          matchedPattern: null,
+          commandContext: null,
+          executedUnit: null,
+        },
+      }),
       toolCallId: "tc-1",
       toolName: "write",
     },

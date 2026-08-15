@@ -1,4 +1,5 @@
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 
 /**
  * Build a minimal `PromptPermissionDetails` for a prompter/authorizer unit test.
@@ -16,6 +17,29 @@ export function makePromptDetails(
     source: "tool_call",
     agentName: null,
     message: "Allow this?",
+    payload: makePromptPayload(),
+    ...overrides,
+  };
+}
+
+/** A minimal complete {@link PromptPayload} for a test that does not render it. */
+export function makePromptPayload(
+  overrides?: Partial<PromptPayload>,
+): PromptPayload {
+  return {
+    kind: "tool",
+    request: {
+      requester: { agentName: null, forwarded: false, sessionId: null },
+      surface: "read",
+      toolName: "read",
+      invokedToolName: null,
+      value: "read",
+      matchedPattern: null,
+      commandContext: null,
+      executedUnit: null,
+    },
+    evidence: [],
+    annotations: [],
     ...overrides,
   };
 }

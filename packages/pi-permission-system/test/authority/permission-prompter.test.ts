@@ -215,5 +215,23 @@ describe("PermissionPrompter", () => {
         }),
       );
     });
+
+    it("does not persist the payload, so log growth stays bounded", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+
+      await prompter.prompt(authorizer, makeDetails());
+
+      // ADR 0010 bounds what the logs accumulate; a complete payload written on
+      // every ask would defeat that bound. The log renders the payload under
+      // its own limits instead — today, as the derived `message`.
+      const [, entry] = logger.review.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(entry).not.toHaveProperty("payload");
+      expect(entry.message).toBe("Allow read?");
+    });
   });
 });
