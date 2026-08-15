@@ -215,6 +215,7 @@ The plan should produce:
 
 1. **Updated health metrics** — table comparing before/after for the phase.
    Prefer cause-level metrics recomputable by a single command (a `grep -c`, `wc -l`, or fallow field — e.g. `canConfirm` occurrences in `src/`, role-interface count) and record the recompute command with the metric, so `/finish-phase` can verify delivered vs. predicted deterministically.
+   Verify the command against the _predicted_ end state, not only today's tree — a command counting the mechanism being replaced reads 0, not the target, once the replacement lands.
    The fallow health score alone is a poor phase metric — it is blind to the type-level wins (a bug class made unrepresentable) that cause-driven phases produce.
 2. **Step list** — numbered steps, each with:
    - Title and issue reference

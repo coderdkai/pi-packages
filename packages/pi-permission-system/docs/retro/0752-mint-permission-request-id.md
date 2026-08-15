@@ -79,5 +79,77 @@ Pre-completion reviewer: **PASS** — no warnings.
   Its `requesterRequestId` field is superseded: the forwarded request's `id` now *is* the child's request id.
   A committed plan is what the next session follows, so that is where the correction belongs.
 
+## Stage: Final Retrospective (2026-08-15T23:48:06Z)
+
+### Session summary
+
+One continuous session carried #752 from `/plan-issue` through `/tdd-plan` to `/ship-issue`, releasing `pi-permission-system-v25.4.0`.
+Four `feat:` commits plus a tidy-first prep and a docs commit landed a `perm-<uuid>` id minted at request creation, carried on every review-log write and on `permissions:decision`, with the forwarding edge adopting the id it is handed instead of minting a third.
+The pre-completion reviewer returned PASS with no warnings; [#753] was filed for a gap the planning gate surfaced.
+
+### Observations
+
+#### What went well
+
+- **The `ask_user` gate earned its keep twice, and both times through the operator's follow-up rather than the options themselves.**
+  "What about UUIDv7?"
+  forced a verification that found Node silently ignores `randomUUID({ version: 7 })` and returns a v4 — the option was about to be chosen on an assumption.
+  "Wait, we don't emit any events for blocked requests yet?"
+  surfaced that the gate-error path is the only blocking path with no terminal broadcast, which became [#753].
+  Neither was reachable from the option list as written; both came from the operator reading the framing and pushing on it.
+- **Planning corrected three of the issue's own structural claims before any code moved**, and the corrections held.
+  Four non-prompting write paths, not three; one `GateBypass.decision` literal, not three; and `run`'s third parameter deleted rather than narrowed.
+  Writing those into the plan meant the TDD steps had nothing to renegotiate mid-implementation.
+- **`DecisionEventFacts` turned a convention into a compiler guarantee.**
+  Because `Omit<PermissionDecisionEvent, "requestId">` is not assignable to the full event, a future gate physically cannot add an emit path that forgets the id.
+  This is the shape [#744] used for `PromptPermissionDetails.payload`, applied a second time — the pattern is becoming a package idiom worth naming.
+- **Declining a tidy-first recommendation with a counted justification was novel** and is the finding most worth generalizing (see below).
+
+#### What caused friction (agent side)
+
+- `instruction-violation` (self-identified, **twice**) — built an `Edit` `oldText` spanning a decorative comment rule (`// ── Private helpers ──…` in `src/handlers/gates/runner.ts`, then `// ── createSkillInputRequestId ──…` in `test/handlers/gates/skill-input-gate-pipeline.test.ts`), retyping the dash run instead of copying it.
+  `AGENTS.md` line 94 already forbids exactly this.
+  Impact: two atomic batch rejections, ~6 extra tool calls, no rework — both were caught by the tool and re-anchored on adjacent code lines.
+  The second case is not covered by the existing rule: there the decorative rule was itself the deletion target, so "anchor on adjacent unique code lines" had no clean answer.
+- `other` — the first corrected metric recompute command used the bare identifier (`|randomUUID`) and read 2 instead of 1, because `import { randomUUID }` matches too.
+  Impact: one extra `grep`, caught immediately by measuring rather than asserting.
+
+#### What caused friction (user side)
+
+- Nothing to flag.
+  The two interventions were strategic (they changed the design and produced a follow-up issue), not mechanical oversight.
+  The pattern worth keeping: the operator read the `ask_user` framing critically and pushed on a premise rather than picking an option.
+
+#### The tidy-first assessor's second recommendation
+
+The assessor proposed routing `runner.test.ts`'s 33 `runner.run` call sites through a `runGate` fixture wrapper, citing `AGENTS.md`'s scripted-regex trap ([#525]) and calling the migration "too large to safely batch."
+It was in scope — the change does touch that file — so the existing scope-creep boundary did not catch it.
+It was still wrong on two counts: the wrapper becomes a zero-value pass-through the moment the parameter is deleted, and the migration measured 30 single-line substitutions plus 3 hand edits, well short of the hazard invoked.
+
+This is a failure mode distinct from scope creep: **a tidying that does not survive the change.**
+A good preparatory refactoring leaves the code better permanently; scaffolding whose only value is absorbing a one-time mechanical migration leaves it worse.
+The assessor has no rule against it today.
+
+### Diagnostic details
+
+- **Model-performance correlation** — planning and TDD ran on `anthropic/claude-opus-5`; `/ship-issue` ran on `anthropic/claude-sonnet-5`; both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) on `anthropic/claude-sonnet-5` per their frontmatter.
+  No mismatch: the judgment-heavy design and review work got the stronger models, and the deterministic ship sequence ran cheaply without a single misstep.
+  Worth noting as a working split rather than a problem.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run check` plus the scoped `vitest run` ran after every Red and every Green, and the full suite plus root `lint` before each commit; the predicted compile error in `test/decision-reporter.test.ts` surfaced at the exact step that caused it rather than at end-of-cycle.
+- **Escalation-delay tracking** and **unused-tool detection** — no `rabbit-hole` or `missing-context` points to analyse; the longest same-error sequence was 2 tool calls (Edit rejection → `grep` → re-anchor).
+
+### Changes made
+
+1. `.pi/agents/tidy-first-assessor.md` — added the rule that a tidying must leave the code better *after* the change lands, and that scaffolding absorbing a one-time mechanical migration is dead weight; count the call sites instead.
+   Closes the gap that let this session's `runGate` wrapper recommendation past the scope-creep boundary.
+2. `AGENTS.md` (§ Edit tool batches) — added the case the decorative-rule guidance did not cover: when the rule line is itself the deletion target, copy it from a fresh `Read` rather than retyping the dash run.
+3. `.pi/skills/improvement-discovery/SKILL.md` (§ Output format) — a metric's recompute command must be verified against the predicted end state, not only today's tree; Phase 13's mint-site row recorded a `2 → 1` target whose command reads 0 once the replacement lands.
+
+Considered and deliberately not landed: a rule about an API options key the runtime accepts and silently drops (`crypto.randomUUID({ version: 7 })` returning a v4).
+One occurrence this session; recorded here rather than promoted to `AGENTS.md`.
+
+[#525]: https://github.com/gotgenes/pi-packages/issues/525
+[#744]: https://github.com/gotgenes/pi-packages/issues/744
 [#745]: https://github.com/gotgenes/pi-packages/issues/745
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
