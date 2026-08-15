@@ -3,7 +3,14 @@ import {
   forEachNestedExecution,
 } from "#src/access-intent/bash/nested-execution";
 import type { TSNode } from "#src/access-intent/bash/parser";
+import {
+  type CommandWord,
+  classifyWrapperWords,
+  type WrapperKind,
+} from "#src/access-intent/bash/wrapper-analysis";
 import type { BashCommandContext } from "#src/types";
+
+export type { WrapperKind } from "#src/access-intent/bash/wrapper-analysis";
 
 // ── Command type ─────────────────────────────────────────────────────────────
 
@@ -15,16 +22,6 @@ import type { BashCommandContext } from "#src/types";
  * The type is the stable extension point: #306 adds an execution `context`,
  * #307 adds per-command path candidates and an effective working directory.
  */
-/**
- * Why a command unit's decision is floored to at least `ask`.
- * `"opaque-payload"` — an inline-shell payload (`bash -c`/`eval`) whose inner
- * program is not re-parsed (#481).
- * `"indirection"` — a prefix/exec wrapper (`sudo`/`env`/`xargs`/`find -exec`/…)
- * whose inner command is a visible argument but is not gated on its own (#490).
- * The kind selects the audit sentinel; both floor identically.
- */
-export type WrapperKind = "opaque-payload" | "indirection";
-
 export interface BashCommand {
   readonly text: string;
   /**
@@ -147,119 +144,33 @@ function makeUnit(
 }
 
 /**
- * Shell command names whose `-c` flag introduces an opaque inline program.
- */
-const SHELL_WRAPPER_NAMES = new Set(["bash", "sh", "dash", "zsh", "ksh"]);
-
-/**
- * Indirection wrappers that always invoke a following command, so the wrapper
- * (not the inner command) is what a bash rule matches. Floored by command-name
- * basename alone. Extend this set to cover another always-invoking wrapper.
- */
-const INDIRECTION_WRAPPER_NAMES = new Set([
-  "sudo",
-  "env",
-  "xargs",
-  "time",
-  "nohup",
-  "timeout",
-  "nice",
-  // Exec-capable rewrites and prefix wrappers surveyed in #575: parallelizers
-  // (parallel/rust-parallel/rush), a sudo rewrite (doas), and prefix wrappers
-  // (setsid/stdbuf/watch/flock) that all always invoke a following command.
-  "parallel",
-  "rust-parallel",
-  "rush",
-  "doas",
-  "setsid",
-  "stdbuf",
-  "watch",
-  "flock",
-]);
-
-/**
- * Search tools that invoke a command per result only when an exec flag is
- * present; a bare search runs no subcommand. Floored only when an argument
- * exactly matches one of the tool's exec flags. Extend by adding a tool with
- * its exec-flag set.
- */
-const EXEC_CONDITIONAL_WRAPPERS = new Map<string, ReadonlySet<string>>([
-  ["find", new Set(["-exec", "-execdir", "-ok", "-okdir"])],
-  ["fd", new Set(["-x", "--exec", "-X", "--exec-batch"])],
-]);
-
-/**
  * Classify a `command` node as a floored wrapper, or `undefined` for an
- * ordinary command. Reads only the node's own named children (a shallow walk),
- * skipping any leading `variable_assignment` prefix, and matches the command
- * name on its basename (so `/bin/bash -c …` counts).
- *
- * `"opaque-payload"`: `eval`, or a shell (`bash`/`sh`/`dash`/`zsh`/`ksh`) with a
- * `-c` short-flag cluster (`-c`, `-ec`, `-xc`) — the inner program is a quoted
- * argument the enumerator does not re-parse (#481).
- *
- * `"indirection"`: an always-invoking prefix/exec wrapper
- * (`INDIRECTION_WRAPPER_NAMES`), or a search tool (`EXEC_CONDITIONAL_WRAPPERS`,
- * `find`/`fd`) carrying a per-result exec flag — the inner command is a visible
- * argument that a `<cmd> *` rule would otherwise never match (#490). A bare
- * `find`/`fd` search runs no subcommand and is not flagged.
+ * ordinary command. The vocabulary and the rules live in `wrapper-analysis.ts`;
+ * this is the node adapter that feeds them.
  */
 function classifyWrapperCommand(node: TSNode): WrapperKind | undefined {
-  const { commandName, args } = readWrapperCommand(node);
-  if (commandName === undefined) return undefined;
-  if (commandName === "eval") return "opaque-payload";
-  if (SHELL_WRAPPER_NAMES.has(commandName) && hasShortFlagC(args)) {
-    return "opaque-payload";
-  }
-  if (INDIRECTION_WRAPPER_NAMES.has(commandName)) return "indirection";
-  const execFlags = EXEC_CONDITIONAL_WRAPPERS.get(commandName);
-  if (execFlags && args.some((arg) => execFlags.has(arg))) return "indirection";
-  return undefined;
+  return classifyWrapperWords(readCommandWords(node));
 }
 
 /**
- * A `command` node's name basename and its argument texts, skipping any leading
- * `variable_assignment` prefix (matching `commandUnitText`). `commandName` is
- * `undefined` for a pure assignment with no `command_name`.
+ * A `command` node's words — its `command_name` followed by its arguments — each
+ * carrying its offset into the unit text `commandUnitText` produces.
+ *
+ * A leading `variable_assignment` prefix is skipped (matching
+ * `commandUnitText`), so offsets are relative to the `command_name`. An empty
+ * list means a pure assignment with no `command_name`.
  */
-function readWrapperCommand(node: TSNode): {
-  commandName: string | undefined;
-  args: string[];
-} {
-  let commandName: string | undefined;
-  const args: string[] = [];
+function readCommandWords(node: TSNode): CommandWord[] {
+  const words: CommandWord[] = [];
+  let unitStart: number | undefined;
   for (let i = 0; i < node.childCount; i++) {
     const child = node.child(i);
     if (!child?.isNamed) continue;
     if (child.type === "variable_assignment") continue;
-    if (commandName === undefined) {
-      commandName = basename(child.text);
-      continue;
-    }
-    args.push(child.text);
+    unitStart ??= child.startIndex;
+    words.push({ text: child.text, offset: child.startIndex - unitStart });
   }
-  return { commandName, args };
-}
-
-/**
- * True when an argument list has a short-flag cluster containing `c` before any
- * `--` end-of-options marker (`-c`, `-ec`, `-xc`) — the inline-shell payload
- * flag for `bash`/`sh`/`dash`/`zsh`/`ksh`.
- */
-function hasShortFlagC(args: string[]): boolean {
-  for (const arg of args) {
-    if (arg === "--") return false;
-    if (arg.startsWith("-") && !arg.startsWith("--") && arg.includes("c")) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** The final path segment of a command name (`/bin/bash` → `bash`). */
-function basename(name: string): string {
-  const slash = name.lastIndexOf("/");
-  return slash === -1 ? name : name.slice(slash + 1);
+  return words;
 }
 
 /**
