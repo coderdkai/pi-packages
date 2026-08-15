@@ -28,13 +28,15 @@ Before investigating the issue, load skills relevant to the change:
 - Load the `package-<PKG>` skill for each affected package (e.g., `package-pi-permission-system`) for package-specific architecture, priorities, and testing context.
 - Load the `colgrep` skill before code exploration — it contains the decision table for when to use semantic search vs. exact grep, which shapes how you approach unfamiliar modules.
 - Load the `code-design` skill for design principles and structural heuristics.
-- Load the `testing` skill if the plan involves test changes or TDD steps.
+- Load the `testing` skill if the plan involves test changes or TDD steps, or if investigation will run a disposable spike test.
 - Load the `markdown-conventions` skill — it contains project-specific rules (one-sentence-per-line, frontmatter schema) that differ from standard markdown conventions.
 - Load the `design-review` skill and run its checklist before finalizing the design for any refactor, extraction, or change to shared interfaces or layer wiring — judge this from the issue, not from a plan that already shows wiring changes.
 
 ## Gather context
 
-1. Run `gh issue view $1 --json number,title,author,body,labels` to read the issue body, labels, and author.
+1. Run `gh issue view $1 --json number,title,author,body,labels,state,comments` to read the issue body, labels, author, state, and discussion.
+   `comments` must be a `--json` field — a separate `--comments` flag is silently ignored when `--json` is present.
+   A closed issue, or one whose latest comment reports the fix is incomplete, changes the job: plan the residual as a new issue rather than re-planning the closed one (Refs #741).
    After fetching the issue, call `set_session_name` with name `#N Planning — <issue title>` to identify this session in the session selector.
    Then check the issue author against the gh CLI user: run `gh api user --jq .login` to get the authenticated user's login and compare it to the issue's `author.login`.
    If they match, the issue reflects the operator's own intent — treat the "Proposed change" as the working hypothesis (subject to the `Decide` gate below) and proceed normally.
