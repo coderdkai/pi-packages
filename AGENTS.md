@@ -73,6 +73,7 @@ It is informational — not a turn boundary.
 Continue the current step (e.g. Red→Green→Commit) until it is complete.
 It also reflows what you just wrote (line wrapping, quote style), so an `oldText` built from the layout you emitted can fail to match — re-read a region you just edited before editing it again.
 It also joins a line ending in `:` with the sentence after it — to add a sentence there, start a new paragraph, not a new line.
+It fires on `Edit`/`Write` only, so a file appended with a shell heredoc skips formatting entirely and fails `pnpm run lint` — append source with `Write`/`Edit` too, not just markdown.
 
 ### Stale prompt-template expansion
 
