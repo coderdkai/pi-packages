@@ -1,3 +1,4 @@
+import { forEachNestedExecution } from "#src/access-intent/bash/nested-execution";
 import type { TSNode } from "#src/access-intent/bash/parser";
 import type { BashCommandContext } from "#src/types";
 
@@ -65,18 +66,6 @@ const COMMAND_ENUM_SKIP = new Set([
 ]);
 
 /**
- * Nested execution contexts whose interior commands really execute and must be
- * evaluated too: command substitution (`$(…)`, backticks) and process
- * substitution (`<(…)`/`>(…)`).
- * Subshells (`( … )`) are handled separately because they are also emitted
- * whole.
- */
-const NESTED_EXECUTION_CONTEXTS = new Map<string, BashCommandContext>([
-  ["command_substitution", "command_substitution"],
-  ["process_substitution", "process_substitution"],
-]);
-
-/**
  * Enumerate the command units of a bash program, in source order.
  *
  * Descends container nodes (`program`, `list`, `pipeline`,
@@ -119,7 +108,7 @@ function collectCommandsInto(
     );
     // A command's text already contains any substitution; descend its subtree
     // to ALSO emit the inner commands of command/process substitutions.
-    collectSubstitutionCommands(node, out);
+    collectHostedCommands(node, out);
     return;
   }
 
@@ -297,20 +286,15 @@ function descendCommandChildren(
 }
 
 /**
- * Search a command's subtree for command/process substitutions and enumerate
- * the commands inside them, tagged with the substitution's execution context.
- * A substitution can nest under `command_name` (when the whole command is
- * `$(…)`) or under an argument, so the entire subtree is searched.
+ * Enumerate the commands of every nested execution context in a subtree, each
+ * tagged with the context it was found in.
+ *
+ * The traversal itself lives in `nested-execution.ts` so the bash path surface
+ * shares one definition of what counts as a nested execution (#741); this
+ * function supplies the command-surface interpretation of each one found.
  */
-function collectSubstitutionCommands(node: TSNode, out: BashCommand[]): void {
-  for (let i = 0; i < node.childCount; i++) {
-    const child = node.child(i);
-    if (!child) continue;
-    const nestedContext = NESTED_EXECUTION_CONTEXTS.get(child.type);
-    if (nestedContext) {
-      descendCommandChildren(child, nestedContext, out);
-    } else {
-      collectSubstitutionCommands(child, out);
-    }
-  }
+function collectHostedCommands(node: TSNode, out: BashCommand[]): void {
+  forEachNestedExecution(node, (contextNode, context) => {
+    descendCommandChildren(contextNode, context, out);
+  });
 }

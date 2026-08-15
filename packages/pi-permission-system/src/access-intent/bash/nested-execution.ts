@@ -1,0 +1,51 @@
+import type { TSNode } from "#src/access-intent/bash/parser";
+import type { BashCommandContext } from "#src/types";
+
+/**
+ * AST node types whose interior commands really execute when the shell runs the
+ * program: command substitution (`$(…)`, backticks) and process substitution
+ * (`<(…)`/`>(…)`).
+ *
+ * Subshells (`( … )`) are deliberately absent — a subshell is also a command
+ * unit in its own right, so the command enumerator emits it whole and descends
+ * it separately rather than treating it as a pure nesting wrapper.
+ *
+ * This map is the single vocabulary shared by the bash command surface and the
+ * bash path surface, so the two cannot disagree about what counts as a nested
+ * execution (#741).
+ */
+export const NESTED_EXECUTION_CONTEXTS: ReadonlyMap<
+  string,
+  BashCommandContext
+> = new Map([
+  ["command_substitution", "command_substitution"],
+  ["process_substitution", "process_substitution"],
+] satisfies [string, BashCommandContext][]);
+
+/**
+ * Visit every nested execution context in `node`'s subtree, in source order.
+ *
+ * The walk does not descend *past* a context it finds: `visit` receives the
+ * context node itself and decides how to treat its interior (the command
+ * enumerator enumerates commands there; the path collector collects operand
+ * tokens), which keeps recursion policy with the consumer that understands it.
+ *
+ * A substitution can nest under `command_name` (when the whole command is
+ * `$(…)`), under an argument, inside a redirect destination, or inside an
+ * interpolating heredoc body, so the entire subtree is searched.
+ */
+export function forEachNestedExecution(
+  node: TSNode,
+  visit: (contextNode: TSNode, context: BashCommandContext) => void,
+): void {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (!child) continue;
+    const context = NESTED_EXECUTION_CONTEXTS.get(child.type);
+    if (context) {
+      visit(child, context);
+    } else {
+      forEachNestedExecution(child, visit);
+    }
+  }
+}
