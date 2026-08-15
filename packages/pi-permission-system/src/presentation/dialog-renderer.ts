@@ -19,8 +19,12 @@ export function renderPromptDialog(
   payload: PromptPayload,
   budget: DialogBudget,
 ): DialogView {
-  const lines = layout([...coreFacts(payload), ...evidenceFacts(payload)]);
-  return { lines: fitLinesToWidth(lines, budget.width), elided: false };
+  const facts = [...coreFacts(payload), ...evidenceFacts(payload)];
+  const capped = facts.map((fact) => capField(fact, budget.fieldMaxWidth));
+  return {
+    lines: fitLinesToWidth(layout(capped), budget.width),
+    elided: capped.some((fact) => fact.clipped),
+  };
 }
 
 /** How much room a renderer has. */
@@ -57,6 +61,31 @@ export function completeViewBudget(width: number): DialogBudget {
 interface Fact {
   readonly label: string;
   readonly text: string;
+}
+
+/** A fact narrowed to the budget, and whether that cost it anything. */
+interface CappedFact extends Fact {
+  readonly clipped: boolean;
+}
+
+/**
+ * Narrow one field's text to the budget.
+ *
+ * A quantity bound applied uniformly, never a content filter: it does not read
+ * the value to decide what to hide, which is what keeps it a cap rather than
+ * redaction (ADR 0010). The marker is a bare ellipsis — a character or line
+ * count is a number the operator cannot act on, and ADR 0011 §4 rejects it in
+ * favour of reaching the complete view.
+ */
+function capField(fact: Fact, fieldMaxWidth: number): CappedFact {
+  if (fact.text.length <= fieldMaxWidth) {
+    return { ...fact, clipped: false };
+  }
+  return {
+    ...fact,
+    text: `${fact.text.slice(0, fieldMaxWidth)}\u2026`,
+    clipped: true,
+  };
 }
 
 /**
@@ -178,8 +207,21 @@ function forwardedValueLabel(surface: string): string {
   }
 }
 
-/** Align the labels into a `label : value` column. */
+/**
+ * Align the labels into a `label : value` column.
+ *
+ * A field carrying its own newlines (a here-string, a multi-line preview)
+ * continues under the column rather than back at the margin, so the eye can
+ * still tell a continuation from the next fact.
+ */
 function layout(facts: readonly Fact[]): string[] {
   const width = Math.max(0, ...facts.map((fact) => fact.label.length));
-  return facts.map((fact) => `${fact.label.padEnd(width)} : ${fact.text}`);
+  const indent = " ".repeat(width + 3);
+  return facts.flatMap((fact) =>
+    fact.text
+      .split("\n")
+      .map((line, index) =>
+        index === 0 ? `${fact.label.padEnd(width)} : ${line}` : indent + line,
+      ),
+  );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   completeViewBudget,
+  type DialogBudget,
   renderPromptDialog,
 } from "#src/presentation/dialog-renderer";
 import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
@@ -263,6 +264,87 @@ describe("renderPromptDialog", () => {
           ],
         }),
       ).toEqual(["skill     : deploy", "read path : /skills/deploy/SKILL.md"]);
+    });
+  });
+
+  describe("the per-field width cap", () => {
+    const NARROW: DialogBudget = {
+      maxRows: Number.POSITIVE_INFINITY,
+      fieldMaxWidth: 12,
+      width: 200,
+    };
+
+    /** A bash ask whose command is the pathological field. */
+    function bashAsk(command: string, fullCommand?: string) {
+      return makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          toolName: "bash",
+          surface: "bash",
+          value: command,
+          matchedPattern: "*",
+        },
+        evidence:
+          fullCommand === undefined
+            ? []
+            : [{ label: "full command", text: fullCommand, detail: null }],
+      });
+    }
+
+    it("clips a core field and marks it, without stating a count", () => {
+      const view = renderPromptDialog(
+        bashAsk("echo the quick brown fox"),
+        NARROW,
+      );
+
+      expect(view.lines).toEqual([
+        "tool    : bash",
+        "rule    : *",
+        "command : echo the qui…",
+      ]);
+      expect(view.elided).toBe(true);
+    });
+
+    it("clips an evidence field the same way", () => {
+      const view = renderPromptDialog(
+        bashAsk("echo hi", "echo hi && echo there"),
+        NARROW,
+      );
+
+      expect(view.lines).toEqual([
+        "tool         : bash",
+        "rule         : *",
+        "command      : echo hi",
+        "full command : echo hi && e…",
+      ]);
+      expect(view.elided).toBe(true);
+    });
+
+    it("reproduces the field verbatim under the complete view", () => {
+      const view = renderPromptDialog(
+        bashAsk("echo the quick brown fox"),
+        completeViewBudget(200),
+      );
+
+      expect(view.lines).toContain("command : echo the quick brown fox");
+      expect(view.elided).toBe(false);
+    });
+
+    it("indents a multi-line field under its label", () => {
+      const view = renderPromptDialog(
+        bashAsk("cat <<'EOF'\nfirst line\nsecond line\nEOF"),
+        completeViewBudget(200),
+      );
+
+      expect(view.lines).toEqual([
+        "tool    : bash",
+        "rule    : *",
+        "command : cat <<'EOF'",
+        "          first line",
+        "          second line",
+        "          EOF",
+      ]);
     });
   });
 
