@@ -72,7 +72,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow git push?",
           toolName: "bash",
@@ -124,7 +124,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow git push?",
           toolName: "bash",
@@ -174,7 +174,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow this path access?",
           toolName: "read",
@@ -237,7 +237,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow read?",
           toolName: "read",
@@ -278,7 +278,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow read?",
           toolName: "read",
@@ -319,7 +319,7 @@ describe("ParentAuthorizer", () => {
 
       const decisionPromise = authorizer.authorize(
         makePromptDetails({
-          requestId: "unused-by-parent-authorizer",
+          requestId: "perm-child-request",
           agentName: "Explore",
           message: "Allow read?",
           toolName: "read",
@@ -346,6 +346,68 @@ describe("ParentAuthorizer", () => {
       temp.cleanup();
     }
   });
+
+  test("adopts the requester's request id as the forwarded request id", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+        }),
+      );
+
+      const decisionPromise = authorizer.authorize(
+        makePromptDetails({ requestId: "perm-child-request" }),
+      );
+
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      expect(request.id).toBe("perm-child-request");
+
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({ approved: true, state: "approved" }),
+        "utf-8",
+      );
+      await decisionPromise;
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("mints a fresh id when the requester's is not filename-safe", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+        }),
+      );
+
+      const decisionPromise = authorizer.authorize(
+        makePromptDetails({ requestId: "../../escape" }),
+      );
+
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      expect(request.id).toMatch(/^perm-/);
+
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({ approved: true, state: "approved" }),
+        "utf-8",
+      );
+      await decisionPromise;
+    } finally {
+      temp.cleanup();
+    }
+  });
 });
 
 // ── Abandonment ─────────────────────────────────────────────────────
@@ -356,7 +418,7 @@ describe("ParentAuthorizer", () => {
 // path (#719).
 
 const forwardedAsk = makePromptDetails({
-  requestId: "unused-by-parent-authorizer",
+  requestId: "perm-child-request",
   agentName: "Explore",
   message: "Allow pwd?",
   toolName: "bash",

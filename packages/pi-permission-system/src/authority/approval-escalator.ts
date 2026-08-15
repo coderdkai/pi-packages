@@ -34,6 +34,7 @@ import {
 } from "#src/authority/permission-forwarding";
 import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
+import { createPermissionRequestId } from "#src/permission-request-id";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
 import type { DebugReviewLogger } from "#src/session-logger";
 import { toRecord } from "#src/value-guards";
@@ -75,6 +76,12 @@ function getContextSystemPrompt(ctx: ForwarderContext): string | undefined {
  * relayed value instead of three positional optionals.
  */
 interface ForwardedRequestFacts {
+  /**
+   * The requester's own permission request id, adopted as the forwarded
+   * request's id so one id runs from the child's gate to the serving node's
+   * decision instead of a third being minted here.
+   */
+  requestId: string;
   message: string;
   display?: ForwardedPromptDisplay;
   sessionApproval?: ForwardedSessionApproval;
@@ -109,6 +116,23 @@ function abandon(denialReason: string): PermissionPromptDecision {
     confirmationUnavailable: true,
     denialReason,
   };
+}
+
+/** Ids this node is willing to use as a request/response filename. */
+const FILENAME_SAFE_REQUEST_ID = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * The id to write on the forwarded request: the requester's own, or a fresh
+ * mint when that id could not safely name a file.
+ *
+ * At a relay hop the adopted id came from a request file on disk, which the
+ * tolerant reader validates only as a string — so this is the boundary that
+ * keeps an inbound id from choosing an outbound path.
+ */
+function forwardableRequestId(requesterRequestId: string): string {
+  return FILENAME_SAFE_REQUEST_ID.test(requesterRequestId)
+    ? requesterRequestId
+    : createPermissionRequestId();
 }
 
 /**
@@ -146,6 +170,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
   ): Promise<PermissionPromptDecision> {
     const uiPrompt = buildUiPrompt(details);
     return this.waitForForwardedApproval(this.ctx, {
+      requestId: details.requestId,
       message: details.message,
       display: {
         source: uiPrompt.source,
@@ -250,7 +275,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     requesterSessionId: string,
     targetSessionId: string,
   ): ForwardedPermissionRequest {
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${process.pid}`;
+    const requestId = forwardableRequestId(facts.requestId);
     const requesterAgentName =
       getActiveAgentName(ctx) ??
       getActiveAgentNameFromSystemPrompt(getContextSystemPrompt(ctx)) ??
