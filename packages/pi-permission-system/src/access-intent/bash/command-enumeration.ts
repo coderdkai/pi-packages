@@ -6,6 +6,7 @@ import type { TSNode } from "#src/access-intent/bash/parser";
 import {
   type CommandWord,
   classifyWrapperWords,
+  executedUnitOf,
   type WrapperKind,
 } from "#src/access-intent/bash/wrapper-analysis";
 import type { BashCommandContext } from "#src/types";
@@ -35,6 +36,13 @@ export interface BashCommand {
    * Absent for an ordinary command.
    */
   readonly wrapperKind?: WrapperKind;
+  /**
+   * The command this wrapper unit actually runs (#713). Display-only — it is
+   * never gated on its own, so the wrapper floor still applies. Absent for an
+   * ordinary command, and for a wrapper whose inner command cannot be
+   * established.
+   */
+  readonly executedUnit?: string;
 }
 
 // ── Command enumeration ──────────────────────────────────────────────────────
@@ -102,9 +110,7 @@ function collectCommandsInto(
   if (COMMAND_ENUM_SKIP.has(node.type)) return;
 
   if (node.type === "command") {
-    out.push(
-      makeUnit(commandUnitText(node), context, classifyWrapperCommand(node)),
-    );
+    out.push(makeCommandUnit(node, context));
     // A command's text already contains any substitution; descend its subtree
     // to ALSO emit the inner commands of command/process substitutions.
     collectHostedCommands(node, out);
@@ -138,18 +144,29 @@ function makeUnit(
   text: string,
   context: BashCommandContext | undefined,
   wrapperKind?: WrapperKind,
+  executedUnit?: string,
 ): BashCommand {
   const unit: BashCommand = context ? { text, context } : { text };
-  return wrapperKind ? { ...unit, wrapperKind } : unit;
+  const flagged = wrapperKind ? { ...unit, wrapperKind } : unit;
+  return executedUnit === undefined ? flagged : { ...flagged, executedUnit };
 }
 
 /**
- * Classify a `command` node as a floored wrapper, or `undefined` for an
- * ordinary command. The vocabulary and the rules live in `wrapper-analysis.ts`;
- * this is the node adapter that feeds them.
+ * Build the unit for a `command` node, reading its words once to answer both
+ * wrapper questions: whether the unit is floored, and what it actually runs.
  */
-function classifyWrapperCommand(node: TSNode): WrapperKind | undefined {
-  return classifyWrapperWords(readCommandWords(node));
+function makeCommandUnit(
+  node: TSNode,
+  context: BashCommandContext | undefined,
+): BashCommand {
+  const text = commandUnitText(node);
+  const words = readCommandWords(node);
+  return makeUnit(
+    text,
+    context,
+    classifyWrapperWords(words),
+    executedUnitOf(text, words) ?? undefined,
+  );
 }
 
 /**

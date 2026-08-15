@@ -83,7 +83,7 @@ export function resolveBashCommandCheck(
       input: { command: cmd.text },
       agentName,
     });
-    const result =
+    const floored =
       cmd.wrapperKind && base.state === "allow"
         ? {
             ...base,
@@ -91,7 +91,12 @@ export function resolveBashCommandCheck(
             matchedPattern: WRAPPER_SENTINEL[cmd.wrapperKind],
           }
         : base;
-    return cmd.context ? { ...result, commandContext: cmd.context } : result;
+    const result = cmd.context
+      ? { ...floored, commandContext: cmd.context }
+      : floored;
+    return cmd.executedUnit === undefined
+      ? result
+      : { ...result, executedUnit: cmd.executedUnit };
   });
   return (
     pickMostRestrictive(results) ??

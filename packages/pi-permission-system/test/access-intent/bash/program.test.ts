@@ -1166,7 +1166,7 @@ describe("BashProgram", () => {
       ])("flags %s as opaque", async (command, text) => {
         const program = await BashProgram.parse(command, normalizer);
         expect(program.commands()).toEqual([
-          { text, wrapperKind: "opaque-payload" },
+          { text, wrapperKind: "opaque-payload", executedUnit: "rm -rf /" },
         ]);
       });
 
@@ -1176,7 +1176,11 @@ describe("BashProgram", () => {
           normalizer,
         );
         expect(program.commands()).toEqual([
-          { text: 'bash -c "rm -rf /"', wrapperKind: "opaque-payload" },
+          {
+            text: 'bash -c "rm -rf /"',
+            wrapperKind: "opaque-payload",
+            executedUnit: "rm -rf /",
+          },
         ]);
       });
 
@@ -1193,27 +1197,27 @@ describe("BashProgram", () => {
 
     describe("indirection wrappers", () => {
       it.each([
-        ["sudo aws s3 ls", "sudo aws s3 ls"],
-        ["env FOO=bar aws s3 ls", "env FOO=bar aws s3 ls"],
-        ["xargs rm -rf", "xargs rm -rf"],
-        ["time aws s3 ls", "time aws s3 ls"],
-        ["nohup aws s3 ls", "nohup aws s3 ls"],
-        ["timeout 10 aws s3 ls", "timeout 10 aws s3 ls"],
-        ["nice -n 10 aws s3 ls", "nice -n 10 aws s3 ls"],
-        ["/usr/bin/sudo aws s3 ls", "/usr/bin/sudo aws s3 ls"],
+        ["sudo aws s3 ls", "sudo aws s3 ls", "aws s3 ls"],
+        ["env FOO=bar aws s3 ls", "env FOO=bar aws s3 ls", "aws s3 ls"],
+        ["xargs rm -rf", "xargs rm -rf", "rm -rf"],
+        ["time aws s3 ls", "time aws s3 ls", "aws s3 ls"],
+        ["nohup aws s3 ls", "nohup aws s3 ls", "aws s3 ls"],
+        ["timeout 10 aws s3 ls", "timeout 10 aws s3 ls", "aws s3 ls"],
+        ["nice -n 10 aws s3 ls", "nice -n 10 aws s3 ls", "aws s3 ls"],
+        ["/usr/bin/sudo aws s3 ls", "/usr/bin/sudo aws s3 ls", "aws s3 ls"],
         // Exec-capable rewrites and prefix wrappers (#575).
-        ["parallel rm ::: x", "parallel rm ::: x"],
-        ["rust-parallel echo", "rust-parallel echo"],
-        ["rush echo", "rush echo"],
-        ["doas aws s3 ls", "doas aws s3 ls"],
-        ["setsid aws s3 ls", "setsid aws s3 ls"],
-        ["stdbuf -oL aws s3 ls", "stdbuf -oL aws s3 ls"],
-        ["watch ls", "watch ls"],
-        ["flock /tmp/lock aws s3 ls", "flock /tmp/lock aws s3 ls"],
-      ])("flags %s as an indirection wrapper", async (command, text) => {
+        ["parallel rm ::: x", "parallel rm ::: x", "rm ::: x"],
+        ["rust-parallel echo", "rust-parallel echo", "echo"],
+        ["rush echo", "rush echo", "echo"],
+        ["doas aws s3 ls", "doas aws s3 ls", "aws s3 ls"],
+        ["setsid aws s3 ls", "setsid aws s3 ls", "aws s3 ls"],
+        ["stdbuf -oL aws s3 ls", "stdbuf -oL aws s3 ls", "aws s3 ls"],
+        ["watch ls", "watch ls", "ls"],
+        ["flock /tmp/lock aws s3 ls", "flock /tmp/lock aws s3 ls", "aws s3 ls"],
+      ])("flags %s as an indirection wrapper", async (command, text, executedUnit) => {
         const program = await BashProgram.parse(command, normalizer);
         expect(program.commands()).toEqual([
-          { text, wrapperKind: "indirection" },
+          { text, wrapperKind: "indirection", executedUnit },
         ]);
       });
 
@@ -1223,7 +1227,11 @@ describe("BashProgram", () => {
           normalizer,
         );
         expect(program.commands()).toEqual([
-          { text: "sudo aws s3 ls", wrapperKind: "indirection" },
+          {
+            text: "sudo aws s3 ls",
+            wrapperKind: "indirection",
+            executedUnit: "aws s3 ls",
+          },
         ]);
       });
 
@@ -1239,18 +1247,18 @@ describe("BashProgram", () => {
 
     describe("exec-conditional wrappers (find/fd)", () => {
       it.each([
-        "find . -exec rm {} \\;",
-        "find . -execdir rm {} \\;",
-        "find . -ok rm {} \\;",
-        "find . -okdir rm {} \\;",
-        "fd -x rm",
-        "fd --exec rm",
-        "fd -X rm",
-        "fd --exec-batch rm",
-      ])("flags %s as an indirection wrapper", async (command) => {
+        ["find . -exec rm {} \\;", "rm {}"],
+        ["find . -execdir rm {} \\;", "rm {}"],
+        ["find . -ok rm {} \\;", "rm {}"],
+        ["find . -okdir rm {} \\;", "rm {}"],
+        ["fd -x rm", "rm"],
+        ["fd --exec rm", "rm"],
+        ["fd -X rm", "rm"],
+        ["fd --exec-batch rm", "rm"],
+      ])("flags %s as an indirection wrapper", async (command, executedUnit) => {
         const program = await BashProgram.parse(command, normalizer);
         expect(program.commands()).toEqual([
-          { text: command, wrapperKind: "indirection" },
+          { text: command, wrapperKind: "indirection", executedUnit },
         ]);
       });
 
@@ -1261,6 +1269,32 @@ describe("BashProgram", () => {
       ])("does not flag a bare %s search", async (command) => {
         const program = await BashProgram.parse(command, normalizer);
         expect(program.commands()).toEqual([{ text: command }]);
+      });
+    });
+
+    describe("executed unit", () => {
+      it.each([
+        ['bash -c "rm -rf /"', "rm -rf /"],
+        ["sudo aws s3 rm", "aws s3 rm"],
+        ["sudo -u root aws s3 rm", "aws s3 rm"],
+        ["timeout 10 grep foo", "grep foo"],
+        ["find . -name x -exec grep foo {} \\;", "grep foo {}"],
+        ["sudo timeout 5 xargs grep foo", "grep foo"],
+      ])("names what %s actually runs", async (command, executedUnit) => {
+        const program = await BashProgram.parse(command, normalizer);
+        expect(program.commands()[0].executedUnit).toBe(executedUnit);
+      });
+
+      it("is absent for an ordinary command", async () => {
+        const program = await BashProgram.parse("grep foo", normalizer);
+        expect(program.commands()).toEqual([{ text: "grep foo" }]);
+      });
+
+      it("is absent when the wrapper names no inner command", async () => {
+        const program = await BashProgram.parse("xargs", normalizer);
+        expect(program.commands()).toEqual([
+          { text: "xargs", wrapperKind: "indirection" },
+        ]);
       });
     });
   });
