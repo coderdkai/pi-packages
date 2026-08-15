@@ -7,6 +7,7 @@ import {
   formatUserDeniedReason,
 } from "#src/denial-messages";
 import { applyPermissionGate } from "#src/permission-gate";
+import { createPermissionRequestId } from "#src/permission-request-id";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { PermissionCheckResult } from "#src/types";
@@ -46,25 +47,28 @@ export class GateRunner {
   /**
    * Execute a gate: null → allow; bypass → log/emit side effects then allow;
    * descriptor → full check→log→emit→approve cycle.
+   *
+   * The request id is minted here, before the branch, so a request that never
+   * prompts is identified exactly as one that does.
    */
-  async run(
-    gate: GateResult,
-    agentName: string | null,
-    toolCallId: string,
-  ): Promise<GateOutcome> {
+  async run(gate: GateResult, agentName: string | null): Promise<GateOutcome> {
     if (!gate) {
       return { action: "allow" };
     }
+    const requestId = createPermissionRequestId();
     if (isGateBypass(gate)) {
       if (gate.log) {
-        this.reporter.writeReviewLog(gate.log.event, gate.log.details);
+        this.reporter.writeReviewLog(gate.log.event, {
+          ...gate.log.details,
+          requestId,
+        });
       }
       if (gate.decision) {
         this.reporter.emitDecision(gate.decision);
       }
       return { action: "allow" };
     }
-    return this.runDescriptor(gate, agentName, toolCallId);
+    return this.runDescriptor(gate, agentName, requestId);
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
@@ -72,7 +76,7 @@ export class GateRunner {
   private async runDescriptor(
     descriptor: GateDescriptor,
     agentName: string | null,
-    toolCallId: string,
+    requestId: string,
   ): Promise<GateOutcome> {
     // 1. Resolve permission state — pre-check, pre-resolved, or via resolver
     let check: PermissionCheckResult;
@@ -96,7 +100,7 @@ export class GateRunner {
 
     // The fields every review-log write for this gate shares, whatever the
     // resolution — built once so a field added here reaches all of them.
-    const logContext = { ...descriptor.logContext, agentName };
+    const logContext = { ...descriptor.logContext, agentName, requestId };
 
     // 2. Session-hit fast path
     if (check.source === "session") {
@@ -161,7 +165,7 @@ export class GateRunner {
       sessionApproval: descriptor.sessionApproval?.toGateApproval(),
       promptForApproval: async () => {
         const decision = await this.prompter.escalate({
-          requestId: toolCallId,
+          requestId,
           ...descriptor.promptDetails,
           ...(descriptor.sessionApproval
             ? { sessionApproval: descriptor.sessionApproval.toForwardedData() }

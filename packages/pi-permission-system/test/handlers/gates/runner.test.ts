@@ -16,7 +16,7 @@ import { makeCheckResult } from "#test/helpers/handler-fixtures";
 describe("GateRunner — descriptor path", () => {
   it("returns allow and emits policy_allow when policy is allow", async () => {
     const { runner, deps } = makeGateRunner();
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -32,7 +32,7 @@ describe("GateRunner — descriptor path", () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toMatchObject({ action: "block" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -60,7 +60,6 @@ describe("GateRunner — descriptor path", () => {
         decision: { surface: "bash", value: "git status" },
       }),
       null,
-      "tc-1",
     );
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
@@ -86,7 +85,7 @@ describe("GateRunner — descriptor path", () => {
         matchedPattern: "*",
       }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.escalate).not.toHaveBeenCalled();
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
@@ -113,7 +112,7 @@ describe("GateRunner — descriptor path", () => {
       }),
     });
 
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
 
     expect(result).toEqual({ action: "allow" });
     expect(deps.escalate).not.toHaveBeenCalled();
@@ -137,7 +136,7 @@ describe("GateRunner — descriptor path", () => {
       resolveResult: makeCheckResult({ state: "deny", matchedPattern: "rm *" }),
     });
 
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
 
     expect(result).toMatchObject({ action: "block" });
     expect(deps.escalate).not.toHaveBeenCalled();
@@ -153,11 +152,11 @@ describe("GateRunner — descriptor path", () => {
       }),
     });
 
-    await runner.run(makeDescriptor(), null, "tc-1");
+    await runner.run(makeDescriptor(), null);
     expect(deps.escalate).toHaveBeenCalledTimes(1);
 
     yolo = true;
-    await runner.run(makeDescriptor(), null, "tc-2");
+    await runner.run(makeDescriptor(), null);
     expect(deps.escalate).toHaveBeenCalledTimes(1);
   });
 
@@ -168,7 +167,7 @@ describe("GateRunner — descriptor path", () => {
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -188,7 +187,7 @@ describe("GateRunner — descriptor path", () => {
     const descriptor = makeDescriptor({
       sessionApproval: SessionApproval.single("read", "*"),
     });
-    const result = await runner.run(descriptor, null, "tc-1");
+    const result = await runner.run(descriptor, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -212,7 +211,7 @@ describe("GateRunner — descriptor path", () => {
       "/outside/b/*",
     ]);
     const descriptor = makeDescriptor({ sessionApproval: approval });
-    const result = await runner.run(descriptor, null, "tc-1");
+    const result = await runner.run(descriptor, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.recordSessionApproval).toHaveBeenCalledTimes(1);
     expect(deps.recordSessionApproval).toHaveBeenCalledWith(approval);
@@ -223,7 +222,7 @@ describe("GateRunner — descriptor path", () => {
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       escalate: vi.fn().mockResolvedValue({ approved: false, state: "denied" }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toMatchObject({ action: "block" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -242,7 +241,7 @@ describe("GateRunner — descriptor path", () => {
         confirmationUnavailable: true,
       }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toMatchObject({ action: "block" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -261,7 +260,7 @@ describe("GateRunner — descriptor path", () => {
         autoApproved: true,
       }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -275,7 +274,7 @@ describe("GateRunner — descriptor path", () => {
     const descriptor = makeDescriptor({
       preResolved: { state: "deny" },
     });
-    const result = await runner.run(descriptor, null, "tc-1");
+    const result = await runner.run(descriptor, null);
     expect(result).toMatchObject({ action: "block" });
     expect(deps.resolve).not.toHaveBeenCalled();
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
@@ -290,7 +289,7 @@ describe("GateRunner — descriptor path", () => {
     const descriptor = makeDescriptor({
       preResolved: { state: "allow" },
     });
-    const result = await runner.run(descriptor, null, "tc-1");
+    const result = await runner.run(descriptor, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.resolve).not.toHaveBeenCalled();
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
@@ -302,7 +301,7 @@ describe("GateRunner — descriptor path", () => {
 
   it("passes agentName to resolve and decision event", async () => {
     const { runner, deps } = makeGateRunner();
-    const result = await runner.run(makeDescriptor(), "test-agent", "tc-1");
+    const result = await runner.run(makeDescriptor(), "test-agent");
     expect(result).toEqual({ action: "allow" });
     expect(deps.resolve).toHaveBeenCalledWith({
       kind: "tool",
@@ -317,13 +316,17 @@ describe("GateRunner — descriptor path", () => {
     );
   });
 
-  it("passes requestId from toolCallId to prompt", async () => {
+  it("escalates a minted request id, not the tool call id", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
     });
-    await runner.run(makeDescriptor(), null, "tc-42");
+    await runner.run(makeDescriptor(), null);
     expect(deps.escalate).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId: "tc-42" }),
+      expect.objectContaining({
+        requestId: expect.stringMatching(/^perm-/),
+        // The host's id keeps flowing as the join back to the Pi transcript.
+        toolCallId: "tc-1",
+      }),
     );
   });
 
@@ -332,11 +335,7 @@ describe("GateRunner — descriptor path", () => {
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
     });
     const approval = SessionApproval.single("bash", "git *");
-    await runner.run(
-      makeDescriptor({ sessionApproval: approval }),
-      null,
-      "tc-1",
-    );
+    await runner.run(makeDescriptor({ sessionApproval: approval }), null);
     expect(deps.escalate).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionApproval: { surface: "bash", patterns: ["git *"] },
@@ -348,7 +347,7 @@ describe("GateRunner — descriptor path", () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
     });
-    await runner.run(makeDescriptor(), null, "tc-1");
+    await runner.run(makeDescriptor(), null);
     expect(deps.escalate).toHaveBeenCalledWith(
       expect.not.objectContaining({ sessionApproval: expect.anything() }),
     );
@@ -361,7 +360,7 @@ describe("GateRunner — descriptor path", () => {
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
     });
-    await runner.run(makeDescriptor(), null, "tc-1");
+    await runner.run(makeDescriptor(), null);
     expect(deps.recordSessionApproval).not.toHaveBeenCalled();
   });
 
@@ -374,7 +373,7 @@ describe("GateRunner — descriptor path", () => {
         matchedPattern: "rm *",
       }),
     });
-    const result = await runner.run(descriptor, null, "tc-1");
+    const result = await runner.run(descriptor, null);
     expect(result).toMatchObject({ action: "block" });
     expect(deps.resolve).not.toHaveBeenCalled();
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
@@ -394,7 +393,7 @@ describe("GateRunner — descriptor path", () => {
         .mockResolvedValue({ approved: true, state: "approved_for_session" }),
     });
     // No sessionApproval on descriptor
-    await runner.run(makeDescriptor(), null, "tc-1");
+    await runner.run(makeDescriptor(), null);
     expect(deps.recordSessionApproval).not.toHaveBeenCalled();
   });
 
@@ -408,11 +407,7 @@ describe("GateRunner — descriptor path", () => {
         check: makeCheckResult({ state: "deny", matchedPattern: "*" }),
         agentName: "test-agent",
       };
-      const result = await runner.run(
-        makeDenialDescriptor(ctx),
-        "test-agent",
-        "tc-1",
-      );
+      const result = await runner.run(makeDenialDescriptor(ctx), "test-agent");
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -433,7 +428,7 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null, "tc-1");
+      const result = await runner.run(makeDenialDescriptor(ctx), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -455,7 +450,7 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null, "tc-1");
+      const result = await runner.run(makeDenialDescriptor(ctx), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(
@@ -477,7 +472,7 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null, "tc-1");
+      const result = await runner.run(makeDenialDescriptor(ctx), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -492,7 +487,7 @@ describe("GateRunner — descriptor path", () => {
 describe("GateRunner.run — null and bypass dispatch", () => {
   it("returns allow for a null gate", async () => {
     const { runner, deps } = makeGateRunner();
-    const result = await runner.run(null, null, "tc-1");
+    const result = await runner.run(null, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
     expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
@@ -501,7 +496,7 @@ describe("GateRunner.run — null and bypass dispatch", () => {
   it("returns allow for a bypass with no log or decision", async () => {
     const { runner, deps } = makeGateRunner();
     const bypass: GateBypass = { action: "allow" };
-    const result = await runner.run(bypass, null, "tc-1");
+    const result = await runner.run(bypass, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
     expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
@@ -513,9 +508,10 @@ describe("GateRunner.run — null and bypass dispatch", () => {
       action: "allow",
       log: { event: "infra.bypass", details: { path: "/x" } },
     };
-    await runner.run(bypass, null, "tc-1");
+    await runner.run(bypass, null);
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith("infra.bypass", {
       path: "/x",
+      requestId: expect.stringMatching(/^perm-/),
     });
     expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
   });
@@ -532,14 +528,14 @@ describe("GateRunner.run — null and bypass dispatch", () => {
       matchedPattern: null,
     };
     const bypass: GateBypass = { action: "allow", decision };
-    await runner.run(bypass, null, "tc-1");
+    await runner.run(bypass, null);
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(decision);
     expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
   });
 
   it("routes a descriptor to the gate check logic and returns allow", async () => {
     const { runner } = makeGateRunner();
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
   });
 
@@ -547,7 +543,101 @@ describe("GateRunner.run — null and bypass dispatch", () => {
     const { runner } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
     });
-    const result = await runner.run(makeDescriptor(), null, "tc-1");
+    const result = await runner.run(makeDescriptor(), null);
     expect(result).toMatchObject({ action: "block" });
+  });
+});
+
+// ── GateRunner — request identity ────────────────────────────────────
+
+/**
+ * Runner over a reporter that records its review-log writes, so a test can
+ * read back the id the runner minted rather than only matching a shape.
+ */
+function makeRecordingRunner(
+  overrides: Parameters<typeof makeGateRunner>[0] = {},
+) {
+  const reviewWrites: Array<{
+    event: string;
+    details: Record<string, unknown>;
+  }> = [];
+  const { runner, deps } = makeGateRunner({
+    ...overrides,
+    reporter: {
+      writeReviewLog: (event, details) => {
+        reviewWrites.push({ event, details });
+      },
+    },
+  });
+  return { runner, deps, reviewWrites };
+}
+
+describe("GateRunner — request identity", () => {
+  it("carries the minted id on the session-approved review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner({
+      resolveResult: makeCheckResult({
+        source: "session",
+        matchedPattern: "git *",
+      }),
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(reviewWrites).toHaveLength(1);
+    expect(reviewWrites[0].event).toBe("permission_request.session_approved");
+    expect(reviewWrites[0].details.requestId).toMatch(/^perm-/);
+  });
+
+  it("carries the minted id on the auto-approved review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
+      yolo: true,
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(reviewWrites).toHaveLength(1);
+    expect(reviewWrites[0].event).toBe("permission_request.auto_approved");
+    expect(reviewWrites[0].details.requestId).toMatch(/^perm-/);
+  });
+
+  it("carries the minted id on the policy-denied review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(reviewWrites).toHaveLength(1);
+    expect(reviewWrites[0].event).toBe("permission_request.blocked");
+    expect(reviewWrites[0].details.requestId).toMatch(/^perm-/);
+  });
+
+  it("carries the minted id on a bypass review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner();
+    const bypass: GateBypass = {
+      action: "allow",
+      log: {
+        event: "permission_request.infrastructure_auto_allowed",
+        details: { path: "/x" },
+      },
+    };
+    await runner.run(bypass, null);
+    expect(reviewWrites).toHaveLength(1);
+    expect(reviewWrites[0].details.requestId).toMatch(/^perm-/);
+  });
+
+  it("keeps the tool call id alongside the minted id on the review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
+    });
+    await runner.run(makeDescriptor(), null);
+    expect(reviewWrites[0].details.toolCallId).toBe("tc-1");
+    expect(reviewWrites[0].details.requestId).not.toBe("tc-1");
+  });
+
+  it("mints a distinct id for each run, so one tool call's gates stay separable", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner({
+      resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
+    });
+    await runner.run(makeDescriptor(), null);
+    await runner.run(makeDescriptor(), null);
+    expect(reviewWrites[0].details.requestId).not.toBe(
+      reviewWrites[1].details.requestId,
+    );
   });
 });

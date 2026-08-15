@@ -68,6 +68,7 @@ export function describeSkillReadGate(
     },
     logContext: {
       source: "skill_read",
+      toolCallId: tcc.toolCallId,
       skillName: matchedSkill.name,
       agentName: tcc.agentName,
       path,
