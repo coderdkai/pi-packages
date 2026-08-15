@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import {
+  EXECUTION_HOST_TYPES,
   forEachNestedExecution,
   NESTED_EXECUTION_CONTEXTS,
 } from "#src/access-intent/bash/nested-execution";
@@ -16,7 +17,12 @@ import type { TSNode } from "#src/access-intent/bash/parser";
  * Recursively visit the AST and collect resolved text of nodes that
  * represent command arguments or redirect destinations.
  *
- * Skips `heredoc_body`, `heredoc_end`, and `comment` subtrees entirely.
+ * Reads no text from `heredoc_body`, `heredoc_end`, or `comment` subtrees, but
+ * still descends an execution host for the commands it hosts — an interpolating
+ * heredoc body runs its substitution even though its prose is never an operand
+ * (#741). That is why the {@link EXECUTION_HOST_TYPES} branch sits above the
+ * {@link SKIP_SUBTREE_TYPES} check: `heredoc_body` is in both sets, and the
+ * host reading is the one that must win.
  *
  * For commands in `PATTERN_FIRST_COMMANDS`, uses position-based
  * argument skipping to avoid collecting inline patterns/scripts
@@ -24,9 +30,12 @@ import type { TSNode } from "#src/access-intent/bash/parser";
  * arguments generically.
  */
 export function collectPathCandidateTokens(node: TSNode): string[] {
-  if (SKIP_SUBTREE_TYPES.has(node.type)) return [];
   if (node.type === "command") return collectCommandTokens(node);
   if (node.type === "file_redirect") return collectRedirectTokens(node);
+  if (EXECUTION_HOST_TYPES.has(node.type)) {
+    return collectHostedExecutionTokens(node);
+  }
+  if (SKIP_SUBTREE_TYPES.has(node.type)) return [];
 
   const tokens: string[] = [];
   for (let i = 0; i < node.childCount; i++) {
