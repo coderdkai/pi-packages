@@ -4,6 +4,7 @@ import type { PermissionPromptDecision } from "#src/authority/permission-dialog"
 import type { requestPermissionDecision } from "#src/authority/permission-prompt-component";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
 import { makePromptDetails } from "#test/helpers/prompt-details-fixtures";
+import { makePromptPreferences } from "#test/helpers/prompt-view-fixtures";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function makeDeps(
       ui,
       mode: "tui" as const,
       events,
-      getPromptPreferences: () => ({ doublePressToConfirm: true }),
+      getPromptPreferences: () => makePromptPreferences(),
       requestPermissionDecision: decisionFn,
     },
     events,
@@ -119,7 +120,7 @@ describe("LocalUserAuthorizer", () => {
     await authorizer.authorize(makeDetails());
 
     expect(decisionFn).toHaveBeenCalledWith(
-      { mode: "tui", ui, doublePressToConfirm: true },
+      { mode: "tui", ui, ...makePromptPreferences() },
       "Permission Required",
       "Allow read?",
       undefined,
@@ -159,7 +160,7 @@ describe("LocalUserAuthorizer", () => {
       ui,
       mode: "tui",
       events,
-      getPromptPreferences: () => ({ doublePressToConfirm: true }),
+      getPromptPreferences: () => makePromptPreferences(),
       requestPermissionDecision: decisionFn,
     });
 
@@ -216,7 +217,7 @@ describe("LocalUserAuthorizer", () => {
       );
 
       expect(decisionFn).toHaveBeenCalledWith(
-        { mode: "tui", ui, doublePressToConfirm: true },
+        { mode: "tui", ui, ...makePromptPreferences() },
         "Permission Required (Subagent)",
         "Allow read?",
         undefined,
