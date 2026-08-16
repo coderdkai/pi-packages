@@ -19,7 +19,10 @@ import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
-import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
+import {
+  makeGatePromptDetails,
+  makePromptPayload,
+} from "#test/helpers/prompt-details-fixtures";
 
 /**
  * Permission resolver mock with an optional default check result.
@@ -51,14 +54,11 @@ export function makeDescriptor(
       kind: "tool",
       check: makeCheckResult({ state: "deny", matchedPattern: "*" }),
     },
-    promptDetails: {
-      source: "tool_call",
-      agentName: null,
+    promptDetails: makeGatePromptDetails({
       message: "Allow tool 'read'?",
-      payload: makePromptPayload(),
       toolCallId: "tc-1",
       toolName: "read",
-    },
+    }),
     logContext: {
       source: "tool_call",
       toolCallId: "tc-1",
@@ -157,9 +157,7 @@ export function makeDenialDescriptor(
     surface: "write",
     input: {},
     denialContext,
-    promptDetails: {
-      source: "tool_call",
-      agentName: null,
+    promptDetails: makeGatePromptDetails({
       message: "Allow tool 'write'?",
       payload: makePromptPayload({
         request: {
@@ -175,7 +173,7 @@ export function makeDenialDescriptor(
       }),
       toolCallId: "tc-1",
       toolName: "write",
-    },
+    }),
     logContext: {
       source: "tool_call",
       toolCallId: "tc-1",
