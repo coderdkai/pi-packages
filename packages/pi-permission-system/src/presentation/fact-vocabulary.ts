@@ -30,8 +30,21 @@ export function flaggedElements(payload: PromptPayload): readonly string[] {
   return payload.request.value === "" ? [] : [payload.request.value];
 }
 
-/** What the decision-relevant value is called, per ask shape. */
+/**
+ * What {@link flaggedElements} returns is called.
+ *
+ * Differs from {@link valueLabel} for exactly one shape: a bash ask that
+ * escaped the working directory flags paths while its value is the command,
+ * so the two nouns are for two different things.
+ */
 export function flaggedElementLabel(payload: PromptPayload): string {
+  return payload.kind === "bash_external_directory"
+    ? "path"
+    : valueLabel(payload);
+}
+
+/** What the decision-relevant value is called, per ask shape. */
+export function valueLabel(payload: PromptPayload): string {
   switch (payload.kind) {
     case "bash":
     case "bash_external_directory":

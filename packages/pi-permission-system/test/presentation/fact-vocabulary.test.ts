@@ -3,6 +3,7 @@ import {
   describeBashCommandContext,
   flaggedElementLabel,
   flaggedElements,
+  valueLabel,
 } from "#src/presentation/fact-vocabulary";
 import type {
   PromptEvidence,
@@ -60,7 +61,7 @@ describe("flaggedElements", () => {
   });
 });
 
-describe("flaggedElementLabel", () => {
+describe("valueLabel", () => {
   it.each([
     ["bash", "command"],
     ["bash_external_directory", "command"],
@@ -71,7 +72,7 @@ describe("flaggedElementLabel", () => {
     ["skill", "skill"],
     ["skill_read", "skill"],
   ] as const)("labels a %s ask's value %s", (kind, label) => {
-    expect(flaggedElementLabel(payloadOf(kind, "value"))).toBe(label);
+    expect(valueLabel(payloadOf(kind, "value"))).toBe(label);
   });
 
   it.each([
@@ -80,12 +81,27 @@ describe("flaggedElementLabel", () => {
     ["read", "value"],
   ])("infers a payload-less forwarded ask's label from its %s surface", (surface, label) => {
     const base = payloadOf("forwarded", "value");
+    expect(valueLabel({ ...base, request: { ...base.request, surface } })).toBe(
+      label,
+    );
+  });
+});
+
+describe("flaggedElementLabel", () => {
+  it("labels the escaping paths a bash external-directory ask flags", () => {
     expect(
-      flaggedElementLabel({
-        ...base,
-        request: { ...base.request, surface },
-      }),
-    ).toBe(label);
+      flaggedElementLabel(payloadOf("bash_external_directory", "cmd")),
+    ).toBe("path");
+  });
+
+  it.each([
+    "bash",
+    "mcp",
+    "path",
+    "skill",
+  ] as const)("agrees with the value label for a %s ask, whose value is what it flags", (kind) => {
+    const single = payloadOf(kind, "value");
+    expect(flaggedElementLabel(single)).toBe(valueLabel(single));
   });
 });
 

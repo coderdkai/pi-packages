@@ -1,7 +1,7 @@
 import {
   describeBashCommandContext,
-  flaggedElementLabel,
   flaggedElements,
+  valueLabel,
 } from "#src/presentation/fact-vocabulary";
 import { fitLinesToWidth } from "#src/presentation/line-fitting";
 import type { PromptPayload } from "#src/presentation/prompt-payload";
@@ -215,7 +215,7 @@ function coreFacts(payload: PromptPayload): Fact[] {
   // The surface is stated already when it *is* the tool name (a bash ask) or
   // when it is the word the value line is labelled with (a path ask reads
   // `path : /tmp/x`), so a line for it would repeat rather than add.
-  const label = flaggedElementLabel(payload);
+  const label = valueLabel(payload);
   if (request.surface !== request.toolName && request.surface !== label) {
     facts.push({ label: "surface", text: request.surface });
   }
