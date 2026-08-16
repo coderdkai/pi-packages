@@ -197,7 +197,7 @@ describe("readForwardedPermissionRequest — accessIntent field", () => {
       requesterSessionId: "child-session",
       targetSessionId: "parent-session",
       requesterAgentName: "researcher",
-      message: "Allow this path access?",
+      surface: "read",
     };
   }
 
@@ -254,7 +254,7 @@ describe("readForwardedPermissionRequest — accessIntent field", () => {
     const parsed = writeAndRead(baseRequest());
     expect(parsed?.accessIntent).toBeUndefined();
     // Display/routing fields still reconstruct.
-    expect(parsed?.message).toBe("Allow this path access?");
+    expect(parsed?.surface).toBe("read");
     expect(parsed?.requesterAgentName).toBe("researcher");
   });
 
@@ -300,7 +300,6 @@ describe("readForwardedPermissionRequest — payload field", () => {
       requesterSessionId: "child-session",
       targetSessionId: "parent-session",
       requesterAgentName: "researcher",
-      message: "Allow this path access?",
     };
   }
 
@@ -381,6 +380,22 @@ describe("readForwardedPermissionRequest — payload field", () => {
       ...baseRequest(),
       payload: { ...makePromptPayload(), annotations: [{ source: "judge" }] },
     });
+    expect(parsed?.payload).toBeUndefined();
+  });
+
+  it("accepts a legacy message-only request and reconstructs no message", () => {
+    // An older child writes `message` and no `payload`. The required-core gate
+    // no longer demands the field, so the request is served (from its display
+    // fields) rather than rejected outright — and the sentence is not salvaged.
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      message: "Allow this path access?",
+      surface: "read",
+      value: "/tmp/x",
+    });
+    expect(parsed).not.toHaveProperty("message");
+    expect(parsed?.surface).toBe("read");
+    expect(parsed?.value).toBe("/tmp/x");
     expect(parsed?.payload).toBeUndefined();
   });
 });

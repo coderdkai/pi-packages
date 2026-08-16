@@ -69,7 +69,7 @@ function getContextSystemPrompt(ctx: ForwarderContext): string | undefined {
 
 /**
  * The facts a forwarded request relays unchanged from the child's ask: the
- * prompt message, the optional display projection, and the optional
+ * prompt payload, the optional display projection, and the optional
  * session-approval suggestion.
  *
  * Bundled into one object so the two-hop private chain
@@ -83,7 +83,6 @@ interface ForwardedRequestFacts {
    * decision instead of a third being minted here.
    */
   requestId: string;
-  message: string;
   /** The child's complete prompt payload, relayed for the serving node to render. */
   payload: PromptPayload;
   display?: ForwardedPromptDisplay;
@@ -174,7 +173,6 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     const uiPrompt = buildUiPrompt(details);
     return this.waitForForwardedApproval(this.ctx, {
       requestId: details.requestId,
-      message: details.message,
       payload: details.payload,
       display: {
         source: uiPrompt.source,
@@ -304,7 +302,6 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       requesterSessionId,
       targetSessionId,
       requesterAgentName,
-      message: facts.message,
       payload: facts.payload,
       ...(facts.display
         ? {

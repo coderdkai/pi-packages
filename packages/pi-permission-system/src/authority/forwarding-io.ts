@@ -397,8 +397,7 @@ export function readForwardedPermissionRequest(
       typeof parsed.createdAt !== "number" ||
       typeof parsed.requesterSessionId !== "string" ||
       typeof parsed.targetSessionId !== "string" ||
-      typeof parsed.requesterAgentName !== "string" ||
-      typeof parsed.message !== "string"
+      typeof parsed.requesterAgentName !== "string"
     ) {
       logPermissionForwardingWarning(
         logger,
@@ -413,9 +412,10 @@ export function readForwardedPermissionRequest(
       requesterSessionId: parsed.requesterSessionId,
       targetSessionId: parsed.targetSessionId,
       requesterAgentName: parsed.requesterAgentName,
-      message: parsed.message,
-      // Tolerant read: display fields are optional and may be absent (older
-      // child) or malformed; reconstruct only the well-formed ones.
+      // Tolerant read: the payload and display fields are optional and may be
+      // absent (older child) or malformed; reconstruct only the well-formed
+      // ones. An older child's `message` is deliberately not salvaged — a
+      // skewed ask renders from the fields it does carry (ADR 0011 §9).
       payload: asPromptPayload(parsed.payload),
       source: asUiPromptSource(parsed.source),
       surface: asNullableDisplayString(parsed.surface),

@@ -94,10 +94,13 @@ function workingDirectory(payload: PromptPayload): string {
 }
 
 /**
- * The child's ask, prefixed with its provenance.
+ * The provenance and relayed display fields of an ask that arrived without a
+ * payload.
  *
- * Until the payload replaces `message` on the wire, a forwarded request carries
- * the child's pre-rendered sentence, which arrives as a single evidence entry.
+ * `forwarded` describes exactly that one ask (#745): a payload-bearing request
+ * carries the child's own kind and renders through the arm above. There is no
+ * relayed sentence left to prefix, so this builds from the surface and value
+ * the request does hold.
  */
 function renderForwarded(payload: PromptPayload): string {
   const { requester } = payload.request;
@@ -107,8 +110,19 @@ function renderForwarded(payload: PromptPayload): string {
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || intentional: a version-skewed request carries "" rather than null
     `Session ID: ${requester.sessionId || "unknown"}`,
     "",
-    textOf(payload, "requested"),
+    forwardedAskClause(payload),
   ].join("\n");
+}
+
+/** What a payload-less request relayed about its ask, however little that is. */
+function forwardedAskClause(payload: PromptPayload): string {
+  const { surface, value } = payload.request;
+  if (!surface) {
+    return "Requested permission; the request relayed no further details.";
+  }
+  return value
+    ? `Requested '${surface}' for '${value}'.`
+    : `Requested '${surface}'.`;
 }
 
 /** The text of an evidence entry the render requires, or the empty string. */

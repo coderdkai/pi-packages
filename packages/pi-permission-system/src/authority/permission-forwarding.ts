@@ -54,9 +54,9 @@ const SESSION_FORWARDING_RESPONSES_DIRECTORY_NAME = "responses";
  * Display fields relayed from a forwarding child to the parent UI so the parent
  * can emit a non-degraded `permissions:ui_prompt` event.
  *
- * Carried separately from the prompt message because the parent reconstructs
+ * Carried separately from the prompt payload because the parent reconstructs
  * the original event from the escalated ask's details (`buildUiPrompt`), not
- * from the message text.
+ * from the payload's own facts.
  */
 export interface ForwardedPromptDisplay {
   source: PermissionUiPromptSource;
@@ -124,7 +124,6 @@ export type ForwardedPermissionRequest = {
   requesterSessionId: string;
   targetSessionId: string;
   requesterAgentName: string;
-  message: string;
   /**
    * The child's complete prompt payload (ADR 0011 §2), so the serving node
    * renders the child's own facts under the *parent's* budget rather than

@@ -315,12 +315,12 @@ function valueLabel(payload: PromptPayload): string {
 }
 
 /**
- * A forwarded request carries the child's *display* projection — its tool name
- * as the surface — rather than the child's own payload, so the label is
- * inferred from it and falls back to a neutral one.
+ * Labels the version-skew render only: a payload-bearing forwarded ask carries
+ * the child's real `kind` and never reaches this arm (#745).
  *
- * Dissolves when the payload replaces `message` on the wire (#745): the
- * serving node will then hold the child's real `kind`.
+ * Without a payload all that survives is the child's *display* projection — its
+ * tool name as the surface — so the label is inferred from it and falls back to
+ * a neutral one.
  */
 function forwardedValueLabel(surface: string): string {
   switch (surface) {

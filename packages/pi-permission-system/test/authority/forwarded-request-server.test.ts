@@ -199,6 +199,15 @@ describe("processInbox — recorded-authority resolution", () => {
       surface: "bash",
       value: "git push",
       accessIntent,
+      payload: makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          surface: "bash",
+          toolName: "bash",
+          value: "git push",
+        },
+      }),
     });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
@@ -223,8 +232,11 @@ describe("processInbox — recorded-authority resolution", () => {
       requestId: "req-ask",
       source: "tool_call",
       agentName: "Explore",
+      // The serving node holds the child's real kind, so the legacy message it
+      // still persists is the local-shaped sentence for that kind — the
+      // deliberate consequence of "renders identically in kind" (#745).
       message:
-        "Subagent 'Explore' requested permission.\nSession ID: child-session\n\nAllow git push?",
+        "Agent 'Explore' requested bash command 'git push'. Allow this command?",
       surface: "bash",
       value: "git push",
       forwarding: {
@@ -237,7 +249,7 @@ describe("processInbox — recorded-authority resolution", () => {
         boundaryValue: null,
       },
       payload: {
-        kind: "forwarded",
+        kind: "bash",
         request: {
           requester: {
             agentName: "Explore",
@@ -245,16 +257,14 @@ describe("processInbox — recorded-authority resolution", () => {
             sessionId: "child-session",
           },
           surface: "bash",
-          toolName: null,
+          toolName: "bash",
           invokedToolName: null,
           value: "git push",
           matchedPattern: null,
           commandContext: null,
           executedUnit: null,
         },
-        evidence: [
-          { label: "requested", text: "Allow git push?", detail: null },
-        ],
+        evidence: [],
         annotations: [],
       },
     });
@@ -512,7 +522,9 @@ describe("processInbox — the child's payload on the escalated ask", () => {
       source: "tool_call",
       surface: "read",
       value: "/tmp/x",
-      message: "Allow read of /tmp/x?",
+      // `JSON.stringify` drops the key, so the written request genuinely
+      // carries no payload — an older child's request.
+      payload: undefined,
     });
 
     // `kind: "forwarded"` now means exactly one thing: this ask arrived without
@@ -533,9 +545,7 @@ describe("processInbox — the child's payload on the escalated ask", () => {
         commandContext: null,
         executedUnit: null,
       },
-      evidence: [
-        { label: "requested", text: "Allow read of /tmp/x?", detail: null },
-      ],
+      evidence: [],
       annotations: [],
     });
   });

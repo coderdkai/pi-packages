@@ -242,28 +242,75 @@ describe("renderLegacyMessage", () => {
     });
   });
 
+  // `forwarded` now describes exactly one ask: a version-skewed request that
+  // arrived without a payload. There is no relayed sentence to prefix — the
+  // render is built from the surface and value the request does carry.
   describe("forwarded", () => {
-    it("prefixes the child's ask with its provenance", () => {
+    it("names the requester and the surface and value it relayed", () => {
       expect(
         renderLegacyMessage(
-          payload(
-            "forwarded",
-            {
-              requester: {
-                agentName: "child",
-                forwarded: true,
-                sessionId: "sess-1",
-              },
+          payload("forwarded", {
+            requester: {
+              agentName: "child",
+              forwarded: true,
+              sessionId: "sess-1",
             },
-            [evidence("requested", "Current agent requested tool 'read'.")],
-          ),
+            surface: "read",
+            value: "/tmp/x",
+          }),
         ),
       ).toBe(
         [
           "Subagent 'child' requested permission.",
           "Session ID: sess-1",
           "",
-          "Current agent requested tool 'read'.",
+          "Requested 'read' for '/tmp/x'.",
+        ].join("\n"),
+      );
+    });
+
+    it("omits the value clause when the request relayed no value", () => {
+      expect(
+        renderLegacyMessage(
+          payload("forwarded", {
+            requester: {
+              agentName: "child",
+              forwarded: true,
+              sessionId: "sess-1",
+            },
+            surface: "bash",
+            value: "",
+          }),
+        ),
+      ).toBe(
+        [
+          "Subagent 'child' requested permission.",
+          "Session ID: sess-1",
+          "",
+          "Requested 'bash'.",
+        ].join("\n"),
+      );
+    });
+
+    it("still names the ask when the request relayed no surface either", () => {
+      expect(
+        renderLegacyMessage(
+          payload("forwarded", {
+            requester: {
+              agentName: "child",
+              forwarded: true,
+              sessionId: "sess-1",
+            },
+            surface: "",
+            value: "",
+          }),
+        ),
+      ).toBe(
+        [
+          "Subagent 'child' requested permission.",
+          "Session ID: sess-1",
+          "",
+          "Requested permission; the request relayed no further details.",
         ].join("\n"),
       );
     });
@@ -274,24 +321,22 @@ describe("renderLegacyMessage", () => {
     ])("says 'unknown' for %s", (_case, identity) => {
       expect(
         renderLegacyMessage(
-          payload(
-            "forwarded",
-            {
-              requester: {
-                agentName: identity,
-                forwarded: true,
-                sessionId: identity,
-              },
+          payload("forwarded", {
+            requester: {
+              agentName: identity,
+              forwarded: true,
+              sessionId: identity,
             },
-            [evidence("requested", "Allow?")],
-          ),
+            surface: "read",
+            value: "/tmp/x",
+          }),
         ),
       ).toBe(
         [
           "Subagent 'unknown' requested permission.",
           "Session ID: unknown",
           "",
-          "Allow?",
+          "Requested 'read' for '/tmp/x'.",
         ].join("\n"),
       );
     });
