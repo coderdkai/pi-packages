@@ -18,6 +18,7 @@ import {
   PERMISSIONS_READY_CHANNEL,
   PERMISSIONS_UI_PROMPT_CHANNEL,
 } from "#src/permission-events";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 
 // ── Minimal EventBus stub ──────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ describe("emitUiPromptEvent", () => {
       surface: "bash",
       value: "git status",
       agentName: "Explore",
-      message: "Allow git status?",
+      request: makePromptPayload().request,
       forwarding: null,
       ...overrides,
     };
