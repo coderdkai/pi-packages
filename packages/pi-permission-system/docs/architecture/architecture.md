@@ -388,8 +388,13 @@ That is a redundancy rule, not an elision: the fact is still on screen, which is
 The two cross-boundary contracts now carry facts rather than prose.
 The forwarded-request wire carries the child's `PromptPayload`, so the serving node renders the child's own facts under the *parent's* budget — a forwarded bash ask reads `command : …` exactly as a local one does, and `kind: "forwarded"` narrows to meaning one thing: this ask arrived without a payload.
 `permissions:ui_prompt` carries `request`, the payload's invariant core, and no evidence at all, which makes the bus the narrowest renderer (ADR 0011 §6): any loaded extension observes it without the operator having named that extension.
-`toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` are deprecated and ignored, superseded by the renderer budgets; their built-in constants still bound the evidence the review log persists verbatim.
-The review log is the last `message` reader, so `renderLegacyMessage` survives until Step 4 ([#746]) replaces it.
+`toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` are deprecated and ignored, superseded by the renderer budgets.
+
+The last two consumers are renderers too, so the flat `message` string is gone.
+The agent-facing text identifies a refused call rather than reproducing it (§7): it names the surface, the tool, the rule with its nested context, the flagged path or target or skill, and the operator's or human's reason — never the bash command, which is the payload that took over the viewport in [#710] and the agent's context window on every denial.
+The flagged element is agent input, so it is capped rather than structurally bounded; naming it is what makes a denial correctable, since which of a call's operands a rule fired on is below tool-call granularity and the agent cannot recover it from its own arguments.
+The review log persists the payload's request facts rather than the prompt sentence — stamped by `GateRunner` beside the request id, so no gate can forget them — and every string it writes is narrowed to `reviewLogFieldMaxWidth`.
+That bound lives in `writeLine` beside the key-name mask, which makes the log's growth a decision the operator makes rather than a consequence of how long a command happened to be.
 ADR 0011 records what each dependent item becomes under the contract.
 
 ## Two-phase checking
@@ -780,7 +785,7 @@ src/
 │   ├── tool-call-boundary.ts `createFailClosedToolCall(gate, reporter, audit, tracer)` - the only `pi.on("tool_call")` target and sole `GateOutcome` → SDK-shape translator; owns the `try/catch → block` (the SDK's `emitToolCall` does not catch a throwing handler), writes a `gate_error` review entry on throw with its own minted request id (the throw may come from anywhere in the pipeline, so no gate's id is available) via a helper that swallows so the block stays unconditional, and emits a `debugLog`-gated `permission.decision` trace per call
 │   └── gates/               Pure descriptor factories + runner
 │       ├── types.ts          GateOutcome, ToolCallContext
-│       ├── descriptor.ts     GateDescriptor (with DenialContext), GateBypass, GateResult types, plus `DecisionEventFacts` (a decision event minus the `requestId` only the runner can supply — the type that routes every emit through the runner's stamping site)
+│       ├── descriptor.ts     GateDescriptor (carrying the `PromptPayload` as its single presentation fact), GateBypass, GateResult types, plus `DecisionEventFacts` (a decision event minus the `requestId` only the runner can supply — the type that routes every emit through the runner's stamping site). Constraint: `promptDetails` omits both `requestId` and `payload`, which the runner stamps, so a gate cannot supply either twice
 │       ├── runner.ts         GateRunner class — constructed with `ScopedPermissionResolver`, `SessionApprovalRecorder`, `AskEscalator` (the single-method ask-escalation seam), `DecisionReporter`, plus a live `isYoloEnabled` reader (read per gate; the sole place a post-resolution ask is reconciled with yolo); `run(gate, agentName)` dispatches null / bypass / descriptor and mints the request id before the branch, so a request that never prompts is identified exactly as one that does; its private `emitDecision` is the sole site stamping that id onto a `DecisionEventFacts`
 │       ├── tool-call-gate-pipeline.ts `ToolCallGateInputs` interface (`getActiveSkillEntries`, `getInfrastructureReadDirs`, `getToolPreviewLimits`, `getPathNormalizer`, `getShellToolAliases`) + `ToolCallGatePipeline` class — constructed with `ScopedPermissionResolver` + `ToolCallGateInputs`; owns bash-command extraction + the single `BashProgram.parse`, `ToolPreviewFormatter` construction, the infra-dir list, the six gate producers, and the run loop; `evaluate(tcc, runner)` returns the first block outcome or allow
 │       ├── skill-input-gate-pipeline.ts `SkillInputGateInputs` + `GateNotifier` interfaces + `SkillInputGatePipeline` class — owns the raw `checkPermission` pre-check, deny notify, `describeSkillInputGate` descriptor, and `runner.run`; `evaluate(skillName, agentName, notifier, runner)` makes the `input` path symmetric with the `tool_call` path
@@ -826,7 +831,6 @@ src/
 ├── node-modules-discovery.ts  Global node_modules resolution (walk-up + npm root -g fallback)
 ├── system-prompt-sanitizer.ts Narrow Available tools section + filter guidelines to the active set
 ├── skill-prompt-sanitizer.ts  Skill prompt filtering by policy
-├── denial-messages.ts         Centralized denial message formatter - DenialContext type, EXTENSION_TAG, formatDenyReason/formatUnavailableReason/formatUserDeniedReason
 ├── permission-prompts.ts      Agent-facing pre-check reasons (missing tool name, unknown tool) refused before any permission check runs
 ├── presentation/             Prompt presentation: the payload a gate emits, and the renders over it (ADR 0011)
 │   ├── prompt-payload.ts     `PromptPayload` (the `kind` discriminant, the `request` invariant core, the complete `evidence` list, the `annotations` slot) + `localRequester`/`findEvidence`/`allEvidence` + `asPromptPayload`, the all-or-nothing tolerant guard the forwarded wire's reader narrows through. Constraint: the payload is complete by contract — it never truncates and never decides what a human sees, so elision is a property of a render (ADR 0011 §2). The guard lives beside its type so a new request fact updates it next door rather than in a distant reader
@@ -836,7 +840,9 @@ src/
 │   ├── forwarded-ask-payload.ts `buildForwardedAskPayload` — a two-branch projection, not a synthesizer: the child's own payload with only `requester` re-stamped to the request's authoritative provenance, or a degraded `kind: "forwarded"` render built from the display fields a payload-less request does carry. Constraint: the serving node is the only party that knows the ask arrived over the wire, so it re-stamps the requester and passes every other child fact through untouched
 │   ├── dialog-renderer.ts    `renderPromptDialog(payload, budget, paint)` — the bounded render for the inline dialog and the `select`/`input` fallback: aligned one-fact-per-line layout, a per-field width cap, a row budget over the evidence, and whole-token highlighting of the flagged element. Also `RenderBudget`/`DEFAULT_RENDER_BUDGET`/`resolveRenderBudget` (the configured budget) and `completeViewBudget` (the complete view). Constraint: the row budget bounds evidence and the field cap bounds the core — a core fact is shortened, never dropped (ADR 0011 §3 over §5)
 │   ├── line-fitting.ts       `fitLinesToWidth` — wrap-then-truncate to a terminal width, so each line is one visual row; shared by the `ctx.ui.custom` dialog, whose contract requires it, and by the renderer, which cannot count rows before wrapping
-│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string the review log still reads, rendered from the payload alone. Transitional: it goes when that last reader does
+│   ├── fact-vocabulary.ts    `flaggedElements`/`flaggedElementLabel`/`valueLabel`/`describeBashCommandContext` — the render vocabulary shared by every renderer over a payload: which element an ask flags, what it is called, and how a nested execution context reads. Owned by no renderer, so the dialog, the agent text, and the review log cannot disagree about what an ask is flagging
+│   ├── agent-renderer.ts     `EXTENSION_TAG` + `renderPolicyDenial`/`renderUserDenial`/`renderUnavailableDenial` — the agent-facing render of a refused ask. Constraint: it identifies the call and never reproduces it (ADR 0011 §7) — the bash command is never rendered, and the flagged path/target/skill is capped
+│   └── review-log-renderer.ts `renderReviewLogFacts(payload)` — the request facts the review log persists (ADR 0011 §6), and no evidence or annotations. Constraint: exposure does not grow — evidence is the unbounded part `docs/decisions/0010-permission-log-secret-exposure.md` bounds
 ├── tool-input-preview.ts              Pure tool-input text utilities (truncation, line counting, count formatting), serialization + default constants; `serializeToolInputPreview` (prompt, unredacted) and `serializeRedactedToolInputPreview` (log) are separate entry points because the input is flattened to a string before the writer sees its keys
 ├── tool-input-prompt-formatters.ts    Pure per-tool prompt formatters (edit/write/read) + getPromptPath helper
 ├── tool-preview-formatter.ts          ToolPreviewFormatter class - config-dependent prompt + log formatting; seam-first dispatch consults ToolInputFormatterLookup before built-in switch
@@ -869,7 +875,8 @@ src/
 │   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` field), location derivation, atomic JSON writes (owner-only; `rename` preserves the temp file's mode)
 │   └── forwarding-manager.ts  `ForwardingController` interface + `ForwardingManager` class - drives the forwarded-permission inbox polling lifecycle; tells `ForwardedRequestServer.processInbox`, and publishes the polled session id to the `ServingAnnouncer` plus a `forwarded_permission.serving_started`/`serving_stopped` review entry
 ├── session-logger.ts          `SessionLogger` interface + `PermissionSessionLogger` class; owns JSONL-writer composition, IO-failure warning dedup, and notify sink
-├── logging.ts                 JSONL review/debug log writer; serializes through `redactedJsonStringify` and creates both logs owner-only
+├── logging.ts                 JSONL review/debug log writer; serializes through `redactedJsonStringify` and creates both logs owner-only. Constraint: `writeLine` is the only place a line is produced, so both the key-name mask and the review stream's width bound live there and no write path can escape either
+├── log-field-cap.ts           `capLogFieldWidths` + `resolveReviewLogFieldWidth` + `DEFAULT_REVIEW_LOG_FIELD_MAX_WIDTH` - the review log's `reviewLogFieldMaxWidth` bound. Constraint: narrows by length alone and never reads a value to decide what to shorten, which is what keeps it a cap rather than redaction
 ├── json-safe-stringify.ts     `createJsonSafeReplacer` (Error → plain object, bigint → string, cycles → `[Circular]`) + `safeJsonStringify`; separate from the writer because the prompt path serializes tool input too, and only the log path redacts
 ├── log-redaction.ts           `isSensitiveLogKey` + `redactedJsonStringify` - key-name masking applied at the log-write boundary. Constraint: structural, never value-shape; see `docs/decisions/0010-permission-log-secret-exposure.md`
 ├── log-file-permissions.ts    Owner-only mode constants + best-effort `restrictExistingPathToOwner`; shared by the log writer, the logs-dir helper, and forwarding IO
@@ -926,6 +933,7 @@ No decline, so the regular rotation continues.
 | Forwarded-wire `message: string` field (`permission-forwarding.ts`)     | 1                     | 0 ✅            |
 | Broadcast `message: string` field (`permission-ui-prompt.ts`)           | 1                     | 0 ✅            |
 | `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
+| Legacy `message` render sites (`renderLegacyMessage` in `src/`)         | 17                    | 0 ✅            |
 | Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1               |
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1             |
 | Request-id mint sites in `src/`                                         | 2                     | 1 ✅            |
@@ -942,6 +950,7 @@ Recompute commands (run from the repo root):
 - Wire message field: `grep -c "message: string" packages/pi-permission-system/src/authority/permission-forwarding.ts`
 - Broadcast message field: `grep -c "message: string" packages/pi-permission-system/src/permission-ui-prompt.ts`
 - Presentation directory: `ls packages/pi-permission-system/src | grep -c presentation`
+- Legacy message sites: `grep -rn "renderLegacyMessage" packages/pi-permission-system/src --include="*.ts" | wc -l`
 - Liveness module: `ls packages/pi-permission-system/src/authority | grep -c "forwarding-liveness"`
 - Provenance sites: `grep -rn "decidedBy" packages/pi-permission-system/src | wc -l`
 - Id mint sites: `grep -rnE "Math\.random\(\)\.toString\(36\)|randomUUID\(\)" packages/pi-permission-system/src --include="*.ts" | wc -l`
@@ -951,7 +960,7 @@ Recompute commands (run from the repo root):
 - Health/duplication/dead exports: `pnpm fallow health --score --workspace @gotgenes/pi-permission-system` / `pnpm fallow dupes --workspace @gotgenes/pi-permission-system` / `pnpm fallow dead-code --workspace @gotgenes/pi-permission-system`
 
 The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows grep for names the phase has not created yet; the step that creates each (Steps 1, 5, 6, 7 respectively) must either use the roadmap's name or update the metric row in the same commit.
-The two request-id rows were added mid-phase with Steps 9 and 10, so their baselines are measured at that point rather than at the phase-open snapshot.
+The two request-id rows were added mid-phase with Steps 9 and 10, and the legacy-message row with Step 4, so their baselines are measured at that point rather than at the phase-open snapshot.
 
 ### Steps
 
@@ -1003,7 +1012,7 @@ Release: batch "presentation-payload"
 
 Release: batch "presentation-contract"
 
-#### Step 4: The agent-facing and review-log renderers ([#746])
+#### ✅ Step 4: The agent-facing and review-log renderers ([#746])
 
 **Cause:** the same unbounded payload that took over the viewport is echoed verbatim into the agent's context on every denial (the human's constraint is rows; the agent's is tokens), and the review log persists prompt wording as a side effect of assembly rather than as a configured render.
 
@@ -1011,6 +1020,12 @@ Release: batch "presentation-contract"
 - **Target:** `denial-messages.ts` migrates to `src/presentation/agent-renderer.ts` under ADR 0011 §7 — the agent renderer identifies the call (surface, matched pattern, verdict, the human's typed reason) and never reproduces its input; the review-log write path (`permission-prompter.ts` / `session-logger.ts`) renders the payload under its existing configured limits instead of persisting `message`.
 - **Outcome:** denial text is structurally bounded (no raw-command interpolation on any denial path); the review log's growth is a configured decision; key-name redaction unchanged.
 - **Impact 3 / Risk 2 / Priority 12.**
+- **Landed:** `grep -rn "renderLegacyMessage" src` goes 17 → 0 — the review log was the last `message` reader, so `legacy-message.ts` went with it and `PromptPermissionDetails.message` is gone.
+  Planning settled the reading §7 leaves open: *identifying* a call includes naming which of its operands the rule fired on, while *reproducing* it means echoing the command or the tool-input body, which no render does.
+  The flagged element is therefore rendered under a field cap rather than structurally excluded — the departure is deliberate, because correlation is already structural (Pi returns a block reason as that call's own tool result, stamped with its `toolCallId`, with the call's arguments retained in context) and what the agent cannot recover is sub-call granularity.
+  `DenialContext` dissolved into `PromptPayload`: every field it uniquely held is one §7 forbids rendering, and the operator's deny-with-reason text passes from the resolved check as an argument, which also makes it reach the agent on every surface rather than tool and bash alone.
+  Measured on a live 7.07 MB review log: dropping `message` (21.5%) and capping every field at the new `reviewLogFieldMaxWidth` (a further 7.1%, all of it `command`) removes 28.7%, shortening 4.3% of command entries.
+  The bound went to `writeLine` rather than each renderer, and the log facts to `GateRunner` rather than each of the seven gates, on the same reasoning: a producer cannot forget what it never supplies.
 
 Release: batch "presentation-contract"
 
@@ -1099,7 +1114,7 @@ Release: independent
 flowchart TD
     S1["✅ Step 1 (#744): PromptPayload + builders"] --> S2["✅ Step 2 (#710): bounded local renderers"]
     S2 --> S3["✅ Step 3 (#745): cross-boundary swap (feat!)"]
-    S2 --> S4["Step 4 (#746): agent + review-log renderers"]
+    S2 --> S4["✅ Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
     S9["✅ Step 9 (#752): minted request id"] --> S3
     S9 --> S10["Step 10 (#610): cross-session correlation"]
