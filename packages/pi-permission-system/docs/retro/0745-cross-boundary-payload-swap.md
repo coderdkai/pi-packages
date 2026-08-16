@@ -97,6 +97,50 @@ The plan is self-consistent and authoritative for `/tdd-plan`: six TDD steps, no
 Nothing is in flight — working tree clean, [#752] landed and released, [#721] (the other `approval-escalator.ts` editor) not started.
 The green baseline has **not** been run this session; `/tdd-plan` owns that gate.
 
+## Stage: Implementation — TDD (2026-08-16T01:10:03Z)
+
+### Session summary
+
+Executed all six TDD steps of the plan: the payload joins the forwarded-request wire additively, the serving node switches to projecting the child's payload, `message` leaves the wire, the `permissions:ui_prompt` broadcast narrows to `request: PromptRequestFacts`, the two tool-preview caps are soft-deprecated with a `detectDeprecatedPreviewCaps` notice, and the docs plus the Phase 13 roadmap mark land.
+Six commits — two plain `feat:`, three `feat!:` carrying the removals, one `docs:` — and a test-count delta of 2994 → 3009 (+15) across 139 files.
+Both plan metrics hit their target: `grep -c "message: string"` is `0` in `permission-forwarding.ts`, `permission-ui-prompt.ts`, and `permission-events.ts`.
+
+### Observations
+
+- **Pre-completion reviewer: PASS.**
+  No WARN findings.
+  It independently re-verified the three named checks — every `feat!:` footer's remedy exists in the real surface, the eight local-kind cases in `test/presentation/legacy-message.test.ts` are untouched, and no stale `message` reference survives in `src/` or the shipped docs.
+  It observed one transient `test/composition-root.test.ts` timeout in the monorepo-wide run that did not reproduce in isolation — resource contention, not a regression.
+- **Tidy-First assessor found no preparatory work warranted.**
+  Its one Optional candidate (extracting a shared assertion helper in `test/permission-ui-prompt.test.ts` before the literals grow) was correctly self-declined: the helper's shape depends on the very `payload`/`request` fields the change introduces.
+  Skipping it was right — the file was rewritten wholesale with a small `payloadWith` local helper that only existed once the type did.
+- **The plan's step-2 boundary was one commit too eager, and lift-and-shift caught it.**
+  Step 2 as written had the degraded forwarded payload emit `evidence: []`, but `message` was still on the wire at that point, so `renderForwarded` (which reads the `"requested"` entry) would have broken a step early.
+  Moved the emptying into step 3, where `message` actually leaves — keeping each step's blast radius at one contract, which is the whole point of the lift-and-shift ordering.
+  Generalizable: when a plan's step N describes a *consequence* of step N+1's removal, the consequence belongs in N+1.
+- **The [#710] row-budget invariant was measured, not argued, and it held.**
+  The new-shape pin (`kind: "bash"` with the child's real evidence, at widths 120) passed on first run inside the 24-row default, so the re-pin was green before the old `kind: "forwarded"` case was touched.
+  Worth noting the old case was *not* deleted: it is now the version-skew render's test, a real branch.
+- **The deprecated config caps traverse the pipeline backwards, and that needed its own test.**
+  Every other field goes schema → merge → runtime type; these must reach the merge intermediate (so `detectDeprecatedPreviewCaps` sees an operator's setting) and stop there.
+  `test/config-pipeline.test.ts`'s #332-class cases were rewritten to assert exactly that split — `mergeResult.merged.toolInputPreviewMaxLength` is `1000` while the normalized config does not have the property.
+  Without that rewrite the deletion would have looked like the #332 bug returning.
+- **A `feat!:` message-removal commit's real blast radius was two test files, not one.**
+  `tsc` found `test/permission-events.test.ts` immediately, but `test/authority/local-user-authorizer.test.ts`'s three `toHaveBeenCalledWith` event literals only failed at *runtime* — the emit is untyped through the bus.
+  The `pnpm run check`-then-full-suite discipline caught them; a cycle-scoped vitest run would not have.
+- **The shared `writeRequest` fixture default is load-bearing in a way that surfaced late.**
+  Adding `payload: makePromptPayload()` to it turned an existing `forwarded-request-server.test.ts` case into a payload-bearing ask, which correctly changed its escalated `message` to the local-shaped sentence.
+  That is the documented consequence of "renders identically in kind", so the test was updated with a comment rather than the fixture being weakened.
+  The payload-less case now passes `payload: undefined` explicitly, relying on `JSON.stringify` dropping the key.
+- **Two stale roadmap lines were found only by reading, not grepping.**
+  `architecture.md`'s Step 10 target and Track E note both still said "the child's originating `requestId`, which Step 3 puts on the wire" — describing the `requesterRequestId` field [#752] retired, in prose that names no removed symbol.
+  This is the exact failure mode the planning stage's own addendum warned about; it recurred one document over.
+  Corrected in the docs commit.
+- **One deviation from the plan's "README.md: No change" row.**
+  Added a docs-table row for `docs/migration/0745-prompt-payload-contracts.md`, per the docs-in-distribution convention (a shipped guide the README does not link is undiscoverable).
+- **Release stays deferred**, per the plan's `**Release:** mid-batch — defer` marker: batch "presentation-contract" tails at [#746], which lands the review-log renderer.
+  The three `feat!:` commits sit on `main` unreleased until then.
+
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#744]: https://github.com/gotgenes/pi-packages/issues/744
