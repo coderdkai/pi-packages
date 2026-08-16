@@ -5,7 +5,6 @@ import { vi } from "vitest";
 import type { AskEscalator } from "#src/authority/authorizer-selection";
 import type { ShellToolsConfig } from "#src/config-schema";
 import type { DecisionReporter } from "#src/decision-reporter";
-import type { DenialContext } from "#src/denial-messages";
 import type { GateDescriptor } from "#src/handlers/gates/descriptor";
 import { GateRunner } from "#src/handlers/gates/runner";
 import type { SkillInputGateInputs } from "#src/handlers/gates/skill-input-gate-pipeline";
@@ -19,10 +18,7 @@ import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
-import {
-  makeGatePromptDetails,
-  makePromptPayload,
-} from "#test/helpers/prompt-details-fixtures";
+import { makeGatePromptDetails } from "#test/helpers/prompt-details-fixtures";
 
 /**
  * Permission resolver mock with an optional default check result.
@@ -138,52 +134,6 @@ export function makeGateRunner(
       escalate,
       reporter,
     },
-  };
-}
-
-/**
- * Gate descriptor variant with write-surface defaults and a caller-supplied
- * denialContext.
- *
- * Use instead of `makeDescriptor` when the test exercises denial-message
- * formatting — the write surface and its matching promptDetails/logContext
- * keep the message helpers' field access consistent.
- */
-export function makeDenialDescriptor(
-  denialContext: DenialContext,
-  overrides: Partial<GateDescriptor> = {},
-): GateDescriptor {
-  return {
-    surface: "write",
-    input: {},
-    denialContext,
-    promptDetails: makeGatePromptDetails({
-      message: "Allow tool 'write'?",
-      payload: makePromptPayload({
-        request: {
-          requester: { agentName: null, forwarded: false, sessionId: null },
-          surface: "write",
-          toolName: "write",
-          invokedToolName: null,
-          value: "write",
-          matchedPattern: null,
-          commandContext: null,
-          executedUnit: null,
-        },
-      }),
-      toolCallId: "tc-1",
-      toolName: "write",
-    }),
-    logContext: {
-      source: "tool_call",
-      toolCallId: "tc-1",
-      toolName: "write",
-    },
-    decision: {
-      surface: "write",
-      value: "write",
-    },
-    ...overrides,
   };
 }
 

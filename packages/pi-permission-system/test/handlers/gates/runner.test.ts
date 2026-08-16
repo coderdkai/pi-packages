@@ -5,11 +5,7 @@ import { EXTENSION_TAG } from "#src/denial-messages";
 import type { GateBypass } from "#src/handlers/gates/descriptor";
 import type { PermissionDecisionEvent } from "#src/permission-events";
 import { SessionApproval } from "#src/session-approval";
-import {
-  makeDenialDescriptor,
-  makeDescriptor,
-  makeGateRunner,
-} from "#test/helpers/gate-fixtures";
+import { makeDescriptor, makeGateRunner } from "#test/helpers/gate-fixtures";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
 
 // ── GateRunner — descriptor path ───────────────────────────────────────────
@@ -408,7 +404,10 @@ describe("GateRunner — descriptor path", () => {
         check: makeCheckResult({ state: "deny", matchedPattern: "*" }),
         agentName: "test-agent",
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), "test-agent");
+      const result = await runner.run(
+        makeDescriptor({ denialContext: ctx }),
+        "test-agent",
+      );
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -429,7 +428,10 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null);
+      const result = await runner.run(
+        makeDescriptor({ denialContext: ctx }),
+        null,
+      );
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -451,7 +453,10 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null);
+      const result = await runner.run(
+        makeDescriptor({ denialContext: ctx }),
+        null,
+      );
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(
@@ -473,7 +478,10 @@ describe("GateRunner — descriptor path", () => {
         kind: "tool",
         check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
       };
-      const result = await runner.run(makeDenialDescriptor(ctx), null);
+      const result = await runner.run(
+        makeDescriptor({ denialContext: ctx }),
+        null,
+      );
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
