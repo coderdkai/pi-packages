@@ -64,8 +64,8 @@ Commits carrying a removal are `feat!:` with a `BREAKING CHANGE:` footer naming 
   The slot exists and nothing populates it.
 - Out-of-process forwarding liveness ([#721], Step 5).
   It also edits `src/authority/approval-escalator.ts`, and the roadmap's Track B note says to land the two in sequence rather than concurrently.
-- Minting the request id itself, carrying it on the non-prompting log paths, and adding it to `PermissionDecisionEvent` — Step 9 ([#752]), which lands **before** this issue.
-  This step only relays whatever `details.requestId` holds, so it commits to no identity model of its own.
+- Anything about the permission request id — Step 9 ([#752]) has landed and settled it, including across the forwarding boundary.
+  This step touches no identity code.
 - The parent-side terminal decision emit and cross-session prompt/decision correlation — Step 10 ([#610]), which lands after Step 4 with both halves in place.
 - Changing what any gate emits.
   Every payload builder is untouched; this step moves an existing payload across two boundaries.
@@ -74,8 +74,8 @@ Commits carrying a removal are `feat!:` with a `BREAKING CHANGE:` footer naming 
 
 ### Sequencing against the rest of Phase 13
 
-Step 9 ([#752]) lands **before** this issue.
-The two edit `src/permission-events.ts` — different interfaces in the same file — so they must not run concurrently, and this step's `requesterRequestId` then relays a minted id rather than the borrowed `toolCallId`.
+Step 9 ([#752]) has **landed and released** (`3f8d3fd6`), which retires the correlation work this plan originally carried — see "The correlation join" below.
+It also already edited `src/permission-events.ts` and `src/authority/approval-escalator.ts`, so this plan is written against the post-[#752] tree and its line references were re-verified there.
 Step 5 ([#721]) also edits `src/authority/approval-escalator.ts` and must land before or after this issue, not alongside it.
 
 ### What Steps 1 and 2 already built
@@ -132,12 +132,6 @@ export type ForwardedPermissionRequest = {
    * display fields it does carry (ADR 0011 §9).
    */
   payload?: PromptPayload;
-  /**
-   * The id the child's own gate used for this ask, so the two sides' review-log
-   * entries join on a shared key. Distinct from `id`, which names this
-   * request/response exchange. Optional for version-skew tolerance.
-   */
-  requesterRequestId?: string;
   source?: PermissionUiPromptSource;
   surface?: string | null;
   value?: string | null;
@@ -154,25 +148,19 @@ No cycle: the presentation layer does not import the authority layer.
 
 ### The correlation join
 
-Superseded by [#752], which landed first.
-The forwarding edge stopped minting its own wire id and adopts `details.requestId` instead, so `ForwardedPermissionRequest.id` **is** the child's request id — there is no second id left for `requesterRequestId` to relay.
-Treat this subsection and its TDD step as done: drop the field and the step, and keep only the `forwarded_permission.request_created` review entry, which already names the id.
-If implementation finds a case where the two must differ (a relay that re-identifies the request), reintroduce the field with that case recorded.
+**Settled by [#752]; nothing to do here.**
 
-The original rationale follows, for the record.
+This plan originally carried a `requesterRequestId` wire field to join the child's and the serving node's review-log entries, on the measurement that 53 of 57 `forwarded_permission.request_created` entries named an id appearing on no `permission_request.*` entry.
+[#752] closed that gap at the source instead, and better: `ParentAuthorizer` stopped minting a third id and now writes `details.requestId` as the forwarded request's `id` (`forwardableRequestId`, `src/authority/approval-escalator.ts`).
+So `ForwardedPermissionRequest.id` **is** the child's request id, and a second relayed field would name the same value twice.
 
-`requesterRequestId` rides here because this step already rewrites the wire type, the writer, the tolerant reader, and the fixtures — the four places it would otherwise have to reopen.
-It is deliberately identity-agnostic: `ParentAuthorizer.authorize` already holds `details.requestId`, and the field relays whatever that is, so Step 9's choice of a minted id versus the borrowed `toolCallId` changes nothing here.
+Verified against the post-[#752] tree: `requesterRequestId` appears nowhere in `src/` or `test/`, and the wire type is otherwise unchanged.
+This step therefore adds no identity field, and its TDD order has no correlation cycle.
 
-Measured on the review log, this is the gap it closes — 53 of 57 `forwarded_permission.request_created` entries carry an id appearing on no `permission_request.*` entry:
-
-```text
-18:07:49.393Z permission_request.waiting            requestId=toolu_0133TL6AquNS6r1RTGfHwn6X
-18:07:49.394Z forwarded_permission.request_created  requestId=1779818869394-yne0w9j8-7884
-```
-
-One millisecond apart, joined by nothing but adjacency.
-Two changes fix it: `ForwardedRequestFacts` gains the field so `buildForwardedRequest` writes it, and the `forwarded_permission.request_created` review entry names it — the second is what makes the *child's own log* joinable, and needs no contract change at all.
+One residual is worth naming rather than discovering during implementation.
+`forwardableRequestId` falls back to a fresh mint when the inbound id could not safely name a file — the relay-hop guard — and in exactly that case `id !== details.requestId`, so the join breaks for that one exchange while the `forwarded_permission.request_created` entry logs the wire id alone.
+It is [#752]'s residual, not this step's: the fallback is a filename-safety valve, the ids it rejects are ones no current minter produces, and closing it means logging both ids on that entry rather than changing any contract.
+Raised in Open Questions; not folded in silently.
 
 ### The serving node
 
@@ -278,23 +266,23 @@ The second row is unavoidable — [ADR 0011] §9 declines to carry both fields i
 
 ### Source
 
-| File                                        | Change                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/authority/permission-forwarding.ts`    | `ForwardedPermissionRequest`: remove `message: string`, add `payload?: PromptPayload` and `requesterRequestId?: string`; import the payload type                                                                                                                                        |
-| `src/presentation/prompt-payload.ts`        | Add `asPromptPayload(value: unknown): PromptPayload \| undefined` — tolerant narrowing over `kind`, the request facts, `evidence`, and `annotations`                                                                                                                                    |
-| `src/authority/forwarding-io.ts`            | Drop `message` from the required-core gate and the reconstruction; add `payload: asPromptPayload(parsed.payload)` and a string narrow for `requesterRequestId`                                                                                                                          |
-| `src/authority/approval-escalator.ts`       | `ForwardedRequestFacts.message: string` → `payload: PromptPayload`, plus `requesterRequestId`; `authorize` relays `details.payload` and `details.requestId`; `buildForwardedRequest` writes both; the `forwarded_permission.request_created` review entry names the child's `requestId` |
-| `src/presentation/forwarded-ask-payload.ts` | Two-branch projection: the child's payload with a re-stamped `requester`, or the degraded `kind: "forwarded"` payload; rewrite the module doc, which currently describes the transition as future                                                                                       |
-| `src/presentation/legacy-message.ts`        | `renderForwarded` renders provenance + surface/value instead of the removed `"requested"` evidence entry                                                                                                                                                                                |
-| `src/presentation/dialog-renderer.ts`       | `forwardedValueLabel`: comment now scopes it to the skew render rather than predicting its dissolution                                                                                                                                                                                  |
-| `src/permission-events.ts`                  | `PermissionUiPromptEvent`: remove `message: string`, add `request: PromptRequestFacts`                                                                                                                                                                                                  |
-| `src/permission-ui-prompt.ts`               | `DirectPromptInput.message: string` → `payload: PromptPayload`; `buildUiPrompt` emits `request`                                                                                                                                                                                         |
-| `src/service.ts`                            | Re-export `PromptPayload`, `PromptPayloadKind`, `PromptRequestFacts`, `PromptRequester`, `PromptEvidence`, `PromptAnnotation`                                                                                                                                                           |
-| `src/tool-preview-formatter.ts`             | `resolveToolPreviewLimits()` loses its parameter; remove `ConfigurablePreviewLimits`                                                                                                                                                                                                    |
-| `src/permission-session.ts`                 | `getToolPreviewLimits()` calls `resolveToolPreviewLimits()` with no argument                                                                                                                                                                                                            |
-| `src/extension-config.ts`                   | Remove `toolInputPreviewMaxLength` / `toolTextSummaryMaxLength` from `PermissionSystemExtensionConfig` and `normalizePermissionSystemConfig`                                                                                                                                            |
-| `src/config-schema.ts`                      | Mark both caps deprecated in their `.meta({ description, markdownDescription })`                                                                                                                                                                                                        |
-| `src/config-loader.ts`                      | Add `detectDeprecatedPreviewCaps`; push its notice onto `allIssues`                                                                                                                                                                                                                     |
+| File                                        | Change                                                                                                                                                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/authority/permission-forwarding.ts`    | `ForwardedPermissionRequest`: remove `message: string`, add `payload?: PromptPayload`; import the payload type                                                                                                                |
+| `src/presentation/prompt-payload.ts`        | Add `asPromptPayload(value: unknown): PromptPayload \| undefined` — tolerant narrowing over `kind`, the request facts, `evidence`, and `annotations`                                                                          |
+| `src/authority/forwarding-io.ts`            | Drop `message` from the required-core gate and the reconstruction; add `payload: asPromptPayload(parsed.payload)`                                                                                                             |
+| `src/authority/approval-escalator.ts`       | `ForwardedRequestFacts.message: string` → `payload: PromptPayload`; `authorize` relays `details.payload`; `buildForwardedRequest` writes it. The `requestId` field and `forwardableRequestId` are [#752]'s and are left alone |
+| `src/presentation/forwarded-ask-payload.ts` | Two-branch projection: the child's payload with a re-stamped `requester`, or the degraded `kind: "forwarded"` payload; rewrite the module doc, which currently describes the transition as future                             |
+| `src/presentation/legacy-message.ts`        | `renderForwarded` renders provenance + surface/value instead of the removed `"requested"` evidence entry                                                                                                                      |
+| `src/presentation/dialog-renderer.ts`       | `forwardedValueLabel`: comment now scopes it to the skew render rather than predicting its dissolution                                                                                                                        |
+| `src/permission-events.ts`                  | `PermissionUiPromptEvent`: remove `message: string`, add `request: PromptRequestFacts`                                                                                                                                        |
+| `src/permission-ui-prompt.ts`               | `DirectPromptInput.message: string` → `payload: PromptPayload`; `buildUiPrompt` emits `request`                                                                                                                               |
+| `src/service.ts`                            | Re-export `PromptPayload`, `PromptPayloadKind`, `PromptRequestFacts`, `PromptRequester`, `PromptEvidence`, `PromptAnnotation`                                                                                                 |
+| `src/tool-preview-formatter.ts`             | `resolveToolPreviewLimits()` loses its parameter; remove `ConfigurablePreviewLimits`                                                                                                                                          |
+| `src/permission-session.ts`                 | `getToolPreviewLimits()` calls `resolveToolPreviewLimits()` with no argument                                                                                                                                                  |
+| `src/extension-config.ts`                   | Remove `toolInputPreviewMaxLength` / `toolTextSummaryMaxLength` from `PermissionSystemExtensionConfig` and `normalizePermissionSystemConfig`                                                                                  |
+| `src/config-schema.ts`                      | Mark both caps deprecated in their `.meta({ description, markdownDescription })`                                                                                                                                              |
+| `src/config-loader.ts`                      | Add `detectDeprecatedPreviewCaps`; push its notice onto `allIssues`                                                                                                                                                           |
 
 `renderLegacyMessage` itself is otherwise untouched, and every payload builder is untouched.
 
@@ -313,7 +301,7 @@ The second row is unavoidable — [ADR 0011] §9 declines to carry both fields i
 | `test/helpers/forwarding-fixtures.ts`                                                                                                                                                                                                                                                                                                       | `writeRequest`'s default request drops `message` and gains a `payload`                                                                                                               |
 | `test/helpers/prompt-details-fixtures.ts`                                                                                                                                                                                                                                                                                                   | Unchanged — `makePromptDetails` already defaults `payload`; `makePromptPayload` gains the wire-shaped cases the new tests need                                                       |
 | `test/authority/forwarding-io.test.ts`                                                                                                                                                                                                                                                                                                      | Round-trip: payload written and read back; malformed payload → `undefined`; legacy `message`-only request still accepted                                                             |
-| `test/authority/approval-escalator.test.ts`                                                                                                                                                                                                                                                                                                 | The written request carries `payload` and `requesterRequestId` and no `message`; the `forwarded_permission.request_created` entry names the child's `requestId`                      |
+| `test/authority/approval-escalator.test.ts`                                                                                                                                                                                                                                                                                                 | The written request carries `payload` and no `message`; [#752]'s id-adoption cases stay green untouched                                                                              |
 | `test/authority/forwarded-request-server.test.ts`                                                                                                                                                                                                                                                                                           | The escalated ask carries the child's payload with a re-stamped requester; a payload-less request escalates the degraded payload                                                     |
 | `test/presentation/legacy-message.test.ts`                                                                                                                                                                                                                                                                                                  | Rewrite the `forwarded` cases against the degraded payload; the eight local-kind cases stay untouched (the [#744] byte-identity invariant)                                           |
 | `test/presentation/dialog-renderer.test.ts`                                                                                                                                                                                                                                                                                                 | Re-pin the [#710] here-string measurement at the new shape (a forwarded ask carrying a child `kind: "bash"` payload); keep the existing `kind: "forwarded"` cases as the skew render |
@@ -389,41 +377,35 @@ That keeps each step's blast radius to one contract instead of collapsing the wh
    Green: `asPromptPayload` in `prompt-payload.ts`; `payload?: PromptPayload` on `ForwardedPermissionRequest`; `forwarding-io.ts` reconstructs it; `ForwardedRequestFacts` gains `payload`, and `ParentAuthorizer` writes both fields.
    `feat(pi-permission-system): carry the prompt payload on the forwarded-request wire`
 
-2. **The forwarded exchange names the child's request id.**
-   Red: `test/authority/approval-escalator.test.ts` — the written request carries `requesterRequestId` equal to `details.requestId`, and the `forwarded_permission.request_created` review entry names it; `test/authority/forwarding-io.test.ts` — it round-trips, and a non-string value reads back `undefined`.
-   Green: the field on `ForwardedPermissionRequest` and `ForwardedRequestFacts`, the narrow in the tolerant reader, the write in `buildForwardedRequest`, and the log-detail addition.
-   Kept separate from step 1 because it is a distinct contract addition with its own skew story, and because it is the one piece here that is useful even if the payload swap were reverted.
-   `feat(pi-permission-system): carry the requester's request id across the forwarding boundary`
-
-3. **The serving node renders the child's facts.**
+2. **The serving node renders the child's facts.**
    Red: `test/authority/forwarded-request-server.test.ts` — the escalated ask's payload is the child's, with `requester` re-stamped to the request's provenance and the child's `kind` preserved; a payload-less request escalates the degraded `forwarded` payload.
    `test/presentation/dialog-renderer.test.ts` — the [#710] here-string measurement at the new shape, asserted **before** the old case is touched.
    Green: `buildForwardedAskPayload`'s two branches.
    `feat(pi-permission-system): render a forwarded ask from the child's own payload`
 
-4. **Remove `message` from the wire.**
+3. **Remove `message` from the wire.**
    Every importer of the field breaks at the type level in this commit, so the wire type, the reader, the child's write, the degraded legacy render, and the fixtures move together.
    Red: `test/authority/forwarding-io.test.ts` — a legacy `message`-only request is accepted and reconstructs no message; `test/presentation/legacy-message.test.ts` — the rewritten forwarded cases render from surface/value.
    Green: drop `message` from `ForwardedPermissionRequest`, from `readForwardedPermissionRequest`'s gate and reconstruction, and from `ForwardedRequestFacts`; rewrite `renderForwarded`; update `forwardedValueLabel`'s comment and `test/helpers/forwarding-fixtures.ts`.
    `feat(pi-permission-system)!: replace the forwarded-request message with the structured payload`
 
-5. **Narrow the broadcast.**
+4. **Narrow the broadcast.**
    Red: `test/permission-ui-prompt.test.ts` — `buildUiPrompt` emits `request` equal to the payload's core and no `message`, with `surface` / `value` / `agentName` / `forwarding` unchanged.
    Green: `PermissionUiPromptEvent.message` → `request`; `DirectPromptInput.message` → `payload`; `service.ts` re-exports; `scripts/verify-public-types.sh` symbol list.
    Consumer-test updates in `test/permission-events.test.ts`, `test/authority/local-user-authorizer.test.ts`, `test/authority/permission-prompter.test.ts`, `test/composition-root.test.ts`, `test/log-redaction.test.ts` ride this commit — the field removal breaks them at compile time.
    `feat(pi-permission-system)!: narrow the ui_prompt broadcast to the request facts`
 
-6. **Soft-deprecate the two preview caps.**
+5. **Soft-deprecate the two preview caps.**
    Red: `test/config-loader.test.ts` — a config setting either cap yields a deprecation notice through `getConfigIssues`, and setting neither yields none; `test/tool-preview-formatter.test.ts` — a configured value no longer changes the limit.
    Green: `detectDeprecatedPreviewCaps`; `resolveToolPreviewLimits()` parameterless; the fields leave `PermissionSystemExtensionConfig`; `.meta` marked deprecated; `pnpm run gen:schema`; `config/config.example.json`.
    `feat(pi-permission-system)!: ignore the deprecated tool-preview caps and notice their use`
 
-7. **Documentation and the roadmap mark.**
+6. **Documentation and the roadmap mark.**
    `docs/cross-extension-api.md`, `docs/configuration.md`, the new `docs/migration/0745-prompt-payload-contracts.md`, and `docs/architecture/architecture.md` (Step 3 `✅` on heading and Mermaid node, `Landed:` note, both metric rows to `0 ✅`, the line-388 paragraph, and the four module-tree entries).
    `docs(pi-permission-system): document the payload contracts and mark Phase 13 Step 3 complete`
 
 Verification after each step: `pnpm --filter @gotgenes/pi-permission-system run check`, `run lint`, `run test`.
-After step 5, also `pnpm --filter @gotgenes/pi-permission-system run verify:public-types`.
+After step 4, also `pnpm --filter @gotgenes/pi-permission-system run verify:public-types`.
 Before the final commit, `pnpm fallow dead-code --workspace @gotgenes/pi-permission-system` and the metric recomputes:
 
 ```bash
@@ -439,7 +421,7 @@ Baselines measured this session: both are `1`.
 | Risk                                                                                               | Mitigation                                                                                                                                                                                               |
 | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | An old parent rejects a new child's request and the child burns the 10-minute timeout              | Only reachable for an out-of-process child; the migration note says upgrade the parent first, and the abandonment already reports `confirmationUnavailable` rather than a user denial ([#719])           |
-| The forwarded render regresses past the row budget once real evidence crosses the wire             | Step 3 re-pins the [#710] measurement at the new shape **before** the old case is edited, so the number is measured                                                                                      |
+| The forwarded render regresses past the row budget once real evidence crosses the wire             | Step 2 re-pins the [#710] measurement at the new shape **before** the old case is edited, so the number is measured                                                                                      |
 | `asPromptPayload` accepts a partially-malformed payload and the serving node renders corrupt facts | The guard is all-or-nothing, following `asForwardedAccessIntent`'s precedent: any malformed field yields `undefined` and the degraded render, never a half-payload                                       |
 | The payload's arrival on the ask details widens what an `Authorizer` link sees                     | The payload carries no `requesterCwd` and no `principal`; a test asserts the absence rather than the design assuming it ([#635])                                                                         |
 | A third-party extension reading `event.message` breaks silently                                    | Unavoidable and intended; the migration note names `request.value` and `request.matchedPattern` as the superseding fields, and `docs/cross-extension-api.md` already tells consumers to read defensively |
@@ -454,8 +436,8 @@ Baselines measured this session: both are `1`.
 - Whether `docs/cross-extension-api.md` should publish a stability note distinguishing the display projection (`surface` / `value`) from the gate facts (`request.surface`).
   Planned as prose in the doc update; if consumers conflate them in practice, that becomes a rename discussion, not a doc one.
 - The `select`/`input` fallback's complete-view capability, parked here by [#710]'s plan, is filed as [#751] and out of scope.
-- Whether the serving node should adopt the forwarded request's `id` as its own request id or mint a fresh one now that `requesterRequestId` is also available.
-  This step keeps today's behavior (`requestId: request.id`); Step 10 ([#610]) decides it with the full correlation picture.
+- Whether `forwarded_permission.request_created` should log the requester's id alongside the wire id, closing the join for the one case where [#752]'s `forwardableRequestId` falls back to a fresh mint.
+  It is [#752]'s residual and needs no contract change; this step keeps today's behavior, and Step 10 ([#610]) decides it with the full correlation picture.
 
 [ADR 0011]: ../decisions/0011-prompt-presentation-contract.md
 [#292]: https://github.com/gotgenes/pi-packages/issues/292
