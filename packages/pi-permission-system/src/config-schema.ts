@@ -209,16 +209,18 @@ export const unifiedConfigSchema = z
       default: 400,
     }),
     toolInputPreviewMaxLength: z.number().int().min(1).optional().meta({
+      deprecated: true,
       description:
-        "Maximum character length of the inline-JSON tool-input preview shown in permission prompts. Omit to use the default (200). Set to a large value to disable truncation.",
+        "Deprecated and ignored. Superseded by promptMaxRows and promptFieldMaxWidth, which bound the whole prompt rather than one preview. Still accepted so an existing config is not rejected; remove it.",
       markdownDescription:
-        "Maximum character length of the inline-JSON tool-input preview shown in permission prompts.\n\nOmit to use the default (200). Set to a large value (e.g. `10000`) to effectively disable truncation and see the full input.",
+        "**Deprecated and ignored.** Superseded by `promptMaxRows` and `promptFieldMaxWidth`, which bound the whole permission prompt rather than one preview inside it.\n\nStill accepted so an existing config is not rejected fail-closed, but the value no longer takes effect. Remove it.",
     }),
     toolTextSummaryMaxLength: z.number().int().min(1).optional().meta({
+      deprecated: true,
       description:
-        "Maximum character length of inline pattern/path summaries (e.g. grep patterns, find globs, ls paths) in permission prompts. Omit to use the default (80).",
+        "Deprecated and ignored. Superseded by promptMaxRows and promptFieldMaxWidth, which bound the whole prompt rather than one summary. Still accepted so an existing config is not rejected; remove it.",
       markdownDescription:
-        "Maximum character length of inline pattern/path summaries (e.g. grep patterns, find globs, ls paths) shown in permission prompts.\n\nOmit to use the default (80). Increase this when working with long regexes or deep paths that are being cut off.",
+        "**Deprecated and ignored.** Superseded by `promptMaxRows` and `promptFieldMaxWidth`, which bound the whole permission prompt rather than one summary inside it.\n\nStill accepted so an existing config is not rejected fail-closed, but the value no longer takes effect. Remove it.",
     }),
     piInfrastructureReadPaths: z.array(z.string().min(1)).optional().meta({
       description:

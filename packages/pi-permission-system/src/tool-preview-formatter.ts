@@ -1,5 +1,4 @@
 import { classifyToolKind, isMcpCheck } from "./access-intent/tool-kind";
-import type { PermissionSystemExtensionConfig } from "./extension-config";
 import type { ToolInputFormatterLookup } from "./tool-input-formatter-registry";
 import {
   serializeRedactedToolInputPreview,
@@ -24,23 +23,20 @@ export interface ToolPreviewFormatterOptions {
   toolInputLogPreviewMaxLength: number;
 }
 
-type ConfigurablePreviewLimits = Pick<
-  PermissionSystemExtensionConfig,
-  "toolInputPreviewMaxLength" | "toolTextSummaryMaxLength"
->;
-
 /**
- * Resolve `ToolPreviewFormatterOptions` from a config object, falling back to
- * the built-in defaults for any field that is absent.
+ * The built-in `ToolPreviewFormatterOptions`.
+ *
+ * Takes no config: `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength`
+ * are subsumed by the renderer budgets (`promptMaxRows` / `promptFieldMaxWidth`,
+ * ADR 0011 §5), so an operator's values no longer take effect. The constants
+ * remain — they still bound the evidence the review log persists verbatim
+ * (`docs/decisions/0010-permission-log-secret-exposure.md`) until [#746] lands
+ * the log's own renderer.
  */
-export function resolveToolPreviewLimits(
-  config: ConfigurablePreviewLimits,
-): ToolPreviewFormatterOptions {
+export function resolveToolPreviewLimits(): ToolPreviewFormatterOptions {
   return {
-    toolInputPreviewMaxLength:
-      config.toolInputPreviewMaxLength ?? TOOL_INPUT_PREVIEW_MAX_LENGTH,
-    toolTextSummaryMaxLength:
-      config.toolTextSummaryMaxLength ?? TOOL_TEXT_SUMMARY_MAX_LENGTH,
+    toolInputPreviewMaxLength: TOOL_INPUT_PREVIEW_MAX_LENGTH,
+    toolTextSummaryMaxLength: TOOL_TEXT_SUMMARY_MAX_LENGTH,
     toolInputLogPreviewMaxLength: TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   };
 }

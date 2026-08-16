@@ -155,27 +155,15 @@ describe("normalizePermissionSystemConfig", () => {
     expect("promptFieldMaxWidth" in result).toBe(false);
   });
 
-  it("includes toolInputPreviewMaxLength when a valid positive integer is provided", () => {
+  // Deliberately dropped rather than carried: a declared config field no
+  // runtime consumer reads is a maintenance trap, so the deprecated caps stop
+  // at the merge intermediate the detector reads (#745).
+  it("drops the deprecated preview caps even when the config sets them", () => {
     const result = normalizePermissionSystemConfig({
       toolInputPreviewMaxLength: 400,
-    });
-    expect(result.toolInputPreviewMaxLength).toBe(400);
-  });
-
-  it("omits toolInputPreviewMaxLength when absent", () => {
-    const result = normalizePermissionSystemConfig({});
-    expect("toolInputPreviewMaxLength" in result).toBe(false);
-  });
-
-  it("includes toolTextSummaryMaxLength when a valid positive integer is provided", () => {
-    const result = normalizePermissionSystemConfig({
       toolTextSummaryMaxLength: 120,
     });
-    expect(result.toolTextSummaryMaxLength).toBe(120);
-  });
-
-  it("omits toolTextSummaryMaxLength when absent", () => {
-    const result = normalizePermissionSystemConfig({});
+    expect("toolInputPreviewMaxLength" in result).toBe(false);
     expect("toolTextSummaryMaxLength" in result).toBe(false);
   });
 

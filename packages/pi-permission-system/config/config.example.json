@@ -11,9 +11,6 @@
   "promptMaxRows": 24,
   "promptFieldMaxWidth": 400,
 
-  "toolInputPreviewMaxLength": 400,
-  "toolTextSummaryMaxLength": 120,
-
   "piInfrastructureReadPaths": [],
 
   "authorizerChain": [],
