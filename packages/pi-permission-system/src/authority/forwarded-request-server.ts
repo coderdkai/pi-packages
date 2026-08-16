@@ -14,7 +14,6 @@ import {
 } from "#src/authority/permission-forwarding";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { buildForwardedAskPayload } from "#src/presentation/forwarded-ask-payload";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { SessionApproval } from "#src/session-approval";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { DebugReviewLogger } from "#src/session-logger";
@@ -100,7 +99,6 @@ function buildForwardedAskDetails(
     requestId: request.id,
     source: request.source ?? "tool_call",
     agentName: request.requesterAgentName || null,
-    message: renderLegacyMessage(payload),
     payload,
     surface: request.surface ?? null,
     value: request.value ?? null,

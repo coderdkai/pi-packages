@@ -245,7 +245,6 @@ describe("describeToolGate", () => {
       toolCallId: "tc-42",
       toolName: "read",
     });
-    expect(desc.promptDetails.message).toBeDefined();
     expect(desc.promptDetails.sessionLabel).toBeDefined();
   });
 

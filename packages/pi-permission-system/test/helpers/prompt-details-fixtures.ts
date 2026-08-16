@@ -29,7 +29,6 @@ export function makeGatePromptDetails(
   return {
     source: "tool_call",
     agentName: null,
-    message: "Allow this?",
     payload: makePromptPayload(),
     ...overrides,
   };

@@ -1,7 +1,6 @@
 import type { AccessPath } from "#src/access-intent/access-path";
 import type { BashProgram } from "#src/access-intent/bash/program";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildPathAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
@@ -120,7 +119,6 @@ export function describeBashPathGate(
     agentName: tcc.agentName,
     matchedPattern: worstCheck.matchedPattern,
   });
-  const askMessage = renderLegacyMessage(payload);
 
   return {
     surface: "path",
@@ -130,7 +128,6 @@ export function describeBashPathGate(
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
-      message: askMessage,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,

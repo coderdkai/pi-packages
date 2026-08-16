@@ -1,7 +1,6 @@
 import { getToolInputPath } from "#src/access-intent/tool-input-path";
 import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildPathAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
@@ -64,7 +63,6 @@ export function describePathGate(
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
-      message: renderLegacyMessage(payload),
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       path: filePath,

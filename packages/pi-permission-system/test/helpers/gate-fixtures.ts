@@ -56,7 +56,6 @@ export function makeDescriptor(
       },
     }),
     promptDetails: makeGatePromptDetails({
-      message: "Allow tool 'read'?",
       toolCallId: "tc-1",
       toolName: "read",
     }),

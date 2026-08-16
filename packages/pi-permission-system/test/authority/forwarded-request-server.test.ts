@@ -232,11 +232,6 @@ describe("processInbox — recorded-authority resolution", () => {
       requestId: "req-ask",
       source: "tool_call",
       agentName: "Explore",
-      // The serving node holds the child's real kind, so the legacy message it
-      // still persists is the local-shaped sentence for that kind — the
-      // deliberate consequence of "renders identically in kind" (#745).
-      message:
-        "Agent 'Explore' requested bash command 'git push'. Allow this command?",
       surface: "bash",
       value: "git push",
       forwarding: {

@@ -77,7 +77,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow git push?",
           toolName: "bash",
           command: "git push",
         }),
@@ -129,7 +128,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow git push?",
           toolName: "bash",
           command: "git push",
           sessionApproval: { surface: "bash", patterns: ["git *"] },
@@ -179,7 +177,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow this path access?",
           toolName: "read",
           path: "src/foo.ts",
           accessIntent: {
@@ -260,7 +257,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow git push?",
           toolName: "bash",
           command: "git push",
           payload,
@@ -303,7 +299,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow read?",
           toolName: "read",
         }),
       );
@@ -344,7 +339,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow read?",
           toolName: "read",
         }),
       );
@@ -385,7 +379,6 @@ describe("ParentAuthorizer", () => {
         makePromptDetails({
           requestId: "perm-child-request",
           agentName: "Explore",
-          message: "Allow read?",
           toolName: "read",
         }),
       );
@@ -484,7 +477,6 @@ describe("ParentAuthorizer", () => {
 const forwardedAsk = makePromptDetails({
   requestId: "perm-child-request",
   agentName: "Explore",
-  message: "Allow pwd?",
   toolName: "bash",
 });
 

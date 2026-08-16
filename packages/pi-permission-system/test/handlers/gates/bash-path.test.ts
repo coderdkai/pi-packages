@@ -124,7 +124,6 @@ describe("describeBashPathGate", () => {
       makeResolver(makeCheckResult({ state: "deny", matchedPattern: "*.env" })),
     )) as GateDescriptor;
     expect(result.promptDetails.command).toBe("cat .env");
-    expect(result.promptDetails.message).toContain(".env");
     // The bash path gate asks about the offending token, not the command.
     expect(result.payload.kind).toBe("path");
     expect(result.payload.request.value).toBe(".env");

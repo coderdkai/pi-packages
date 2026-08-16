@@ -25,7 +25,6 @@ describe("DenyingAuthorizer", () => {
       makePromptDetails({
         requestId: "req-2",
         source: "skill_input",
-        message: "Allow skill input?",
         skillName: "deploy-helper",
       }),
     );

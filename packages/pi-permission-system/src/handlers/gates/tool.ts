@@ -6,7 +6,6 @@ import {
   type ShellInvocation,
 } from "#src/access-intent/tool-kind";
 import { suggestSessionPattern } from "#src/pattern-suggest";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildToolAskPayload } from "#src/presentation/tool-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import type { ToolPreviewFormatter } from "#src/tool-preview-formatter";
@@ -81,7 +80,6 @@ export function describeToolGate(
     input: tcc.input,
     formatter,
   });
-  const askMessage = renderLegacyMessage(payload);
 
   const decisionValue = deriveDecisionValue(
     gateSurface,
@@ -106,7 +104,6 @@ export function describeToolGate(
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
-      message: askMessage,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       sessionLabel: suggestion.label,

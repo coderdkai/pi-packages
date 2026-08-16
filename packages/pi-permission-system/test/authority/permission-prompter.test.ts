@@ -33,7 +33,6 @@ function makeDetails(
   return makePromptDetails({
     requestId: "req-123",
     agentName: "test-agent",
-    message: "Allow read?",
     toolName: "read",
     ...overrides,
   });

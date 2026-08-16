@@ -87,14 +87,13 @@ describe("describeSkillInputGate", () => {
     expect(descriptor.payload.request.value).toBe("librarian");
   });
 
-  it("includes a non-empty message in promptDetails", () => {
+  it("names the skill in promptDetails so the prompt can identify it", () => {
     const descriptor = describeSkillInputGate(
       "librarian",
       null,
       makeSkillCheck("ask"),
     );
-    expect(typeof descriptor.promptDetails.message).toBe("string");
-    expect(descriptor.promptDetails.message.length).toBeGreaterThan(0);
+    expect(descriptor.promptDetails.skillName).toBe("librarian");
   });
 
   it("sets logContext source to 'skill_input' with skill name and agent", () => {

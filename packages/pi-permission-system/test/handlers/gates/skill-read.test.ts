@@ -161,7 +161,6 @@ describe("describeSkillReadGate", () => {
       toolName: "read",
       skillName: "my-skill",
     });
-    expect(result.promptDetails.message).toBeDefined();
   });
 
   it("logContext includes skill_read source and skillName", () => {

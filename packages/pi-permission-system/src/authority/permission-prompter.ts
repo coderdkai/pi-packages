@@ -28,7 +28,6 @@ export interface PromptPermissionDetails {
   requestId: string;
   source: PermissionReviewSource;
   agentName: string | null;
-  message: string;
   /**
    * The complete structured description of this ask (ADR 0011 §2).
    *

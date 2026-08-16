@@ -1,7 +1,6 @@
 import { getToolInputPath } from "#src/access-intent/tool-input-path";
 import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
@@ -87,7 +86,6 @@ export function describeExternalDirectoryGate(
     agentName: tcc.agentName,
     matchedPattern: preCheck.matchedPattern,
   });
-  const extDirMessage = renderLegacyMessage(payload);
 
   return {
     surface: "external_directory",
@@ -98,7 +96,6 @@ export function describeExternalDirectoryGate(
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
-      message: extDirMessage,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       path: externalDirectoryPath,

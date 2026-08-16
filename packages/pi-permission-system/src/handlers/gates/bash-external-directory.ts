@@ -1,6 +1,5 @@
 import type { BashProgram } from "#src/access-intent/bash/program";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildBashExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
@@ -85,7 +84,6 @@ export function describeBashExternalDirectoryGate(
     toolName: tcc.toolName,
     matchedPattern: preCheck.matchedPattern,
   });
-  const bashExtMessage = renderLegacyMessage(payload);
 
   const patterns = uncoveredPaths.map((p) => deriveApprovalPattern(p));
 
@@ -97,7 +95,6 @@ export function describeBashExternalDirectoryGate(
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
-      message: bashExtMessage,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,

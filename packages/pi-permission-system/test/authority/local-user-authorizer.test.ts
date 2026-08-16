@@ -21,7 +21,6 @@ function makeDetails(
   return makePromptDetails({
     requestId: "req-123",
     agentName: "test-agent",
-    message: "Allow read?",
     toolName: "read",
     ...overrides,
   });
@@ -182,8 +181,6 @@ describe("LocalUserAuthorizer", () => {
         makeDetails({
           source: "tool_call",
           agentName: "Explore",
-          message:
-            "Subagent 'Explore' requested permission.\n\nAllow git push?",
           surface: "bash",
           value: "git push",
           forwarding: {

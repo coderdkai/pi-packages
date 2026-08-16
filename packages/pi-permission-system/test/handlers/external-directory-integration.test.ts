@@ -12,7 +12,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { EXTENSION_TAG } from "#src/presentation/agent-renderer";
-import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import type { PermissionCheckResult } from "#src/types";
 import {
@@ -47,15 +46,13 @@ vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
 describe("external_directory helper regression guard", () => {
   it("the external-directory ask names the path it gates", () => {
     expect(
-      renderLegacyMessage(
-        buildExternalDirectoryAskPayload({
-          toolName: "read",
-          pathValue: "/outside/file",
-          cwd: "/project",
-          agentName: null,
-        }),
-      ),
-    ).toContain("/outside/file");
+      buildExternalDirectoryAskPayload({
+        toolName: "read",
+        pathValue: "/outside/file",
+        cwd: "/project",
+        agentName: null,
+      }).request.value,
+    ).toBe("/outside/file");
   });
 
   it("EXTENSION_TAG is the expected value", () => {
