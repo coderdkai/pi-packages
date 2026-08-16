@@ -4,6 +4,7 @@ import type {
   ForwardedSessionApproval,
 } from "#src/authority/permission-forwarding";
 import type { PromptPayload } from "#src/presentation/prompt-payload";
+import { renderReviewLogFacts } from "#src/presentation/review-log-renderer";
 import type { ReviewLogger } from "#src/session-logger";
 import type { TerminalAuthorizer } from "./authorizer";
 
@@ -149,7 +150,7 @@ export class PermissionPrompter implements PermissionPrompterApi {
       requestId: details.requestId,
       source: details.source,
       agentName: details.agentName,
-      message: details.message,
+      ...renderReviewLogFacts(details.payload),
       toolCallId: details.toolCallId ?? null,
       toolName: details.toolName ?? null,
       skillName: details.skillName ?? null,

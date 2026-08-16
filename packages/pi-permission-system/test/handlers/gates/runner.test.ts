@@ -43,6 +43,34 @@ describe("GateRunner — descriptor path", () => {
     );
   });
 
+  it("records which rule denied a blocked request", async () => {
+    const { runner, deps } = makeGateRunner({
+      resolveResult: makeCheckResult({ state: "deny", matchedPattern: "rm *" }),
+    });
+
+    await runner.run(
+      makeDescriptor({
+        surface: "bash",
+        payload: makePromptPayload({
+          kind: "bash",
+          request: {
+            ...makePromptPayload().request,
+            surface: "bash",
+            toolName: "bash",
+            value: "rm -rf build",
+            matchedPattern: "rm *",
+          },
+        }),
+      }),
+      null,
+    );
+
+    expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
+      "permission_request.blocked",
+      expect.objectContaining({ surface: "bash", matchedPattern: "rm *" }),
+    );
+  });
+
   it("returns allow and emits session_approved on session hit", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({

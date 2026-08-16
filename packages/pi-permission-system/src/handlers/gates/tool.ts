@@ -117,7 +117,6 @@ export function describeToolGate(
       source: "tool_call",
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
-      message: askMessage,
       ...permissionLogContext,
     },
     decision: {

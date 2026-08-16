@@ -110,7 +110,6 @@ export function describeExternalDirectoryGate(
       toolName: tcc.toolName,
       agentName: tcc.agentName,
       path: externalDirectoryPath,
-      message: extDirMessage,
     },
     decision: {
       surface: "external_directory",

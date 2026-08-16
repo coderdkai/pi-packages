@@ -6,7 +6,10 @@ import {
   type PermissionPrompterDeps,
   type PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
-import { makePromptDetails } from "#test/helpers/prompt-details-fixtures";
+import {
+  makePromptDetails,
+  makePromptPayload,
+} from "#test/helpers/prompt-details-fixtures";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -184,7 +187,6 @@ describe("PermissionPrompter", () => {
           requestId: "req-123",
           source: "tool_call",
           agentName: "test-agent",
-          message: "Allow read?",
           toolCallId: "tc-1",
           toolName: "read",
           skillName: "librarian",
@@ -216,7 +218,34 @@ describe("PermissionPrompter", () => {
       );
     });
 
-    it("does not persist the payload, so log growth stays bounded", async () => {
+    it("records the payload's request facts rather than its prompt wording", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+
+      await prompter.prompt(
+        authorizer,
+        makeDetails({
+          payload: makePromptPayload({
+            kind: "bash",
+            request: {
+              ...makePromptPayload().request,
+              surface: "bash",
+              toolName: "bash",
+              value: "rm -rf build",
+              matchedPattern: "rm *",
+            },
+          }),
+        }),
+      );
+
+      expect(logger.review).toHaveBeenCalledWith(
+        "permission_request.waiting",
+        expect.objectContaining({ surface: "bash", matchedPattern: "rm *" }),
+      );
+    });
+
+    it("persists neither the payload nor the prompt sentence", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
       const authorizer = makeAuthorizer({ approved: true, state: "approved" });
@@ -224,14 +253,15 @@ describe("PermissionPrompter", () => {
       await prompter.prompt(authorizer, makeDetails());
 
       // ADR 0010 bounds what the logs accumulate; a complete payload written on
-      // every ask would defeat that bound. The log renders the payload under
-      // its own limits instead — today, as the derived `message`.
+      // every ask would defeat that bound, and a prompt sentence made the log's
+      // growth a side effect of how the prompt happened to be worded.
       const [, entry] = logger.review.mock.calls[0] as [
         string,
         Record<string, unknown>,
       ];
       expect(entry).not.toHaveProperty("payload");
-      expect(entry.message).toBe("Allow read?");
+      expect(entry).not.toHaveProperty("message");
+      expect(entry).not.toHaveProperty("evidence");
     });
   });
 });

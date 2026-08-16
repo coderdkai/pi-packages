@@ -110,7 +110,6 @@ export function describeBashExternalDirectoryGate(
       agentName: tcc.agentName,
       command,
       externalPaths: uncoveredPaths,
-      message: bashExtMessage,
     },
     decision: {
       surface: "external_directory",

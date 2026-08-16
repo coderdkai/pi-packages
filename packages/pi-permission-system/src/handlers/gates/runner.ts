@@ -9,6 +9,7 @@ import {
   renderUnavailableDenial,
   renderUserDenial,
 } from "#src/presentation/agent-renderer";
+import { renderReviewLogFacts } from "#src/presentation/review-log-renderer";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { PermissionCheckResult } from "#src/types";
 import type {
@@ -111,8 +112,16 @@ export class GateRunner {
     }
 
     // The fields every review-log write for this gate shares, whatever the
-    // resolution — built once so a field added here reaches all of them.
-    const logContext = { ...descriptor.logContext, agentName, requestId };
+    // resolution — built once so a field added here reaches all of them. The
+    // payload's request facts are stamped here rather than by each gate, for
+    // the same reason `requestId` is: a gate cannot forget what it never
+    // supplies (ADR 0011 §6).
+    const logContext = {
+      ...descriptor.logContext,
+      ...renderReviewLogFacts(descriptor.payload),
+      agentName,
+      requestId,
+    };
 
     // 2. Session-hit fast path
     if (check.source === "session") {

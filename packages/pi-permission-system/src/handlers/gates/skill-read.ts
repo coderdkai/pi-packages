@@ -66,7 +66,6 @@ export function describeSkillReadGate(
       skillName: matchedSkill.name,
       agentName: tcc.agentName,
       path,
-      message: skillReadMessage,
     },
     decision: {
       surface: "skill",

@@ -34,7 +34,6 @@ export function describeSkillInputGate(
       source: "skill_input",
       skillName,
       agentName,
-      message,
     },
     decision: {
       surface: "skill",

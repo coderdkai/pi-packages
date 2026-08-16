@@ -236,13 +236,14 @@ describe("describeExternalDirectoryGate", () => {
     });
   });
 
-  it("logContext includes path and message", () => {
+  it("logContext includes the path, and no prompt wording", () => {
     const result = gateUnderTest(makeTcc(), ["/test/agent"]) as GateDescriptor;
     expect(result.logContext).toMatchObject({
       source: "tool_call",
       path: "/outside/project/file.ts",
     });
-    expect(result.logContext.message).toBeDefined();
+    // The payload's request facts are stamped by the runner, not the gate.
+    expect(result.logContext).not.toHaveProperty("message");
   });
 });
 
