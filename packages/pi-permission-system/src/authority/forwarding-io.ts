@@ -23,6 +23,7 @@ import {
   OWNER_ONLY_FILE_MODE,
 } from "#src/log-file-permissions";
 import type { PermissionUiPromptSource } from "#src/permission-events";
+import { asPromptPayload } from "#src/presentation/prompt-payload";
 import type { DebugReviewLogger } from "#src/session-logger";
 
 /** Valid `permissions:ui_prompt` source values, for tolerant request reads. */
@@ -415,6 +416,7 @@ export function readForwardedPermissionRequest(
       message: parsed.message,
       // Tolerant read: display fields are optional and may be absent (older
       // child) or malformed; reconstruct only the well-formed ones.
+      payload: asPromptPayload(parsed.payload),
       source: asUiPromptSource(parsed.source),
       surface: asNullableDisplayString(parsed.surface),
       value: asNullableDisplayString(parsed.value),

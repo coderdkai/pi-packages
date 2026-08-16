@@ -28,6 +28,7 @@ import {
   type ForwardedPermissionRequest,
 } from "#src/authority/permission-forwarding";
 import type { DebugReviewLogger } from "#src/session-logger";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -282,6 +283,105 @@ describe("readForwardedPermissionRequest — accessIntent field", () => {
       },
     });
     expect(parsed?.accessIntent).toBeUndefined();
+  });
+});
+
+describe("readForwardedPermissionRequest — payload field", () => {
+  let root: string;
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function baseRequest(): ForwardedPermissionRequest {
+    return {
+      id: "req-1",
+      createdAt: 1000,
+      requesterSessionId: "child-session",
+      targetSessionId: "parent-session",
+      requesterAgentName: "researcher",
+      message: "Allow this path access?",
+    };
+  }
+
+  function writeAndRead(raw: unknown): ForwardedPermissionRequest | null {
+    root = mkdtempSync(join(tmpdir(), "io-payload-"));
+    const filePath = join(root, "req.json");
+    writeJsonFileAtomic(null, filePath, raw);
+    return readForwardedPermissionRequest(null, filePath);
+  }
+
+  it("round-trips the child's complete prompt payload", () => {
+    const payload = makePromptPayload({
+      kind: "bash",
+      request: {
+        requester: { agentName: "Explore", forwarded: false, sessionId: null },
+        surface: "bash",
+        toolName: "bash",
+        invokedToolName: null,
+        value: "git push",
+        matchedPattern: "git *",
+        commandContext: null,
+        executedUnit: null,
+      },
+      evidence: [{ label: "command", text: "git push", detail: null }],
+    });
+    const parsed = writeAndRead({ ...baseRequest(), payload });
+    expect(parsed?.payload).toEqual(payload);
+  });
+
+  it("reads a request with no payload as undefined (version skew)", () => {
+    const parsed = writeAndRead(baseRequest());
+    expect(parsed?.payload).toBeUndefined();
+    expect(parsed?.requesterAgentName).toBe("researcher");
+  });
+
+  it("drops a payload with an unrecognized kind", () => {
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      payload: { ...makePromptPayload(), kind: "telepathy" },
+    });
+    expect(parsed?.payload).toBeUndefined();
+  });
+
+  it("drops a payload whose request facts are malformed", () => {
+    const payload = makePromptPayload();
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      payload: { ...payload, request: { ...payload.request, value: 42 } },
+    });
+    expect(parsed?.payload).toBeUndefined();
+  });
+
+  it("drops a payload whose requester is malformed", () => {
+    const payload = makePromptPayload();
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      payload: {
+        ...payload,
+        request: { ...payload.request, requester: { forwarded: true } },
+      },
+    });
+    expect(parsed?.payload).toBeUndefined();
+  });
+
+  it("drops a payload whose evidence entries are malformed", () => {
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      payload: {
+        ...makePromptPayload(),
+        evidence: [{ label: "command", text: null, detail: null }],
+      },
+    });
+    expect(parsed?.payload).toBeUndefined();
+  });
+
+  it("drops a payload whose annotations are malformed", () => {
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      payload: { ...makePromptPayload(), annotations: [{ source: "judge" }] },
+    });
+    expect(parsed?.payload).toBeUndefined();
   });
 });
 

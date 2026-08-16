@@ -36,6 +36,7 @@ import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { createPermissionRequestId } from "#src/permission-request-id";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 import type { DebugReviewLogger } from "#src/session-logger";
 import { toRecord } from "#src/value-guards";
 import type { TerminalAuthorizer } from "./authorizer";
@@ -83,6 +84,8 @@ interface ForwardedRequestFacts {
    */
   requestId: string;
   message: string;
+  /** The child's complete prompt payload, relayed for the serving node to render. */
+  payload: PromptPayload;
   display?: ForwardedPromptDisplay;
   sessionApproval?: ForwardedSessionApproval;
   /** The child-fixed access facts; the edge completes them into a `ForwardedAccessIntent`. */
@@ -172,6 +175,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
     return this.waitForForwardedApproval(this.ctx, {
       requestId: details.requestId,
       message: details.message,
+      payload: details.payload,
       display: {
         source: uiPrompt.source,
         surface: uiPrompt.surface,
@@ -301,6 +305,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
       targetSessionId,
       requesterAgentName,
       message: facts.message,
+      payload: facts.payload,
       ...(facts.display
         ? {
             source: facts.display.source,

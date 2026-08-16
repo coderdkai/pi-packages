@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { PermissionUiPromptSource } from "#src/permission-events";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 import type { PermissionDecisionState } from "./permission-dialog";
 import type { SubagentSessionRegistry } from "./subagent-registry";
 
@@ -124,6 +125,15 @@ export type ForwardedPermissionRequest = {
   targetSessionId: string;
   requesterAgentName: string;
   message: string;
+  /**
+   * The child's complete prompt payload (ADR 0011 §2), so the serving node
+   * renders the child's own facts under the *parent's* budget rather than
+   * relaying a sentence the child assembled under its own configuration.
+   *
+   * Optional for version-skew tolerance: an older child omits it, and the
+   * serving node renders from the display fields it does carry (ADR 0011 §9).
+   */
+  payload?: PromptPayload;
   /**
    * Original prompt display fields, persisted so the parent emits a
    * non-degraded event. Optional for version-skew tolerance: a parent on a

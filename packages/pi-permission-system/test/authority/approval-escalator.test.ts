@@ -22,7 +22,10 @@ import {
   makeParentAuthorizerDeps,
   makeSubagentRegistry,
 } from "#test/helpers/forwarding-fixtures";
-import { makePromptDetails } from "#test/helpers/prompt-details-fixtures";
+import {
+  makePromptDetails,
+  makePromptPayload,
+} from "#test/helpers/prompt-details-fixtures";
 
 // ── Local poll helper ────────────────────────────────────────────────────
 //
@@ -205,6 +208,67 @@ describe("ParentAuthorizer", () => {
           agentName: request.requesterAgentName,
         },
       });
+
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+        }),
+        "utf-8",
+      );
+      await decisionPromise;
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("relays the details' prompt payload onto the forwarded request", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const registry = makeSubagentRegistry("child-session", {
+        parentSessionId: "parent-session",
+      });
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry,
+        }),
+      );
+
+      const payload = makePromptPayload({
+        kind: "bash",
+        request: {
+          requester: {
+            agentName: "Explore",
+            forwarded: false,
+            sessionId: null,
+          },
+          surface: "bash",
+          toolName: "bash",
+          invokedToolName: null,
+          value: "git push",
+          matchedPattern: "git *",
+          commandContext: null,
+          executedUnit: null,
+        },
+        evidence: [{ label: "command", text: "git push", detail: null }],
+      });
+      const decisionPromise = authorizer.authorize(
+        makePromptDetails({
+          requestId: "perm-child-request",
+          agentName: "Explore",
+          message: "Allow git push?",
+          toolName: "bash",
+          command: "git push",
+          payload,
+        }),
+      );
+
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      expect(request.payload).toEqual(payload);
 
       writeFileSync(
         join(temp.location.responsesDir, `${request.id}.json`),
