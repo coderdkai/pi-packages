@@ -385,7 +385,11 @@ Without that reading a bounded render is unreachable, since the decision-relevan
 A fact an adjacent line already states is not repeated — a bash ask's gate surface is its tool name, and a path ask's is the word its value line is labelled with — so the render spends a line only where it adds something.
 That is a redundancy rule, not an elision: the fact is still on screen, which is what §3 requires.
 
-The wire, the broadcast, and the review log still read the flat `message` that `renderLegacyMessage` derives from the payload, so `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` still bound the non-bash previews the payload carries as evidence.
+The two cross-boundary contracts now carry facts rather than prose.
+The forwarded-request wire carries the child's `PromptPayload`, so the serving node renders the child's own facts under the *parent's* budget — a forwarded bash ask reads `command : …` exactly as a local one does, and `kind: "forwarded"` narrows to meaning one thing: this ask arrived without a payload.
+`permissions:ui_prompt` carries `request`, the payload's invariant core, and no evidence at all, which makes the bus the narrowest renderer (ADR 0011 §6): any loaded extension observes it without the operator having named that extension.
+`toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` are deprecated and ignored, superseded by the renderer budgets; their built-in constants still bound the evidence the review log persists verbatim.
+The review log is the last `message` reader, so `renderLegacyMessage` survives until Step 4 ([#746]) replaces it.
 ADR 0011 records what each dependent item becomes under the contract.
 
 ## Two-phase checking
@@ -799,9 +803,9 @@ src/
 ├── permissions-service.ts    `LocalPermissionsService` class - in-process implementation of `PermissionsService`; injected with narrow collaborator interfaces (a `resolve` + `getToolPermission` resolver view, a `getPathNormalizer` session view, the formatter/access-extractor/authorizer registrars); routes path-surface queries through the resolver as an `access-path` intent so external policy queries match lexical ∪ canonical like the gates, and bash queries through `resolveBashAdvisoryCheck` for decomposed fidelity
 ├── service-lifecycle.ts      `ServiceLifecycle` interface + `PermissionServiceLifecycle` class — owns the process-global service publish (child-gated), ready emit, and session teardown ordering
 ├── service.ts                PermissionsService interface, Symbol.for() accessor (cross-extension API); public surface published as a self-contained dist/public.d.ts bundle
-├── permission-events.ts      Event channel constants, payload types, emit helpers
+├── permission-events.ts      Event channel constants, payload types, emit helpers. `PermissionUiPromptEvent` carries the payload's `request` core alongside the flat `surface`/`value` display projection — the gate surface and the display surface are two facts, not one (#292)
 ├── permission-request-id.ts  `createPermissionRequestId()` — the one mint for a permission request's `perm-<uuid>` id; distinct from the host's `toolCallId`, which stays alongside it as the join back to the Pi transcript
-├── permission-ui-prompt.ts   Centralized construction for `permissions:ui_prompt` event payloads - `buildUiPrompt` is the single builder for direct and forwarded asks, keeping the emitted contract shape in one place
+├── permission-ui-prompt.ts   Centralized construction for `permissions:ui_prompt` event payloads - `buildUiPrompt` is the single builder for direct and forwarded asks, keeping the emitted contract shape in one place. It projects the prompt payload's `request` core onto the event and nothing else: the bus is the narrowest renderer, so no evidence reaches it (ADR 0011 §6)
 ├── config-store.ts           `ConfigStore` class — owns `config` + `lastConfigWarning`; `ConfigReader`, `SessionConfigStore`, `CommandConfigStore` narrow interfaces
 ├── config-loader.ts          File I/O, format detection, strict zod validation (fail-closed) for config files
 ├── config-schema.ts          Zod schemas - single source of truth for the config shape; derives the JSON Schema (buildPermissionsJsonSchema) and the config types
@@ -825,14 +829,14 @@ src/
 ├── denial-messages.ts         Centralized denial message formatter - DenialContext type, EXTENSION_TAG, formatDenyReason/formatUnavailableReason/formatUserDeniedReason
 ├── permission-prompts.ts      Agent-facing pre-check reasons (missing tool name, unknown tool) refused before any permission check runs
 ├── presentation/             Prompt presentation: the payload a gate emits, and the renders over it (ADR 0011)
-│   ├── prompt-payload.ts     `PromptPayload` (the `kind` discriminant, the `request` invariant core, the complete `evidence` list, the `annotations` slot) + `localRequester`/`findEvidence`/`allEvidence`. Constraint: the payload is complete by contract — it never truncates and never decides what a human sees, so elision is a property of a render (ADR 0011 §2)
+│   ├── prompt-payload.ts     `PromptPayload` (the `kind` discriminant, the `request` invariant core, the complete `evidence` list, the `annotations` slot) + `localRequester`/`findEvidence`/`allEvidence` + `asPromptPayload`, the all-or-nothing tolerant guard the forwarded wire's reader narrows through. Constraint: the payload is complete by contract — it never truncates and never decides what a human sees, so elision is a property of a render (ADR 0011 §2). The guard lives beside its type so a new request fact updates it next door rather than in a distant reader
 │   ├── tool-ask-payload.ts   `buildToolAskPayload` — the bash, MCP, and generic-tool asks; carries the invoked tool name when a shell alias re-exposes bash (#574) and the wrapper's executed unit (#713)
 │   ├── path-ask-payload.ts   `buildPathAskPayload`, `buildExternalDirectoryAskPayload`, `buildBashExternalDirectoryAskPayload` — each escaping path carries its canonical alias as that evidence entry's `detail`, so a bounded render cannot show a path while eliding what it resolves to
 │   ├── skill-ask-payload.ts  `buildSkillAskPayload`, `buildSkillPathAskPayload` — the skill is the decision-relevant value (it is what the policy names); a skill read carries the path it was reached through as evidence
-│   ├── forwarded-ask-payload.ts `buildForwardedAskPayload` — the serving node's payload for an ask forwarded up from a subagent; carries the child's still-pre-rendered sentence as one evidence entry until the payload replaces `message` on the wire
+│   ├── forwarded-ask-payload.ts `buildForwardedAskPayload` — a two-branch projection, not a synthesizer: the child's own payload with only `requester` re-stamped to the request's authoritative provenance, or a degraded `kind: "forwarded"` render built from the display fields a payload-less request does carry. Constraint: the serving node is the only party that knows the ask arrived over the wire, so it re-stamps the requester and passes every other child fact through untouched
 │   ├── dialog-renderer.ts    `renderPromptDialog(payload, budget, paint)` — the bounded render for the inline dialog and the `select`/`input` fallback: aligned one-fact-per-line layout, a per-field width cap, a row budget over the evidence, and whole-token highlighting of the flagged element. Also `RenderBudget`/`DEFAULT_RENDER_BUDGET`/`resolveRenderBudget` (the configured budget) and `completeViewBudget` (the complete view). Constraint: the row budget bounds evidence and the field cap bounds the core — a core fact is shortened, never dropped (ADR 0011 §3 over §5)
 │   ├── line-fitting.ts       `fitLinesToWidth` — wrap-then-truncate to a terminal width, so each line is one visual row; shared by the `ctx.ui.custom` dialog, whose contract requires it, and by the renderer, which cannot count rows before wrapping
-│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string the wire, the broadcast, and the review log still read, rendered from the payload alone. Transitional: it goes when the last `message` reader does
+│   └── legacy-message.ts     `renderLegacyMessage(payload)` — the single producer of the flat `message` string the review log still reads, rendered from the payload alone. Transitional: it goes when that last reader does
 ├── tool-input-preview.ts              Pure tool-input text utilities (truncation, line counting, count formatting), serialization + default constants; `serializeToolInputPreview` (prompt, unredacted) and `serializeRedactedToolInputPreview` (log) are separate entry points because the input is flattened to a string before the writer sees its keys
 ├── tool-input-prompt-formatters.ts    Pure per-tool prompt formatters (edit/write/read) + getPromptPath helper
 ├── tool-preview-formatter.ts          ToolPreviewFormatter class - config-dependent prompt + log formatting; seam-first dispatch consults ToolInputFormatterLookup before built-in switch
@@ -859,7 +863,7 @@ src/
 │   ├── serving-registry.ts    ServingSessionRegistry class + getServingSessionRegistry() process-global accessor, split into the `ServingAnnouncer` (poller) and `ServingLookup` (forwarding child) seams - which sessions are draining a forwarded-permission inbox
 │   ├── subagent-lifecycle-events.ts subscribeSubagentLifecycle() - subscribes to @gotgenes/pi-subagents child lifecycle events; registers/unregisters child sessions in SubagentSessionRegistry (ADR 0002)
 │   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId`/`getCwd` - shared by the escalation and serving roles
-│   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + `resolvePermissionForwardingTarget`, which returns the resolved session id together with its `self`/`registry`/`env` provenance (only a `registry` target is in-process, so only it may be judged against the serving registry)
+│   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, which carries the child's `PromptPayload` rather than a sentence assembled under the child's config; the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + `resolvePermissionForwardingTarget`, which returns the resolved session id together with its `self`/`registry`/`env` provenance (only a `registry` target is in-process, so only it may be judged against the serving registry)
 │   ├── approval-escalator.ts  `ParentAuthorizer` class - `TerminalAuthorizer` for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction; adopts the requester's `requestId` as the forwarded request's `id` (falling back to a fresh mint when it could not safely name a file — at a relay hop that id came off disk); every abandonment path (unresolvable target, unusable directories, unwritable request, unserved in-process target, unreadable response, timeout) denies with `confirmationUnavailable` plus a path-naming `denialReason` and discards the request so a late answer cannot arrive
 │   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy.resolve(intent: ForwardedAccessIntent)` is intent-shaped (agent-scoped to `principal.agentName`, child-fixed `matchValues` used as-is, never re-derived through this session's `PathNormalizer`/cwd), floors to `ask` when `accessIntent` is absent (version skew); projects the request's access facts onto the escalated ask (`surface`/`matchValues`/`boundaryValue` only — `requesterCwd`/`principal` stay off the ask details, and the bounded-delegation checkpoint's exclusion reads the projected gate surface, #635); one-hop canary
 │   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` field), location derivation, atomic JSON writes (owner-only; `rename` preserves the temp file's mode)
@@ -919,8 +923,8 @@ No decline, so the regular rotation continues.
 | Metric                                                                  | Baseline (2026-08-15) | Phase 13 target |
 | ----------------------------------------------------------------------- | --------------------- | --------------- |
 | Flat-assembler sites (`formatAskPrompt` references in `src/`)           | 4                     | 0 ✅            |
-| Forwarded-wire `message: string` field (`permission-forwarding.ts`)     | 1                     | 0               |
-| Broadcast `message: string` field (`permission-ui-prompt.ts`)           | 1                     | 0               |
+| Forwarded-wire `message: string` field (`permission-forwarding.ts`)     | 1                     | 0 ✅            |
+| Broadcast `message: string` field (`permission-ui-prompt.ts`)           | 1                     | 0 ✅            |
 | `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
 | Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1               |
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1             |
@@ -984,7 +988,7 @@ Release: batch "presentation-payload"
 
 Release: batch "presentation-payload"
 
-#### Step 3: The cross-boundary swap — payload replaces `message` on the wire and the broadcast ([#745])
+#### ✅ Step 3: The cross-boundary swap — payload replaces `message` on the wire and the broadcast ([#745])
 
 **Cause:** same cause at the two cross-boundary contracts — the forwarded wire relays the child's prose (assembled under the child's config) and the broadcast ships the full sentence to any unconsented observer, so consistency across local and forwarded asks is structurally unattainable and the bus over-discloses.
 
@@ -993,6 +997,9 @@ Release: batch "presentation-payload"
   Breaking: `feat!:` with a migration note naming the payload fields that supersede `message` on both contracts.
 - **Outcome:** `grep -c "message: string"` goes 1 → 0 in both `permission-forwarding.ts` and `permission-ui-prompt.ts`; a forwarded ask renders identically in kind to a local one; the bus discloses request facts and verdicts only.
 - **Impact 4 / Risk 3 / Priority 12.**
+- **Landed:** both metric rows are `0`; `asPromptPayload` (an all-or-nothing tolerant guard beside its type) admits the payload through the wire's `asX` reader, and the required-core gate no longer demands `message`, so an older child's request is served from its display fields rather than rejected.
+  `docs/migration/0745-prompt-payload-contracts.md` names the superseding fields and the upgrade-the-parent-first ordering.
+  The [#710] row-budget invariant was re-measured at the new shape — the reported here-string ask arriving as `kind: "bash"` with the child's real evidence — and stays inside the 24-row default.
 
 Release: batch "presentation-contract"
 
@@ -1079,7 +1086,7 @@ Release: independent
 Measured on the review log: 53 of 57 `forwarded_permission.request_created` entries carry an id appearing on no `permission_request.*` entry, the child's ask and the request the parent serves joined by nothing but a one-millisecond timestamp gap.
 
 - **Smell:** Category C (boundary flaw — a lifecycle observable on one side of the forwarding edge and not the other).
-- **Target:** `src/authority/forwarded-request-server.ts` emits a parent-side `permissions:decision` after the serving session's human decision, reusing the request id its own `permissions:ui_prompt` carried; the child's originating `requestId`, which Step 3 puts on the wire, joins the two sides' log entries.
+- **Target:** `src/authority/forwarded-request-server.ts` emits a parent-side `permissions:decision` after the serving session's human decision, reusing the request id its own `permissions:ui_prompt` carried; `ForwardedPermissionRequest.id` **is** the child's originating `requestId` (Step 9), so it already joins the two sides' log entries.
   Silent policy resolutions stay silent — no prompt, no terminal event, unchanged.
 - **Outcome:** a direct prompt and its decision share one id; a forwarded prompt and its parent-side decision share one id on one bus; concurrent equivalent prompts stay independently correlatable.
 - **Impact 3 / Risk 2 / Priority 12.**
@@ -1091,7 +1098,7 @@ Release: independent
 ```mermaid
 flowchart TD
     S1["✅ Step 1 (#744): PromptPayload + builders"] --> S2["✅ Step 2 (#710): bounded local renderers"]
-    S2 --> S3["Step 3 (#745): cross-boundary swap (feat!)"]
+    S2 --> S3["✅ Step 3 (#745): cross-boundary swap (feat!)"]
     S2 --> S4["Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["Step 6: decidedBy provenance (#726)"]
     S9["✅ Step 9 (#752): minted request id"] --> S3
@@ -1110,8 +1117,7 @@ flowchart TD
 - **Track C — decision provenance:** Step 6, after Step 4.
 - **Track D — independent fixes:** Steps 7 and 8, any time.
 - **Track E — request identity:** Step 9, then Step 10 after Step 4.
-  Step 9 is disjoint from Track A apart from `permission-events.ts`, which Step 3 also edits (different interfaces in the same file) — land Step 9 **before** Step 3, not concurrently.
-  Step 3 then carries the child's `requestId` onto the forwarded-request wire while it is already rewriting that contract, so Step 10 finds both halves in place.
+  Step 9 was disjoint from Track A apart from `permission-events.ts`, which Step 3 also edits (different interfaces in the same file) — it landed **before** Step 3, and its id adoption retired the `requesterRequestId` wire field Step 3 had planned, so Step 10 finds both halves in place.
   Step 10 and Step 6 both enrich the review-log write path; land them in sequence.
 
 The step numbers are discovery order, not execution order: Steps 9 and 10 were added mid-phase, and Step 9 runs before Step 3.
