@@ -131,7 +131,7 @@ The write-back reads the release commit from a path-prefixed `<path>--sha` outpu
 ### Clarification gates
 
 Present the substance — concrete examples, before/after, trade-offs — in a message first, then call `ask_user` with options that reference it.
-An option list is a set of choices, not a briefing; context crammed into option descriptions gets bounced (Refs #635, #737).
+An option list is a set of choices, not a briefing; context crammed into option descriptions — or into `preview` panes — gets bounced (Refs #635, #737, #746).
 
 ### Background agent guardrails
 

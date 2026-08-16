@@ -64,4 +64,77 @@ Test count went 3009 → 3010 across a much larger churn than that suggests: 107
   The reviewer also flagged two `composition-root.test.ts` timeouts under the parallel root run and correctly diagnosed them as contention flakiness, not a regression — both pass in isolation.
 - Measured outcome: `renderLegacyMessage` in `src/` went 17 → 0, and the predicted 28.7% review-log reduction rests on the same live 7.07 MB log the plan measured.
 
+## Stage: Final Retrospective (2026-08-16T21:50:31Z)
+
+### Session summary
+
+Planned, implemented, and shipped Phase 13 Step 4 in one continuous session — the agent-facing denial text and the review log became renderers over `PromptPayload`, retiring the flat `message` string and the parallel `DenialContext` union.
+Twelve implementation commits landed as `pi-permission-system-v26.0.0`, a breaking release batching #745 and #746 as the "presentation-contract" batch.
+The measured outcome held: `renderLegacyMessage` in `src/` went 17 → 0, and the new `reviewLogFieldMaxWidth` bound removes ~28.7% of a live 7.07 MB review log.
+
+### Observations
+
+#### What went well
+
+- The **two-bounce planning gate produced a materially better design than either first draft**.
+  Bounce one forced a source trace instead of an argument, which established that denial correlation is structural (Pi stamps a block reason as that call's own tool result with its `toolCallId`, arguments retained) — collapsing "the agent needs the text to identify its call" from a requirement into a non-issue.
+  Bounce two forced seven worked scenarios into a plain message, which is what surfaced the *actual* discriminating case: a multi-token bash call where the agent cannot tell which operand tripped the gate.
+  Option B exists only because that case became visible.
+- **Measurement replaced estimation at every decision point.**
+  The live 7.07 MB review log answered where the log's growth actually lives (`message` 21.5%, `command` 20.2%, largest single value 72 KB), which is what showed that dropping `message` alone leaves half the growth unconfigured — and moved the width bound from the renderer to `writeLine`.
+  The same log supplied the blast radius for the cap (188 of 4325 command entries, 4.3%), which went into the migration note rather than a hedge.
+- **The `tidy-first-assessor` earned its dispatch, including by refusing work.**
+  Its two preparatory commits made step 7's required-field removal a one-line fixture edit; it also correctly declined to extract a shared gate-descriptor assembler, on the grounds that the seven builders' `denialContext` blocks were about to be deleted and there is nothing to extract before a deletion.
+- **The exhaustive-grep rule (Refs #441) paid for itself.**
+  The pre-completion reviewer's WARN named 5 stale sites; grepping every removed symbol found 12 files.
+  Fixing only the named ones would have invited the second WARN round the rule exists to prevent.
+- **Model assignment tracked task shape.**
+  Planning, TDD, and this retro ran on `claude-opus-5`; the operator switched to `claude-sonnet-5` for the 26-turn ship stage — deterministic tool orchestration — and back for the retro.
+
+#### What caused friction (agent side)
+
+- `instruction-violation` (self-identified, in retro) — `.pi/prompts/plan-issue.md:33` says to load the `design-review` skill before finalizing the design for any change to shared interfaces or layer wiring.
+  This change added `GateDescriptor.payload`, removed `PromptPermissionDetails.message`, and threaded a derived fact through seven gate builders; the skill was never loaded.
+  Its checklist item 5 ("Parameter relay — if intermediaries only relay, the parameter belongs on a shared object, not threaded through every layer") describes the exact defect the plan then prescribed.
+  Impact: the plan specified seven `logContext` spreads of `renderReviewLogFacts(payload)`; implementation corrected it to a single `GateRunner` stamp.
+  One deviation, caught cheaply by a fixture that would have had to restate the spread — no rework beyond the correction itself.
+- `wrong-abstraction` — the `fact-vocabulary.ts` extraction collapsed `dialog-renderer`'s private `flaggedTexts` and `valueLabel` into a single `flaggedElementLabel`, conflating two functions that only look alike.
+  They diverge for `bash_external_directory`, whose `request.value` is the command while what it *flags* are paths.
+  The `code-design` skill's "structural reasons before extracting duplication" rule covers this and was loaded.
+  Impact: one failing test in the first agent-renderer Green (`labels a bash_external_directory ask's value command`), split into `valueLabel` + `flaggedElementLabel` in the same cycle.
+  No commit-level rework.
+- `other` — the first agent-renderer Red used a `kind: "tool"` payload carrying a path value, and the renderer dutifully rendered `for tool '/etc/passwd'`.
+  A hand-built payload literal can be internally incoherent in ways no production builder produces.
+  Impact: one failed assertion, fixed by making the fixture coherent rather than the renderer tolerant.
+- `other` — an early `Write` targeted `/Users/chris/development/pi/pi-permission-system-agent-renderer.test.tmp.ts`, outside the repo, and was blocked by this very extension.
+  Impact: one denied call; incidentally a live demonstration of the pre-#746 denial text this issue replaces.
+
+#### What caused friction (user side)
+
+- Nothing material.
+  Both `ask_user` bounces were the gate working: each rejected an under-grounded question and named precisely what was missing (verify the correlation premise; pair each example with the tool call that produced it).
+  The second bounce also carried a reusable format instruction — "not as content in `ask_user` but as a user message" — that generalized into an `AGENTS.md` refinement below.
+
+### Diagnostic details
+
+- **Model-performance correlation** — attributed from inline turn labels in the session file, not `model_change` entries.
+  `claude-opus-5` ran planning (session lines 5–125), TDD (126–607), and this retro (664+); `claude-sonnet-5` ran the ship stage (609–663, 26 turns).
+  All three subagents (`tidy-first-assessor`, `pre-completion-reviewer` ×2, and the `Explore` dispatch for the Pi source trace) ran `anthropic/claude-sonnet-5`, matching their frontmatter and the `AGENTS.md` guidance for a multi-hop trace in the sibling Pi checkout.
+  No mismatch: no reasoning-weak model on judgment work, no high-cost model on mechanical work.
+- **Unused-tool detection** — the `design-review` skill was available, named by the active prompt, and not loaded; its checklist item 5 targets the one design defect the plan shipped.
+  This is the only unused-tool finding.
+- **Feedback-loop gap analysis** — no gap. 57 verification invocations spread continuously across the TDD stage: a four-command green baseline at lines 137–144, then `pnpm run check` / scoped `vitest run` after essentially every change through line 590, with `lint` and `fallow dead-code` at each commit boundary.
+  Verification was never deferred to the end.
+- **Escalation-delay tracking** — nothing notable.
+  No `rabbit-hole` friction points; the longest same-error sequence was 2 tool calls (the 8-failure agent-renderer Green, resolved in one analysis pass into two distinct causes).
+
+### Changes made
+
+1. `.pi/agents/pre-completion-reviewer.md` — added a "Source and test comments" bullet to the forward doc-staleness check, directing a `src/`/`test/` grep when a change removes a module, export, or type.
+   The existing bullet covered renames across `.pi/skills/` and `.pi/prompts/` only, and this session's reviewer pass missed 7 of 12 stale sites, all of them code comments.
+2. `AGENTS.md` — § Clarification gates now names `preview` panes alongside option descriptions as a place context gets bounced from, with a `#746` ref.
+   A `type: "preview"` ask carrying full worked examples was bounced this session with an explicit instruction to put them in a message instead.
+3. `.pi/prompts/plan-issue.md` — added a parameter-relay heuristic to § Design Overview: when N sibling call sites each supply the same derived fact, check whether a shared downstream point already stamps per-call fields.
+   The `design-review` skill covers this, but it is loaded ~115 lines earlier in the prompt; this puts the check where the design is actually written.
+
 [#746]: https://github.com/gotgenes/pi-packages/issues/746

@@ -146,6 +146,7 @@ Then an H1 title (e.g., `# <short descriptive title>`) — required by markdownl
   Fix upstream API gaps in the plan before planning the extraction.
   When a new exported function accepts domain objects, verify the parameter type follows ISP — list which fields the function reads and confirm the type doesn't carry unused fields.
   When the plan consolidates code from multiple methods into a shared helper, verify the methods have the same lifecycle semantics — different guards, cleanup scopes, or shutdown-vs-normal-operation contexts indicate structural duplication that should not be extracted.
+  When the design has N sibling call sites each supply the same derived fact, check whether a shared downstream point already stamps per-call fields (a runner, a writer, a factory) — a fact every sibling merely relays belongs there, not in N places (Refs #746).
   When the issue proposes moving or relocating a class to a new owner, list every method's callers and what fields/state each method touches.
   If most methods operate on the target owner's fields, the class may be an intermediary that should be dissolved into the owner rather than relocated intact.
 - **Module-Level Changes** — file-by-file list of what's added, changed, or removed.
