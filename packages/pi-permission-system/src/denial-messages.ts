@@ -1,5 +1,6 @@
 import { classifyToolKind, isMcpCheck } from "./access-intent/tool-kind";
 import { EXTENSION_ID } from "./extension-config";
+import { describeBashCommandContext } from "./presentation/fact-vocabulary";
 import type { BashCommandContext, PermissionCheckResult } from "./types";
 
 // ── Extension attribution tag ──────────────────────────────────────────────
@@ -158,25 +159,6 @@ function buildToolDenyBody(
 }
 
 /**
- * Human-readable label for a nested bash execution context, or `undefined` for
- * a current-shell (top-level) command.
- */
-export function describeBashCommandContext(
-  context?: BashCommandContext,
-): string | undefined {
-  switch (context) {
-    case "command_substitution":
-      return "command substitution";
-    case "process_substitution":
-      return "process substitution";
-    case "subshell":
-      return "subshell";
-    default:
-      return undefined;
-  }
-}
-
-/**
  * Build the parenthetical qualifier for a bash decision, folding the matched
  * rule and (for a nested command) its execution context into one clause, e.g.
  * `(matched 'rm *', inside command substitution)`. Returns `""` when neither
@@ -190,7 +172,7 @@ export function matchQualifier(
   if (matchedPattern) {
     parts.push(`matched '${matchedPattern}'`);
   }
-  const label = describeBashCommandContext(context);
+  const label = describeBashCommandContext(context ?? null);
   if (label) {
     parts.push(`inside ${label}`);
   }
