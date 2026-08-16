@@ -85,6 +85,17 @@ So `ForwardedPermissionRequest.id` **is** the child's request id, and the `reque
   `forwardableRequestId` falls back to a fresh mint when an inbound id could not safely name a file, and in that case the join breaks for that exchange.
   It is [#752]'s residual, needs no contract change (log both ids on `forwarded_permission.request_created`), and sits in this plan's Open Questions for Step 10 ([#610]) to decide.
 - **Anchors re-verified against the post-[#752] tree** before handing off: both `message: string` metric baselines still `1`, `architecture.md` line 388 unmoved, the [#710] here-string pin present, `forwarded-ask-payload.ts:42` still reading `request.message`, and `requesterRequestId` absent from `src/` and `test/`.
+- **The reconciliation took two passes, and the second one is the transferable lesson.**
+  The first swept for the symbol `requesterRequestId` and cleaned six sites.
+  A full re-read then found a seventh in Goals — "the forwarded request carries the child's originating `requestId`, and the child's `forwarded_permission.*` review entries name it" — which describes the same retired work in prose without ever naming the field, so no symbol grep could match it.
+  When retiring planned work, sweep for the *concept* (`requestId`, `correlation`, `join`, `shared key`) as well as the identifier, and re-read the sections a grep does not lead you to.
+  This is the doc-side twin of AGENTS.md's "a step that reworks documented behavior carries no removed symbol to match".
+
+### Handoff state (verified 2026-08-15)
+
+The plan is self-consistent and authoritative for `/tdd-plan`: six TDD steps, no identity work, all anchors verified against the current tree.
+Nothing is in flight — working tree clean, [#752] landed and released, [#721] (the other `approval-escalator.ts` editor) not started.
+The green baseline has **not** been run this session; `/tdd-plan` owns that gate.
 
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
