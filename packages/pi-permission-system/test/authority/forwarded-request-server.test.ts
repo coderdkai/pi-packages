@@ -31,6 +31,7 @@ import {
   makeSubagentRegistry,
 } from "#test/helpers/forwarding-fixtures";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 
 let temp: ForwardingTempDir | undefined;
 
@@ -454,6 +455,89 @@ describe("processInbox — child-fixed access facts on the escalated ask", () =>
     // `accessIntent?.surface ?? surface` fallback reads the display surface only
     // when the key is genuinely absent.
     expect(details).not.toHaveProperty("accessIntent");
+  });
+});
+
+describe("processInbox — the child's payload on the escalated ask", () => {
+  test("escalates the child's own payload with the requester re-stamped as forwarded", async () => {
+    const childPayload = makePromptPayload({
+      kind: "bash",
+      request: {
+        requester: { agentName: "Explore", forwarded: false, sessionId: null },
+        surface: "bash",
+        toolName: "bash",
+        invokedToolName: null,
+        value: "git push",
+        matchedPattern: "git *",
+        commandContext: null,
+        executedUnit: null,
+      },
+      evidence: [
+        { label: "full command", text: "git push --force", detail: null },
+      ],
+    });
+
+    const details = await escalateForwardedAsk({
+      id: "req-child-payload",
+      requesterAgentName: "Explore",
+      requesterSessionId: "child-session",
+      source: "tool_call",
+      surface: "bash",
+      value: "git push",
+      payload: childPayload,
+    });
+
+    // The child's kind and facts pass through untouched — a forwarded bash ask
+    // renders `command : …` exactly as a local one does. Only the requester is
+    // re-stamped: the serving node is the only party that knows the ask arrived
+    // over the wire, and the request's own provenance is authoritative (#292).
+    expect(details.payload).toEqual({
+      ...childPayload,
+      request: {
+        ...childPayload.request,
+        requester: {
+          agentName: "Explore",
+          forwarded: true,
+          sessionId: "child-session",
+        },
+      },
+    });
+  });
+
+  test("escalates a degraded forwarded payload for a request carrying none", async () => {
+    const details = await escalateForwardedAsk({
+      id: "req-skew-payload",
+      requesterAgentName: "scout",
+      requesterSessionId: "child-session",
+      source: "tool_call",
+      surface: "read",
+      value: "/tmp/x",
+      message: "Allow read of /tmp/x?",
+    });
+
+    // `kind: "forwarded"` now means exactly one thing: this ask arrived without
+    // a payload, so it is rendered from the display fields it does carry.
+    expect(details.payload).toEqual({
+      kind: "forwarded",
+      request: {
+        requester: {
+          agentName: "scout",
+          forwarded: true,
+          sessionId: "child-session",
+        },
+        surface: "read",
+        toolName: null,
+        invokedToolName: null,
+        value: "/tmp/x",
+        matchedPattern: null,
+        commandContext: null,
+        executedUnit: null,
+      },
+      evidence: [
+        { label: "requested", text: "Allow read of /tmp/x?", detail: null },
+      ],
+      annotations: [],
+    });
   });
 });
 
