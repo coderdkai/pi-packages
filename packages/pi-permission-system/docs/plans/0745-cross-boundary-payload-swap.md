@@ -35,7 +35,6 @@ The two preview caps are the third loose end.
 - `permissions:ui_prompt` drops `message` and gains `request: PromptRequestFacts` — the payload's invariant core, verbatim.
   The forwarded provenance (`forwarding.requesterAgentName` / `forwarding.requesterSessionId`) and the display projection (`surface` / `value` / `agentName`) are retained in full: what narrows is evidence, never correlation ([#292], [#610]).
 - Version skew is handled per [ADR 0011] §9: a request carrying no payload is rendered from the fields it does carry, and a prompt is never presented empty.
-- The forwarded request carries the child's originating `requestId`, and the child's `forwarded_permission.*` review entries name it, so a child's ask and the request the parent serves join on a shared key instead of a timestamp gap.
 - `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength` stay optional in the schema, their values are ignored, and a config that sets either receives a deprecation notice through the existing config-issue channel.
 
 This change **is breaking**, on three surfaces:
