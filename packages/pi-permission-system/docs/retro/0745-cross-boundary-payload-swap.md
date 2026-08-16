@@ -68,6 +68,24 @@ An operator question after the plan commit — "should every request have an ID 
 - **[#610]'s original sweep disposition was wrong**, and the roadmap now records why: it was swept out as a feature issue on its symptom without the cause being traced.
   Worth carrying into the next `/plan-improvements` sweep as a check — a user-reported observability gap may be a structural finding wearing a feature label.
 
+### Addendum — the `requesterRequestId` step was retired by [#752] (2026-08-15)
+
+[#752] has landed and released, and it closed the correlation gap at the source rather than on the wire: `ParentAuthorizer` stopped minting a third id and now writes `details.requestId` as the forwarded request's `id` (`forwardableRequestId`, `3f8d3fd6`).
+So `ForwardedPermissionRequest.id` **is** the child's request id, and the `requesterRequestId` field this plan had gained would have named the same value twice.
+
+- **The stale instructions were the real hazard, not the stale design note.**
+  A "superseded by [#752]" paragraph had been added to the design section, but the Module-Level Changes rows, the test-expectations row, and TDD step 2 still instructed adding the field.
+  A plan that says "do not do this" in one section and "do this" in three others resolves, for an implementation session reading top to bottom, as "do this".
+  Excised the instructions and renumbered the TDD order 1–6; the historical rationale stays in one clearly-labelled paragraph.
+- **Predicting a dependency's shape is what went wrong.**
+  The field was designed while [#752] was still unplanned, on the assumption that it would mint an id and leave the wire's own id alone.
+  It did something better that this plan could not have specified.
+  The cheaper move would have been to name the correlation gap and defer the mechanism to whichever issue landed first.
+- **One residual is now recorded rather than absorbed.**
+  `forwardableRequestId` falls back to a fresh mint when an inbound id could not safely name a file, and in that case the join breaks for that exchange.
+  It is [#752]'s residual, needs no contract change (log both ids on `forwarded_permission.request_created`), and sits in this plan's Open Questions for Step 10 ([#610]) to decide.
+- **Anchors re-verified against the post-[#752] tree** before handing off: both `message: string` metric baselines still `1`, `architecture.md` line 388 unmoved, the [#710] here-string pin present, `forwarded-ask-payload.ts:42` still reading `request.message`, and `requesterRequestId` absent from `src/` and `test/`.
+
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#744]: https://github.com/gotgenes/pi-packages/issues/744
