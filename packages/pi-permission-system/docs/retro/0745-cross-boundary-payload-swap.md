@@ -142,6 +142,83 @@ Both plan metrics hit their target: `grep -c "message: string"` is `0` in `permi
   The three `feat!:` commits sit on `main` unreleased until then.
 
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
+
+## Stage: Final Retrospective (2026-08-16T15:10:55Z)
+
+### Session summary
+
+Shipped Phase 13 Step 3 across four stages (planning, two planning addenda, TDD, ship): the structured `PromptPayload` replaced the pre-rendered `message` on the forwarded-request wire and the `permissions:ui_prompt` broadcast, and the two tool-preview caps were soft-deprecated.
+Six commits, +15 tests, both `message: string` metric rows to `0`, pre-completion reviewer PASS, CI green, issue closed with the release deliberately deferred to the [#746] batch tail.
+The TDD stage ran without a single user correction — every deviation was self-caught.
+
+### Observations
+
+#### What went well
+
+- **The plan's lift-and-shift ordering paid off exactly as designed, and one boundary error in it was caught by executing rather than reading.**
+  The plan put the degraded payload's `evidence: []` in step 2, but `message` was still on the wire there, so `renderForwarded` would have broken a step early.
+  Caught while writing the step-2 red, before any green — the assertion was moved to step 3 and both steps stayed at one contract each.
+  The generalizable rule: when a plan's step N describes a *consequence* of step N+1's removal, it belongs in N+1.
+- **Measuring the [#710] row-budget invariant instead of arguing it was cheap and conclusive.**
+  The plan insisted the re-pin be asserted at the new shape *before* the old case was touched.
+  It passed on the first run, which retired the risk in one tool call — and the old `kind: "forwarded"` case survived as the version-skew render's test rather than being deleted as redundant.
+- **The `tidy-first-assessor` correctly declined its own only candidate.**
+  It proposed extracting a shared assertion helper in `test/permission-ui-prompt.test.ts`, then reasoned that the helper's shape depends on the very `payload`/`request` fields the change introduces, and filed it Optional rather than Recommended.
+  That is the assessor working as intended — an assessor that had recommended it would have produced a throwaway commit.
+- **Verification cadence was tight throughout.**
+  `pnpm run check` after every green, the full package suite after every step, root `lint` + `fallow dead-code` before every commit.
+  No feedback-loop gap; see the diagnostic details below.
+
+#### What caused friction (agent side)
+
+- `other` — **`pnpm exec biome check --write` cannot fix a warning-level finding, and the attempt cost the session's single largest time sink.**
+  Root `lint` reported PASS while `grep -c 'lint/'` counted one `noUnusedImports` warning in `src/tool-preview-formatter.ts` (a stale `PermissionSystemExtensionConfig` import left by making `resolveToolPreviewLimits` parameterless).
+  `--write` reported `No fixes applied. Found 1 warning.` — a warning's fix is classified unsafe, so only `--write --unsafe` applies it.
+  Verified this retro: on a probe file `--write` skips it and `--write --unsafe` fixes it.
+  Impact: one wasted command whose chained root `lint` then hit a 600-second timeout — ~10 minutes, the largest single delay in the session.
+  Fixed by hand-editing the import.
+- `other` — **The project's own prescribed warning-count idiom reports failure on success.**
+  `AGENTS.md` teaches `pnpm run lint >/tmp/l.log 2>&1; grep -c 'lint/' /tmp/l.log`, but `grep -c` exits 1 when the count is `0`, so a clean lint surfaces as `Command exited with code 1`.
+  Hit three times (after TDD steps 2 and 5, and at the changelog-preview step, where `grep -c "message: string"` returning `0` for all three files did the same).
+  Impact: no rework — each was correctly read as success — but three false failure signals on the exact command the repo documents.
+- `other` — **Retyped a file path from memory twice, four turns apart, after the first was already corrected.**
+  Both reads used `/Users/chris/development/pi/pi-permission-system/test/…`, dropping the `pi-packages/packages/` segment; the `external_directory` gate denied both and its denial message printed the corrected path each time.
+  Impact: two wasted tool calls, no rework.
+  Worth noting the second occurrence came *after* a correct read of the same file — the fix is to copy paths from prior tool output rather than retype them.
+- `missing-context` — **`tsc` passed twice while the full suite then failed on untyped assertion literals.**
+  Removing `message` from `ForwardedPermissionRequest` (step 3) and from `PermissionUiPromptEvent` (step 4) left stale object literals in `expect(escalate).toHaveBeenCalledWith({…})` (`test/authority/forwarded-request-server.test.ts`) and `expect(events.emit).toHaveBeenCalledWith("permissions:ui_prompt", {…})` (`test/authority/local-user-authorizer.test.ts`).
+  Neither is type-checked — the mock's signature is loose and the event bus is untyped — so both surfaced only at the full-suite run.
+  Impact: two diagnose-and-locate detours (about 5 tool calls each, including one `sed -n '/Failed Tests/,/^$/p'` that printed nothing and had to be retried as `tail -60`).
+  No rework beyond the fixes themselves, because the full suite ran after every step.
+  This is the same class as the package skill's `hasUI:`-cast note, arriving through a different vector: assertion literals rather than hand-built `ctx` objects.
+
+#### What caused friction (user side)
+
+- Nothing to flag.
+  The single interaction point — the deferred-release confirmation at ship time — is exactly the strategic judgment the workflow should route to the operator, and it was answered from a decision the plan had already recorded.
+  The `Continue.` at the start of the TDD stage was a mechanical unblock after the plan read hit the 50 KB truncation limit; the plan being long enough to truncate is a plan-authoring signal, not a user one.
+
+### Diagnostic details
+
+- **Model-performance correlation** — no mismatches.
+  TDD stage on `anthropic/claude-opus-5` (judgment-heavy: five contract changes, a tolerant parser, three breaking-change footers); ship stage on `anthropic/claude-sonnet-5` (mechanical: push, CI poll, close); retro on `anthropic/claude-opus-5`.
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `anthropic/claude-sonnet-5` per their frontmatter — appropriate for read-only review.
+  The `pre-completion-reviewer` took 1127 s / 53 tool calls, which is the cost of a genuinely independent re-verification (it re-ran all four gates and re-checked every `BREAKING CHANGE:` remedy against the real surface).
+- **Escalation-delay tracking** — no sequence exceeded five consecutive tool calls on one error.
+  The two longest were the post-`message`-removal test repairs (about 5 calls each), and both were linear diagnose → read → fix, not repeated attempts at the same failing approach.
+  No subagent escalation was warranted.
+- **Unused-tool detection** — `colgrep` was never used; every search was an exact symbol or field-name grep (`message: string`, `toolInputPreviewMaxLength`, `renderForwarded`), which is the correct tool for this change.
+  The one `missing-context` friction point above would not have been helped by a semantic search either — the stale literals contain the exact string `message:`; what was missing was the habit of grepping `test/` for it, not a better search tool.
+- **Feedback-loop gap analysis** — no gap.
+  The green baseline ran all four gates before any edit (`check`, root `lint`, `test`, `fallow dead-code`), and each of the six steps closed with `check` + full suite + `lint` before its commit.
+  `verify:public-types` was run at step 4, the step that changed the public surface, rather than deferred to the end.
+
+### Changes made
+
+1. `AGENTS.md` — appended `|| true` to the documented warning-count idiom and noted that `biome check --write` will not apply a warning's fix.
+2. `.pi/skills/testing/SKILL.md` — added a field-removal rule covering untyped assertion literals in `test/`, under § "Interface and type changes".
+3. `packages/pi-permission-system/docs/retro/0745-cross-boundary-payload-swap.md` — this Final Retrospective stage entry.
+
 [#710]: https://github.com/gotgenes/pi-packages/issues/710
 [#744]: https://github.com/gotgenes/pi-packages/issues/744
 [#746]: https://github.com/gotgenes/pi-packages/issues/746

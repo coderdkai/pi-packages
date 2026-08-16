@@ -322,7 +322,8 @@ Do not gate a commit (or any `&&` step) on a check piped through `tail`/`head` �
 Run the check unpiped, or test `${PIPESTATUS[0]}`.
 To keep the output short without losing the gate, redirect rather than pipe: `pnpm run check >/dev/null && git commit …`.
 That redirect hides Biome findings at **warning** level, which exit 0 — `pnpm run lint` reports PASS while new warnings accumulate.
-After adding or heavily editing files, count them: `pnpm run lint >/tmp/l.log 2>&1; grep -c 'lint/' /tmp/l.log` (Refs #694).
+After adding or heavily editing files, count them: `pnpm run lint >/tmp/l.log 2>&1; grep -c 'lint/' /tmp/l.log || true` — `grep -c` exits 1 on a zero count (Refs #694).
+`biome check --write` reports `No fixes applied` for a warning, whose fix is unsafe-classified — hand-edit it, or `--write --unsafe` the one file.
 When a shell loop or script needs a status variable, do not name it `status` — zsh reserves `$status` (an alias for `$?`) as read-only, so the assignment aborts with `read-only variable: status`; use `state`/`rc` instead.
 Do not edit `CHANGELOG.md` — release-please owns it.
 Before naming a remediation in a breaking-change migration note (CLI flag, config key, API call), verify it exists in the real surface (SDK types, `--help`, schema) — do not infer a config key by analogy.
