@@ -6,7 +6,6 @@ import type { ToolCallContext } from "#src/handlers/gates/types";
 import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import {
-  TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   TOOL_INPUT_PREVIEW_MAX_LENGTH,
   TOOL_TEXT_SUMMARY_MAX_LENGTH,
 } from "#src/tool-input-preview";
@@ -19,7 +18,6 @@ function makeFormatter(): ToolPreviewFormatter {
   return new ToolPreviewFormatter({
     toolInputPreviewMaxLength: TOOL_INPUT_PREVIEW_MAX_LENGTH,
     toolTextSummaryMaxLength: TOOL_TEXT_SUMMARY_MAX_LENGTH,
-    toolInputLogPreviewMaxLength: TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   });
 }
 

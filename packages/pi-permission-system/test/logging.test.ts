@@ -121,6 +121,77 @@ describe("createPermissionSystemLogger", () => {
     });
   });
 
+  describe("the review log's field-width bound", () => {
+    /** The single review entry the log holds, parsed. */
+    function writtenReviewEntry(): Record<string, unknown> {
+      return JSON.parse(readFileSync(reviewLogPath, "utf8").trim()) as Record<
+        string,
+        unknown
+      >;
+    }
+
+    test("shortens an oversized value at the configured width", () => {
+      config.reviewLogFieldMaxWidth = 20;
+
+      makeLogger().review("permission_request.waiting", {
+        toolName: "bash",
+        command: "a".repeat(500),
+      });
+
+      expect(writtenReviewEntry().command).toBe(`${"a".repeat(20)}\u2026`);
+    });
+
+    test("bounds every value the entry carries, not one chosen field", () => {
+      config.reviewLogFieldMaxWidth = 5;
+
+      makeLogger().review("permission_request.waiting", {
+        command: "b".repeat(50),
+        path: "c".repeat(50),
+        toolInputPreview: "d".repeat(50),
+      });
+
+      expect(writtenReviewEntry()).toMatchObject({
+        command: `${"b".repeat(5)}\u2026`,
+        path: `${"c".repeat(5)}\u2026`,
+        toolInputPreview: `${"d".repeat(5)}\u2026`,
+      });
+    });
+
+    test("defaults to a width that leaves ordinary commands whole", () => {
+      const command = "pnpm run test --filter @gotgenes/pi-permission-system";
+
+      makeLogger().review("permission_request.waiting", {
+        toolName: "bash",
+        command,
+      });
+
+      expect(writtenReviewEntry().command).toBe(command);
+    });
+
+    test("masks a sensitive-keyed value whole, however long it was", () => {
+      config.reviewLogFieldMaxWidth = 10;
+
+      makeLogger().review("permission_request.waiting", {
+        headers: { authorization: `Bearer ${"TEST_VALUE".repeat(20)}` },
+      });
+
+      const written = readFileSync(reviewLogPath, "utf8");
+      expect(written).not.toContain("TEST_VALUE");
+      expect(writtenReviewEntry()).toMatchObject({
+        headers: { authorization: "[redacted]" },
+      });
+    });
+
+    test("leaves the debug log unbounded, since it exists to be read in full", () => {
+      config.debugLog = true;
+      config.reviewLogFieldMaxWidth = 10;
+
+      makeLogger().debug("permission.decision", { command: "e".repeat(500) });
+
+      expect(readFileSync(debugLogPath, "utf8")).toContain("e".repeat(500));
+    });
+  });
+
   test("respects debug toggle and keeps review log enabled by default", () => {
     const logger = makeLogger();
 

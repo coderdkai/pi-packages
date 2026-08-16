@@ -26,6 +26,8 @@ export interface PermissionSystemExtensionConfig {
   promptMaxRows?: number;
   /** Max characters of any one field shown in a permission prompt. Defaults to 400. */
   promptFieldMaxWidth?: number;
+  /** Max characters of any one value written to the permission review log. Defaults to 1000. */
+  reviewLogFieldMaxWidth?: number;
   /** Non-bash tools that carry shell semantics, keyed by tool name. */
   shellTools?: ShellToolsConfig;
   /** Ordered names of registered live-authority chain links to consult before the terminal authorizer. */
@@ -81,6 +83,9 @@ export function normalizePermissionSystemConfig(
   }
   if (raw.promptFieldMaxWidth !== undefined) {
     result.promptFieldMaxWidth = raw.promptFieldMaxWidth;
+  }
+  if (raw.reviewLogFieldMaxWidth !== undefined) {
+    result.reviewLogFieldMaxWidth = raw.reviewLogFieldMaxWidth;
   }
   // `toolInputPreviewMaxLength` / `toolTextSummaryMaxLength` are deliberately
   // absent: the schema and the merge still accept them so the deprecation

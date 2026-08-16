@@ -3,7 +3,6 @@ import type { ToolInputFormatterLookup } from "./tool-input-formatter-registry";
 import {
   serializeRedactedToolInputPreview,
   serializeToolInputPreview,
-  TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   TOOL_INPUT_PREVIEW_MAX_LENGTH,
   TOOL_TEXT_SUMMARY_MAX_LENGTH,
   truncateInlineText,
@@ -20,7 +19,6 @@ import { getNonEmptyString, toRecord } from "./value-guards";
 export interface ToolPreviewFormatterOptions {
   toolInputPreviewMaxLength: number;
   toolTextSummaryMaxLength: number;
-  toolInputLogPreviewMaxLength: number;
 }
 
 /**
@@ -29,15 +27,13 @@ export interface ToolPreviewFormatterOptions {
  * Takes no config: `toolInputPreviewMaxLength` and `toolTextSummaryMaxLength`
  * are subsumed by the renderer budgets (`promptMaxRows` / `promptFieldMaxWidth`,
  * ADR 0011 §5), so an operator's values no longer take effect. The constants
- * remain — they still bound the evidence the review log persists verbatim
- * (`docs/decisions/0010-permission-log-secret-exposure.md`) until [#746] lands
- * the log's own renderer.
+ * remain because they still shape a *prompt* preview; what the review log
+ * persists is bounded by `reviewLogFieldMaxWidth` at the writer instead.
  */
 export function resolveToolPreviewLimits(): ToolPreviewFormatterOptions {
   return {
     toolInputPreviewMaxLength: TOOL_INPUT_PREVIEW_MAX_LENGTH,
     toolTextSummaryMaxLength: TOOL_TEXT_SUMMARY_MAX_LENGTH,
-    toolInputLogPreviewMaxLength: TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   };
 }
 
@@ -143,14 +139,16 @@ export class ToolPreviewFormatter {
   // ── Log formatting ──────────────────────────────────────────────────────
 
   /**
-   * Serialize `input` to inline JSON and truncate at
-   * `toolInputLogPreviewMaxLength`, masking sensitive-keyed values.
+   * Serialize `input` to inline JSON for the review log, masking
+   * sensitive-keyed values.
+   *
+   * Unbounded here: the writer narrows every field it persists to
+   * `reviewLogFieldMaxWidth`, so a second bound at the producer would be a
+   * limit the operator cannot see or change.
    */
   formatGenericToolInputForLog(input: unknown): string | undefined {
     const inline = serializeRedactedToolInputPreview(input);
-    return inline
-      ? `input ${truncateInlineText(inline, this.options.toolInputLogPreviewMaxLength)}`
-      : undefined;
+    return inline ? `input ${inline}` : undefined;
   }
 
   /** Derive a loggable input preview string for the review log. */
@@ -164,16 +162,7 @@ export class ToolPreviewFormatter {
     }
 
     if (pathBearingTools.has(result.toolName)) {
-      const inputPreview = this.formatToolInputForPrompt(
-        result.toolName,
-        input,
-      );
-      return inputPreview
-        ? truncateInlineText(
-            inputPreview,
-            this.options.toolInputLogPreviewMaxLength,
-          )
-        : undefined;
+      return this.formatToolInputForPrompt(result.toolName, input) || undefined;
     }
 
     return this.formatGenericToolInputForLog(input);

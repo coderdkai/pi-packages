@@ -224,6 +224,7 @@ export function mergeUnifiedConfigs(
     "forwardingTimeoutMs",
     "promptMaxRows",
     "promptFieldMaxWidth",
+    "reviewLogFieldMaxWidth",
     "toolInputPreviewMaxLength",
     "toolTextSummaryMaxLength",
   ] as const) {

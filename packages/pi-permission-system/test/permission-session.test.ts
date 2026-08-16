@@ -343,7 +343,6 @@ describe("PermissionSession", () => {
       const limits = session.getToolPreviewLimits();
       expect(limits.toolInputPreviewMaxLength).toBeGreaterThan(0);
       expect(limits.toolTextSummaryMaxLength).toBeGreaterThan(0);
-      expect(limits.toolInputLogPreviewMaxLength).toBeGreaterThan(0);
     });
   });
 

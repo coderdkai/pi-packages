@@ -155,6 +155,19 @@ describe("normalizePermissionSystemConfig", () => {
     expect("promptFieldMaxWidth" in result).toBe(false);
   });
 
+  it("includes the review-log field width when provided", () => {
+    expect(
+      normalizePermissionSystemConfig({ reviewLogFieldMaxWidth: 200 })
+        .reviewLogFieldMaxWidth,
+    ).toBe(200);
+  });
+
+  it("omits the review-log field width when absent, leaving the writer's default", () => {
+    expect(
+      "reviewLogFieldMaxWidth" in normalizePermissionSystemConfig({}),
+    ).toBe(false);
+  });
+
   // Deliberately dropped rather than carried: a declared config field no
   // runtime consumer reads is a maintenance trap, so the deprecated caps stop
   // at the merge intermediate the detector reads (#745).

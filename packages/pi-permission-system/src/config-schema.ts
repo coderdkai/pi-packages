@@ -208,6 +208,13 @@ export const unifiedConfigSchema = z
         "Maximum characters of any one field shown in a permission prompt.\n\nOmit to use the default (400). This is what bounds a single pathological field — a long here-string command, say — that would otherwise fill the prompt through wrapping. A shortened field is marked with an ellipsis, and `Ctrl+O` shows it in full.",
       default: 400,
     }),
+    reviewLogFieldMaxWidth: z.number().int().min(1).optional().meta({
+      description:
+        "Maximum characters of any one value written to the permission review log. Omit to use the default (1000).",
+      markdownDescription:
+        "Maximum characters of any one value written to the permission review log.\n\nOmit to use the default (1000). Every string the review log writes is narrowed to this width and marked with an ellipsis, so the log's growth is a decision you make rather than a side effect of how long a command happened to be. Raise it to keep longer values \u2014 a bash command exceeding the width is stored shortened.\n\nThis is a length bound, not redaction: it never inspects a value to decide what to hide. Key-name masking is unchanged and applies independently.",
+      default: 1000,
+    }),
     toolInputPreviewMaxLength: z.number().int().min(1).optional().meta({
       deprecated: true,
       description:

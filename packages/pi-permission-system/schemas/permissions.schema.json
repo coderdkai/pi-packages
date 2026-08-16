@@ -55,6 +55,14 @@
       "minimum": 1,
       "maximum": 9007199254740991
     },
+    "reviewLogFieldMaxWidth": {
+      "description": "Maximum characters of any one value written to the permission review log. Omit to use the default (1000).",
+      "markdownDescription": "Maximum characters of any one value written to the permission review log.\n\nOmit to use the default (1000). Every string the review log writes is narrowed to this width and marked with an ellipsis, so the log's growth is a decision you make rather than a side effect of how long a command happened to be. Raise it to keep longer values — a bash command exceeding the width is stored shortened.\n\nThis is a length bound, not redaction: it never inspects a value to decide what to hide. Key-name masking is unchanged and applies independently.",
+      "default": 1000,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
     "toolInputPreviewMaxLength": {
       "deprecated": true,
       "description": "Deprecated and ignored. Superseded by promptMaxRows and promptFieldMaxWidth, which bound the whole prompt rather than one preview. Still accepted so an existing config is not rejected; remove it.",

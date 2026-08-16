@@ -523,6 +523,22 @@ describe("mergeUnifiedConfigs", () => {
     expect(merged.promptFieldMaxWidth).toBe(400);
   });
 
+  it("replaces the review-log field width (project wins)", () => {
+    expect(
+      mergeUnifiedConfigs(
+        { reviewLogFieldMaxWidth: 1000 },
+        { reviewLogFieldMaxWidth: 200 },
+      ).reviewLogFieldMaxWidth,
+    ).toBe(200);
+  });
+
+  it("carries the review-log field width from the base when unoverridden", () => {
+    expect(
+      mergeUnifiedConfigs({ reviewLogFieldMaxWidth: 200 }, {})
+        .reviewLogFieldMaxWidth,
+    ).toBe(200);
+  });
+
   it("returns base unchanged when override is empty", () => {
     const base = {
       debugLog: true,

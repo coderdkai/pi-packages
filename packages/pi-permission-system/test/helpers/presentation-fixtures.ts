@@ -1,6 +1,5 @@
 import type { ToolInputFormatterLookup } from "#src/tool-input-formatter-registry";
 import {
-  TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   TOOL_INPUT_PREVIEW_MAX_LENGTH,
   TOOL_TEXT_SUMMARY_MAX_LENGTH,
 } from "#src/tool-input-preview";
@@ -45,7 +44,6 @@ export function makeToolPreviewFormatter(
     {
       toolInputPreviewMaxLength: TOOL_INPUT_PREVIEW_MAX_LENGTH,
       toolTextSummaryMaxLength: TOOL_TEXT_SUMMARY_MAX_LENGTH,
-      toolInputLogPreviewMaxLength: TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
       ...options,
     },
     customFormatters,
