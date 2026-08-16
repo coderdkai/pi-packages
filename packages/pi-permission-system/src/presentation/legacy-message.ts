@@ -1,9 +1,10 @@
-import { matchQualifier, resolvesToSuffix } from "#src/denial-messages";
+import { describeBashCommandContext } from "#src/presentation/fact-vocabulary";
 import {
   allEvidence,
   findEvidence,
   type PromptPayload,
 } from "#src/presentation/prompt-payload";
+import type { BashCommandContext } from "#src/types";
 
 /**
  * Render the flat `message` string every consumer still reads.
@@ -128,4 +129,29 @@ function forwardedAskClause(payload: PromptPayload): string {
 /** The text of an evidence entry the render requires, or the empty string. */
 function textOf(payload: PromptPayload, label: string): string {
   return findEvidence(payload, label)?.text ?? "";
+}
+
+/** ` (resolves to '<canonical>')` when a distinct target exists, else `""`. */
+function resolvesToSuffix(resolvedPath?: string): string {
+  return resolvedPath ? ` (resolves to '${resolvedPath}')` : "";
+}
+
+/**
+ * The bash parenthetical, folding the matched rule and (for a nested command)
+ * its execution context into one clause, e.g.
+ * `(matched 'rm *', inside command substitution)`.
+ */
+function matchQualifier(
+  matchedPattern?: string,
+  context?: BashCommandContext,
+): string {
+  const parts: string[] = [];
+  if (matchedPattern) {
+    parts.push(`matched '${matchedPattern}'`);
+  }
+  const label = describeBashCommandContext(context ?? null);
+  if (label) {
+    parts.push(`inside ${label}`);
+  }
+  return parts.length > 0 ? `(${parts.join(", ")})` : "";
 }

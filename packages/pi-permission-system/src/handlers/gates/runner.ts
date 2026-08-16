@@ -1,14 +1,14 @@
 import type { AskEscalator } from "#src/authority/authorizer-selection";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type { DecisionReporter } from "#src/decision-reporter";
-import {
-  formatDenyReason,
-  formatUnavailableReason,
-  formatUserDeniedReason,
-} from "#src/denial-messages";
 import { applyPermissionGate } from "#src/permission-gate";
 import { createPermissionRequestId } from "#src/permission-request-id";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
+import {
+  renderPolicyDenial,
+  renderUnavailableDenial,
+  renderUserDenial,
+} from "#src/presentation/agent-renderer";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { PermissionCheckResult } from "#src/types";
 import type {
@@ -160,16 +160,16 @@ export class GateRunner {
     // 3. Apply the deny/ask/allow gate — always escalate on ask; the selected
     // Authorizer answers (the DenyingAuthorizer by denying with a marker).
 
-    // Construct messages from the centralized formatter.
+    // The agent-facing renders of this ask. The rule reason is the operator's
+    // deny-with-reason text, which lives on the resolved check rather than the
+    // payload: no human render wants it, because a deny never prompts.
+    const { payload } = descriptor;
     const messages = {
-      denyReason: formatDenyReason(descriptor.denialContext),
+      denyReason: renderPolicyDenial(payload, check.reason ?? null),
       unavailableReason: (decision: PermissionPromptDecision) =>
-        formatUnavailableReason(
-          descriptor.denialContext,
-          decision.denialReason,
-        ),
+        renderUnavailableDenial(payload, decision.denialReason ?? null),
       userDeniedReason: (decision: PermissionPromptDecision) =>
-        formatUserDeniedReason(descriptor.denialContext, decision.denialReason),
+        renderUserDenial(payload, decision.denialReason ?? null),
     };
 
     let autoApproved = false;
@@ -180,6 +180,7 @@ export class GateRunner {
       promptForApproval: async () => {
         const decision = await this.prompter.escalate({
           requestId,
+          payload,
           ...descriptor.promptDetails,
           ...(descriptor.sessionApproval
             ? { sessionApproval: descriptor.sessionApproval.toForwardedData() }

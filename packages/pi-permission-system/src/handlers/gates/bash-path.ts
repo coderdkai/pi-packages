@@ -125,18 +125,12 @@ export function describeBashPathGate(
   return {
     surface: "path",
     input: { path: worstToken },
-    denialContext: {
-      kind: "bash_path",
-      command,
-      pathValue: worstToken,
-      agentName: tcc.agentName ?? undefined,
-    },
+    payload,
     sessionApproval: SessionApproval.single("path", pattern),
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
       message: askMessage,
-      payload,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,

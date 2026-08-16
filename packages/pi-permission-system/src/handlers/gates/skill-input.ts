@@ -22,16 +22,11 @@ export function describeSkillInputGate(
     surface: "skill",
     input: { name: skillName },
     preCheck,
-    denialContext: {
-      kind: "skill_input",
-      skillName,
-      agentName: agentName ?? undefined,
-    },
+    payload,
     promptDetails: {
       source: "skill_input",
       agentName,
       message,
-      payload,
       skillName,
       accessIntent: accessFactsFromValue("skill", skillName),
     },

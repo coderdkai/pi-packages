@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { DenialContext } from "#src/denial-messages";
-import { EXTENSION_TAG } from "#src/denial-messages";
 import type { GateBypass } from "#src/handlers/gates/descriptor";
 import type { PermissionDecisionEvent } from "#src/permission-events";
+import { EXTENSION_TAG } from "#src/presentation/agent-renderer";
 import { SessionApproval } from "#src/session-approval";
 import { makeDescriptor, makeGateRunner } from "#test/helpers/gate-fixtures";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
+import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
 
 // ── GateRunner — descriptor path ───────────────────────────────────────────
 
@@ -394,28 +394,67 @@ describe("GateRunner — descriptor path", () => {
     expect(deps.recordSessionApproval).not.toHaveBeenCalled();
   });
 
-  describe("denialContext formatting", () => {
-    it("uses denialContext to format denyReason with extension tag", async () => {
+  describe("agent-facing denial rendering", () => {
+    it("renders the deny reason from the descriptor's payload", async () => {
       const { runner } = makeGateRunner({
         resolveResult: makeCheckResult({ state: "deny", matchedPattern: "*" }),
       });
-      const ctx: DenialContext = {
-        kind: "tool",
-        check: makeCheckResult({ state: "deny", matchedPattern: "*" }),
-        agentName: "test-agent",
-      };
       const result = await runner.run(
-        makeDescriptor({ denialContext: ctx }),
+        makeDescriptor({
+          payload: makePromptPayload({
+            request: {
+              ...makePromptPayload().request,
+              surface: "read",
+              toolName: "read",
+              value: "read",
+              matchedPattern: "*",
+            },
+          }),
+        }),
         "test-agent",
       );
       expect(result.action).toBe("block");
       if (result.action === "block") {
-        expect(result.reason).toContain(EXTENSION_TAG);
-        expect(result.reason).not.toContain("Hard stop");
+        expect(result.reason).toBe(
+          `${EXTENSION_TAG} Denied by policy: 'read' (rule '*').`,
+        );
       }
     });
 
-    it("uses denialContext to format unavailableReason with extension tag", async () => {
+    it("carries an operator's deny-with-reason text on a non-tool surface", async () => {
+      const { runner } = makeGateRunner({
+        resolveResult: makeCheckResult({
+          state: "deny",
+          toolName: "path",
+          matchedPattern: "/etc/*",
+          reason: "system files are off limits",
+        }),
+      });
+      const result = await runner.run(
+        makeDescriptor({
+          surface: "path",
+          payload: makePromptPayload({
+            kind: "path",
+            request: {
+              ...makePromptPayload().request,
+              surface: "path",
+              toolName: "read",
+              value: "/etc/passwd",
+              matchedPattern: "/etc/*",
+            },
+          }),
+        }),
+        null,
+      );
+      expect(result.action).toBe("block");
+      if (result.action === "block") {
+        expect(result.reason).toBe(
+          `${EXTENSION_TAG} Denied by policy: 'path' for tool 'read' for path '/etc/passwd' (rule '/etc/*'). Reason: system files are off limits.`,
+        );
+      }
+    });
+
+    it("renders the unavailable reason with the extension tag", async () => {
       const { runner } = makeGateRunner({
         resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
         escalate: vi.fn().mockResolvedValue({
@@ -424,14 +463,7 @@ describe("GateRunner — descriptor path", () => {
           confirmationUnavailable: true,
         }),
       });
-      const ctx: DenialContext = {
-        kind: "tool",
-        check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      };
-      const result = await runner.run(
-        makeDescriptor({ denialContext: ctx }),
-        null,
-      );
+      const result = await runner.run(makeDescriptor(), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
@@ -449,14 +481,7 @@ describe("GateRunner — descriptor path", () => {
           denialReason: "Session 'parent-1' is not serving forwarded requests",
         }),
       });
-      const ctx: DenialContext = {
-        kind: "tool",
-        check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      };
-      const result = await runner.run(
-        makeDescriptor({ denialContext: ctx }),
-        null,
-      );
+      const result = await runner.run(makeDescriptor(), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(
@@ -465,7 +490,7 @@ describe("GateRunner — descriptor path", () => {
       }
     });
 
-    it("uses denialContext to format userDeniedReason with extension tag", async () => {
+    it("renders the user's denial reason with the extension tag", async () => {
       const { runner } = makeGateRunner({
         resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
         escalate: vi.fn().mockResolvedValue({
@@ -474,18 +499,44 @@ describe("GateRunner — descriptor path", () => {
           denialReason: "too risky",
         }),
       });
-      const ctx: DenialContext = {
-        kind: "tool",
-        check: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      };
-      const result = await runner.run(
-        makeDescriptor({ denialContext: ctx }),
-        null,
-      );
+      const result = await runner.run(makeDescriptor(), null);
       expect(result.action).toBe("block");
       if (result.action === "block") {
         expect(result.reason).toContain(EXTENSION_TAG);
         expect(result.reason).toContain("too risky");
+      }
+    });
+
+    it("never echoes the command into a bash denial", async () => {
+      const { runner } = makeGateRunner({
+        resolveResult: makeCheckResult({
+          state: "deny",
+          toolName: "bash",
+          matchedPattern: "rm *",
+        }),
+      });
+      const command = `cat <<'EOF'\n${"x".repeat(5000)}\nEOF`;
+      const result = await runner.run(
+        makeDescriptor({
+          surface: "bash",
+          payload: makePromptPayload({
+            kind: "bash",
+            request: {
+              ...makePromptPayload().request,
+              surface: "bash",
+              toolName: "bash",
+              value: command,
+              matchedPattern: "rm *",
+            },
+          }),
+        }),
+        null,
+      );
+      expect(result.action).toBe("block");
+      if (result.action === "block") {
+        expect(result.reason).toBe(
+          `${EXTENSION_TAG} Denied by policy: 'bash' (rule 'rm *').`,
+        );
       }
     });
   });

@@ -17,12 +17,12 @@ vi.mock("node:fs", () => ({
   default: { realpathSync: (p: string) => p },
 }));
 
-import type { ExternalPathDisclosure } from "#src/denial-messages";
-import { formatDenyReason } from "#src/denial-messages";
 import { extractExternalPathsFromBashCommand as extractWithNormalizer } from "#src/handlers/gates/bash-path-extractor";
 import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
+import { renderPolicyDenial } from "#src/presentation/agent-renderer";
 import { renderLegacyMessage } from "#src/presentation/legacy-message";
+import type { ExternalPathDisclosure } from "#src/presentation/path-ask-payload";
 import { buildBashExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 
 afterEach(() => {
@@ -1098,18 +1098,21 @@ describe("Git Bash POSIX absolute paths (win32 semantics)", () => {
   });
 });
 
-describe("bash external-directory denial messages (centralized)", () => {
-  test("denial message includes command, paths, and extension tag", () => {
-    const result = formatDenyReason({
-      kind: "bash_external_directory",
-      command: "cat /etc/hosts",
-      externalPaths: [{ path: "/etc/hosts" }],
-      cwd: "/projects/my-app",
-    });
-    expect(result).toContain("cat /etc/hosts");
-    expect(result).toContain("/etc/hosts");
-    expect(result).toContain("/projects/my-app");
-    expect(result).toContain("[pi-permission-system]");
-    expect(result).not.toContain("Hard stop");
+describe("the bash external-directory denial the agent sees", () => {
+  test("names the escaping paths and the boundary, never the command", () => {
+    const result = renderPolicyDenial(
+      buildBashExternalDirectoryAskPayload({
+        command: "cat /etc/hosts",
+        externalPaths: [{ path: "/etc/hosts" }],
+        cwd: "/projects/my-app",
+        agentName: null,
+        toolName: "bash",
+        matchedPattern: "*",
+      }),
+      null,
+    );
+    expect(result).toBe(
+      "[pi-permission-system] Denied by policy: 'external_directory' for tool 'bash' for path '/etc/hosts' (rule '*'): outside working directory '/projects/my-app'.",
+    );
   });
 });

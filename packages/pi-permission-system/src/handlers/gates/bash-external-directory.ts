@@ -92,19 +92,12 @@ export function describeBashExternalDirectoryGate(
   return {
     surface: "external_directory",
     input: {},
-    denialContext: {
-      kind: "bash_external_directory",
-      command,
-      externalPaths: disclosures,
-      cwd: tcc.cwd,
-      agentName: tcc.agentName ?? undefined,
-    },
+    payload,
     sessionApproval: SessionApproval.multiple("external_directory", patterns),
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
       message: bashExtMessage,
-      payload,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,

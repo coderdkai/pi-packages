@@ -154,11 +154,9 @@ describe("describeExternalDirectoryGate", () => {
       ["/test/agent"],
     ) as GateDescriptor;
 
-    expect(result.promptDetails.payload.kind).toBe("external_directory");
-    expect(result.promptDetails.payload.request.value).toBe(
-      "/outside/project/file.ts",
-    );
-    expect(result.promptDetails.payload.evidence).toContainEqual({
+    expect(result.payload.kind).toBe("external_directory");
+    expect(result.payload.request.value).toBe("/outside/project/file.ts");
+    expect(result.payload.evidence).toContainEqual({
       label: "working directory",
       text: "/test/project",
       detail: null,
@@ -209,16 +207,18 @@ describe("describeExternalDirectoryGate", () => {
     expect(result.sessionApproval?.representativePattern).toBeDefined();
   });
 
-  it("denialContext contains the external path and cwd", () => {
+  it("payload contains the external path and the boundary it escaped", () => {
     const result = gateUnderTest(
       makeTcc({ input: { path: "/outside/project/file.ts" } }),
       ["/test/agent"],
     ) as GateDescriptor;
-    expect(result.denialContext).toMatchObject({
-      kind: "external_directory",
-      toolName: "read",
-      pathValue: "/outside/project/file.ts",
-      cwd: "/test/project",
+    expect(result.payload.kind).toBe("external_directory");
+    expect(result.payload.request.toolName).toBe("read");
+    expect(result.payload.request.value).toBe("/outside/project/file.ts");
+    expect(result.payload.evidence).toContainEqual({
+      label: "working directory",
+      text: "/test/project",
+      detail: null,
     });
   });
 

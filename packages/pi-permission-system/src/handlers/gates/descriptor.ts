@@ -1,6 +1,6 @@
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
-import type { DenialContext } from "#src/denial-messages";
 import type { PermissionDecisionEvent } from "#src/permission-events";
+import type { PromptPayload } from "#src/presentation/prompt-payload";
 import type { SessionApproval } from "#src/session-approval";
 import type { PermissionCheckResult, PermissionState } from "#src/types";
 
@@ -18,16 +18,27 @@ export interface GateDescriptor {
   surface: string;
   /** Input passed to checkPermission. */
   input: unknown;
-  /** Structured denial context — the runner formats messages from this. */
-  denialContext: DenialContext;
+  /**
+   * The complete structured description of this ask (ADR 0011 §2).
+   *
+   * The descriptor's one presentation fact: every render over it — the dialog,
+   * the agent-facing denial text, the review log — reads this and nothing
+   * else, so a gate states its facts once.
+   */
+  payload: PromptPayload;
   /**
    * Session-approval suggestion for the "for this session" option.
    * Wraps either a single pattern or multiple patterns behind a unified
    * interface — the runner never needs to know which case applies.
    */
   sessionApproval?: SessionApproval;
-  /** Details passed to the interactive permission prompt (requestId is added by the runner). */
-  promptDetails: Omit<PromptPermissionDetails, "requestId">;
+  /**
+   * Details passed to the interactive permission prompt.
+   *
+   * The runner stamps both `requestId` (which it mints) and `payload` (which
+   * the descriptor owns), so neither is a gate's to supply twice.
+   */
+  promptDetails: Omit<PromptPermissionDetails, "requestId" | "payload">;
   /** Extra context fields written to the review log alongside gate outcomes. */
   logContext: Record<string, unknown>;
   /** Surface and value for the decision event (may differ from the check surface). */

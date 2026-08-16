@@ -49,17 +49,11 @@ export function describeSkillReadGate(
   return {
     surface: "skill",
     input: { name: matchedSkill.name },
-    denialContext: {
-      kind: "skill_read",
-      skillName: matchedSkill.name,
-      readPath: path,
-      agentName: tcc.agentName ?? undefined,
-    },
+    payload,
     promptDetails: {
       source: "skill_read",
       agentName: tcc.agentName,
       message: skillReadMessage,
-      payload,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       skillName: matchedSkill.name,

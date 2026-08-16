@@ -98,12 +98,7 @@ export function describeToolGate(
   return {
     surface: gateSurface,
     input: tcc.input,
-    denialContext: {
-      kind: "tool",
-      check,
-      agentName: tcc.agentName ?? undefined,
-      input: tcc.input,
-    },
+    payload,
     sessionApproval: SessionApproval.single(
       suggestion.surface,
       suggestion.pattern,
@@ -112,7 +107,6 @@ export function describeToolGate(
       source: "tool_call",
       agentName: tcc.agentName,
       message: askMessage,
-      payload,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       sessionLabel: suggestion.label,

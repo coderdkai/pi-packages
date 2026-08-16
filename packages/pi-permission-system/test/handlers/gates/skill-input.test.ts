@@ -42,30 +42,25 @@ describe("describeSkillInputGate", () => {
     expect(descriptor.preCheck).toBe(check);
   });
 
-  it("sets denialContext with kind skill_input and skill name", () => {
+  it("makes the skill the payload's decision-relevant value", () => {
     const descriptor = describeSkillInputGate(
       "librarian",
       null,
       makeSkillCheck("allow"),
     );
-    expect(descriptor.denialContext).toEqual({
-      kind: "skill_input",
-      skillName: "librarian",
-      agentName: undefined,
-    });
+    expect(descriptor.payload.kind).toBe("skill");
+    expect(descriptor.payload.request.surface).toBe("skill");
+    expect(descriptor.payload.request.value).toBe("librarian");
+    expect(descriptor.payload.request.requester.agentName).toBeNull();
   });
 
-  it("includes agentName in denialContext when provided", () => {
+  it("names the requesting agent on the payload when provided", () => {
     const descriptor = describeSkillInputGate(
       "librarian",
       "code-agent",
       makeSkillCheck("allow"),
     );
-    expect(descriptor.denialContext).toEqual({
-      kind: "skill_input",
-      skillName: "librarian",
-      agentName: "code-agent",
-    });
+    expect(descriptor.payload.request.requester.agentName).toBe("code-agent");
   });
 
   it("sets promptDetails source to 'skill_input' with skill name and agent", () => {
@@ -88,8 +83,8 @@ describe("describeSkillInputGate", () => {
       makeSkillCheck("ask"),
     );
 
-    expect(descriptor.promptDetails.payload.kind).toBe("skill");
-    expect(descriptor.promptDetails.payload.request.value).toBe("librarian");
+    expect(descriptor.payload.kind).toBe("skill");
+    expect(descriptor.payload.request.value).toBe("librarian");
   });
 
   it("includes a non-empty message in promptDetails", () => {

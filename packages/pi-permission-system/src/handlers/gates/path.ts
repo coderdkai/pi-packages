@@ -59,18 +59,12 @@ export function describePathGate(
   const descriptor: GateDescriptor = {
     surface: "path",
     input: { path: filePath },
-    denialContext: {
-      kind: "path",
-      toolName: tcc.toolName,
-      pathValue: filePath,
-      agentName: tcc.agentName ?? undefined,
-    },
+    payload,
     sessionApproval: SessionApproval.single("path", pattern),
     promptDetails: {
       source: "tool_call",
       agentName: tcc.agentName,
       message: renderLegacyMessage(payload),
-      payload,
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       path: filePath,

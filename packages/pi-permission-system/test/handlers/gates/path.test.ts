@@ -168,12 +168,10 @@ describe("describePathGate", () => {
       resolver,
       normalizer,
     ) as GateDescriptor;
-    expect(result.denialContext).toEqual({
-      kind: "path",
-      toolName: "read",
-      pathValue: ".env",
-      agentName: undefined,
-    });
+    expect(result.payload.kind).toBe("path");
+    expect(result.payload.request.toolName).toBe("read");
+    expect(result.payload.request.value).toBe(".env");
+    expect(result.payload.request.requester.agentName).toBeNull();
   });
 
   it("carries the child-fixed access facts on promptDetails (path surface)", () => {
@@ -206,9 +204,9 @@ describe("describePathGate", () => {
       normalizer,
     ) as GateDescriptor;
 
-    expect(result.promptDetails.payload.kind).toBe("path");
-    expect(result.promptDetails.payload.request.value).toBe(".env");
-    expect(result.promptDetails.payload.request.matchedPattern).toBe("*.env");
+    expect(result.payload.kind).toBe("path");
+    expect(result.payload.request.value).toBe(".env");
+    expect(result.payload.request.matchedPattern).toBe("*.env");
   });
 
   it("descriptor decision uses surface 'path' and the file path as value", () => {
@@ -273,12 +271,10 @@ describe("describePathGate — home-relative paths", () => {
 
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
-    // Raw path preserved in denial context for display.
-    expect(result.denialContext).toMatchObject({
-      kind: "path",
-      toolName: "read",
-      pathValue: "~/.ssh/config",
-    });
+    // Raw path preserved on the payload for display.
+    expect(result.payload.kind).toBe("path");
+    expect(result.payload.request.toolName).toBe("read");
+    expect(result.payload.request.value).toBe("~/.ssh/config");
     expect(resolver.resolve).toHaveBeenCalledWith({
       kind: "access-path",
       surface: "path",
@@ -302,10 +298,8 @@ describe("describePathGate — home-relative paths", () => {
 
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
-    expect(result.denialContext).toMatchObject({
-      kind: "path",
-      pathValue: "$HOME/.ssh/config",
-    });
+    expect(result.payload.kind).toBe("path");
+    expect(result.payload.request.value).toBe("$HOME/.ssh/config");
   });
 
   it("returns null when home-relative path resolves to allow", () => {

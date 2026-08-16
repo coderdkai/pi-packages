@@ -18,7 +18,10 @@ import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
-import { makeGatePromptDetails } from "#test/helpers/prompt-details-fixtures";
+import {
+  makeGatePromptDetails,
+  makePromptPayload,
+} from "#test/helpers/prompt-details-fixtures";
 
 /**
  * Permission resolver mock with an optional default check result.
@@ -37,8 +40,8 @@ export function makeResolver(defaultCheck?: PermissionCheckResult) {
 /**
  * Gate descriptor factory with runner-test defaults.
  *
- * Uses deny as the default `denialContext` check result so tests that
- * verify block paths don't need to override the surface check.
+ * Carries the payload every render over this descriptor reads, so a test that
+ * verifies a block path gets rendered denial text without overriding it.
  */
 export function makeDescriptor(
   overrides: Partial<GateDescriptor> = {},
@@ -46,10 +49,12 @@ export function makeDescriptor(
   return {
     surface: "read",
     input: {},
-    denialContext: {
-      kind: "tool",
-      check: makeCheckResult({ state: "deny", matchedPattern: "*" }),
-    },
+    payload: makePromptPayload({
+      request: {
+        ...makePromptPayload().request,
+        matchedPattern: "*",
+      },
+    }),
     promptDetails: makeGatePromptDetails({
       message: "Allow tool 'read'?",
       toolCallId: "tc-1",

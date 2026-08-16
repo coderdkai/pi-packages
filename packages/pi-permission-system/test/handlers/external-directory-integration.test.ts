@@ -11,7 +11,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { EXTENSION_TAG } from "#src/denial-messages";
+import { EXTENSION_TAG } from "#src/presentation/agent-renderer";
 import { renderLegacyMessage } from "#src/presentation/legacy-message";
 import { buildExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import type { PermissionCheckResult } from "#src/types";
@@ -374,8 +374,10 @@ describe("external_directory policy state — ask", () => {
       makeCtx({ hasUI: false }),
     );
     expect(result).toMatchObject({ action: "block" });
-    expect((result as { reason?: string }).reason).toContain(
-      "outside the working directory",
+    // The gate surface names the boundary; an unavailable verdict states only
+    // that approval was unreachable, since no retry shape changes that.
+    expect((result as { reason?: string }).reason).toBe(
+      `${EXTENSION_TAG} This 'external_directory' call for tool 'read' for path '${EXTERNAL_PATH}' requires approval, but no interactive UI is available.`,
     );
   });
 

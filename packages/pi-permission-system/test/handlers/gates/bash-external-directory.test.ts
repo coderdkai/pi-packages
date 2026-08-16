@@ -14,12 +14,22 @@ import type { ToolCallContext } from "#src/handlers/gates/types";
 import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
+import {
+  allEvidence,
+  findEvidence,
+  type PromptPayload,
+} from "#src/presentation/prompt-payload";
 import type { PermissionCheckResult } from "#src/types";
 import { getNonEmptyString, toRecord } from "#src/value-guards";
 
 import { makeResolver } from "#test/helpers/gate-fixtures";
 
 // ── helpers ────────────────────────────────────────────────────────────────
+
+/** Every escaping path the payload lists, in payload order. */
+function externalPaths(payload: PromptPayload): string[] {
+  return allEvidence(payload, "external path").map((entry) => entry.text);
+}
 
 function makeTcc(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
   return {
@@ -102,12 +112,9 @@ describe("describeBashExternalDirectoryGate", () => {
         resolver,
       );
       expect(isGateDescriptor(result)).toBe(true);
-      expect((result as GateDescriptor).denialContext).toMatchObject({
-        kind: "bash_external_directory",
-        externalPaths: [
-          { path: join(homedir(), "pi-permission-system-repro-new") },
-        ],
-      });
+      expect(externalPaths((result as GateDescriptor).payload)).toEqual([
+        join(homedir(), "pi-permission-system-repro-new"),
+      ]);
     });
 
     // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional literal — a braced shell expansion, not a template string
@@ -118,10 +125,9 @@ describe("describeBashExternalDirectoryGate", () => {
         makeResolver(makeCheckResult("ask")),
       );
       expect(isGateDescriptor(result)).toBe(true);
-      expect((result as GateDescriptor).denialContext).toMatchObject({
-        kind: "bash_external_directory",
-        externalPaths: [{ path: join(homedir(), "somewhere") }],
-      });
+      expect(externalPaths((result as GateDescriptor).payload)).toEqual([
+        join(homedir(), "somewhere"),
+      ]);
     });
 
     it("does not prompt for a variable it cannot resolve", async () => {
@@ -171,12 +177,10 @@ describe("describeBashExternalDirectoryGate", () => {
       resolver,
     )) as GateDescriptor;
 
-    expect(result.promptDetails.payload.kind).toBe("bash_external_directory");
+    expect(result.payload.kind).toBe("bash_external_directory");
     // The command is the decision value; the paths it reaches are evidence.
-    expect(result.promptDetails.payload.request.value).toBe(
-      "cat /outside/a.ts",
-    );
-    expect(result.promptDetails.payload.evidence).toContainEqual({
+    expect(result.payload.request.value).toBe("cat /outside/a.ts");
+    expect(result.payload.evidence).toContainEqual({
       label: "external path",
       text: "/outside/a.ts",
       detail: null,
@@ -259,17 +263,17 @@ describe("describeBashExternalDirectoryGate", () => {
     expect(desc.decision.surface).toBe("external_directory");
   });
 
-  it("denialContext contains the command and external paths", async () => {
+  it("payload carries the command and the boundary it escaped", async () => {
     const result = await describeGate(
       makeTcc({ input: { command: "cat /outside/file.ts" } }),
       makeResolver(makeCheckResult("ask")),
     );
-    const desc = result as GateDescriptor;
-    expect(desc.denialContext).toMatchObject({
-      kind: "bash_external_directory",
-      command: "cat /outside/file.ts",
-      cwd: "/test/project",
-    });
+    const { payload } = result as GateDescriptor;
+    expect(payload.kind).toBe("bash_external_directory");
+    expect(payload.request.value).toBe("cat /outside/file.ts");
+    expect(findEvidence(payload, "working directory")?.text).toBe(
+      "/test/project",
+    );
   });
 
   it("promptDetails includes command and tool_call source", async () => {
@@ -381,10 +385,6 @@ describe("describeBashExternalDirectoryGate — Git Bash semantics (win32)", () 
       makeResolver(makeCheckResult("ask")),
     );
     expect(isGateDescriptor(result)).toBe(true);
-    const desc = result as GateDescriptor;
-    expect(desc.denialContext).toMatchObject({
-      kind: "bash_external_directory",
-      externalPaths: [{ path: "/tmp" }],
-    });
+    expect(externalPaths((result as GateDescriptor).payload)).toEqual(["/tmp"]);
   });
 });

@@ -123,15 +123,11 @@ describe("describeBashPathGate", () => {
       makeTcc(),
       makeResolver(makeCheckResult({ state: "deny", matchedPattern: "*.env" })),
     )) as GateDescriptor;
-    expect(result.denialContext).toMatchObject({
-      kind: "bash_path",
-      command: "cat .env",
-      pathValue: ".env",
-    });
+    expect(result.promptDetails.command).toBe("cat .env");
     expect(result.promptDetails.message).toContain(".env");
     // The bash path gate asks about the offending token, not the command.
-    expect(result.promptDetails.payload.kind).toBe("path");
-    expect(result.promptDetails.payload.request.value).toBe(".env");
+    expect(result.payload.kind).toBe("path");
+    expect(result.payload.request.value).toBe(".env");
   });
 
   it("descriptor decision uses surface 'path'", async () => {
@@ -277,8 +273,8 @@ describe("describeBashPathGate", () => {
       }),
       agentName: undefined,
     });
-    // The raw token drives the prompt, denial context, and session approval.
-    expect(result.denialContext).toMatchObject({ pathValue: "src/file.txt" });
+    // The raw token drives the prompt payload, the decision, and the approval.
+    expect(result.payload.request.value).toBe("src/file.txt");
     expect(result.decision.value).toBe("src/file.txt");
   });
 
@@ -348,11 +344,8 @@ describe("describeBashPathGate — home-relative paths", () => {
 
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
-    expect(result.denialContext).toMatchObject({
-      kind: "bash_path",
-      command: "cat ~/.ssh/config",
-      pathValue: "~/.ssh/config",
-    });
+    expect(result.promptDetails.command).toBe("cat ~/.ssh/config");
+    expect(result.payload.request.value).toBe("~/.ssh/config");
   });
 
   it("extracts $HOME/... token and builds descriptor on deny", async () => {
@@ -372,16 +365,13 @@ describe("describeBashPathGate — home-relative paths", () => {
 
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
-    expect(result.denialContext).toMatchObject({
-      kind: "bash_path",
-      // A plain `$HOME` reference is resolved at token collection (#694), so
-      // the displayed token is the path the shell will actually touch — and it
-      // now agrees with the session-approval pattern, which has always been
-      // derived from the expanded `AccessPath.value()`. A `~` token keeps its
-      // raw spelling: it is shape-classified directly and never needed
-      // collection-time expansion.
-      pathValue: "/mock/home/.ssh/config",
-    });
+    // A plain `$HOME` reference is resolved at token collection (#694), so the
+    // displayed token is the path the shell will actually touch — and it now
+    // agrees with the session-approval pattern, which has always been derived
+    // from the expanded `AccessPath.value()`. A `~` token keeps its raw
+    // spelling: it is shape-classified directly and never needed
+    // collection-time expansion.
+    expect(result.payload.request.value).toBe("/mock/home/.ssh/config");
   });
 });
 
@@ -417,10 +407,7 @@ describe("describeBashPathGate — win32 backslash-relative paths", () => {
 
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
-    expect(result.denialContext).toMatchObject({
-      kind: "bash_path",
-      pathValue: "dir\\file",
-    });
+    expect(result.payload.request.value).toBe("dir\\file");
   });
 
   it("does not gate a backslash-relative token on posix (stays bare)", async () => {

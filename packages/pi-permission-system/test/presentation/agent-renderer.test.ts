@@ -369,6 +369,26 @@ describe("renderUnavailableDenial", () => {
       "[pi-permission-system] This 'path' call for tool 'read' for path '/etc/passwd' (rule '/etc/*') requires approval, but no interactive UI is available.",
     );
   });
+
+  it("omits the escaped boundary, which no retry shape would change", () => {
+    expect(
+      renderUnavailableDenial(
+        payload(
+          "external_directory",
+          {
+            surface: "external_directory",
+            toolName: "write",
+            value: "/etc/hosts",
+            matchedPattern: "*",
+          },
+          [{ label: "working directory", text: "/repo", detail: null }],
+        ),
+        null,
+      ),
+    ).toBe(
+      "[pi-permission-system] This 'external_directory' call for tool 'write' for path '/etc/hosts' (rule '*') requires approval, but no interactive UI is available.",
+    );
+  });
 });
 
 describe("the flagged-element field cap", () => {
