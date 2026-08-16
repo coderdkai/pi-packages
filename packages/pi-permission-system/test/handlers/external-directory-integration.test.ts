@@ -60,8 +60,8 @@ describe("external_directory helper regression guard", () => {
   });
 
   // formatExternalDirectoryDenyReason, formatExternalDirectoryUserDeniedReason,
-  // and formatExternalDirectoryHardStopHint have moved to denial-messages.ts.
-  // Their behavior is tested in denial-messages.test.ts.
+  // and formatExternalDirectoryHardStopHint are now renders over the prompt
+  // payload. Their behavior is tested in presentation/agent-renderer.test.ts.
 });
 
 // ── Path scope: gate applicability ────────────────────────────────────────

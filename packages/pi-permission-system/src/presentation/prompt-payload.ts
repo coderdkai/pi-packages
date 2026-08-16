@@ -22,10 +22,10 @@ export interface PromptPayload {
  *
  * Present because the ask shapes are not separable by surface alone: a tool
  * external-directory ask and a bash one share the `external_directory` surface,
- * and the `path` gate and the per-tool gate differ only in wording. It mirrors
- * `DenialContext`'s discriminated union, the shape ADR 0011 §7 names as already
- * correct, and gives every renderer an exhaustive switch rather than a set of
- * string comparisons a new variant sails past.
+ * and the `path` gate and the per-tool gate differ only in wording. It gives
+ * every renderer an exhaustive switch rather than a set of string comparisons a
+ * new variant sails past — which is what let the parallel denial-context union
+ * ADR 0011 §7 described dissolve into this one (#746).
  */
 export type PromptPayloadKind =
   | "bash"

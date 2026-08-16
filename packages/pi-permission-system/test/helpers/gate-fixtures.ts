@@ -238,7 +238,6 @@ export function makeGateInputs(
       vi.fn<() => ToolPreviewFormatterOptions>(() => ({
         toolInputPreviewMaxLength: 500,
         toolTextSummaryMaxLength: 100,
-        toolInputLogPreviewMaxLength: 200,
       })),
     getPathNormalizer:
       overrides.getPathNormalizer ??

@@ -13,7 +13,7 @@ import type { PermissionCheckResult } from "#src/types";
  * Build a `PermissionCheckResult` for a presentation unit test.
  *
  * Defaults to the package's least-privilege `ask`. The presentation modules
- * (`denial-messages`, `permission-prompts`, `tool-preview-formatter`) never
+ * (the payload builders, `permission-prompts`, `tool-preview-formatter`) never
  * read `state`, so a file whose subject is denials or allows wraps this with
  * its own default rather than the caller repeating the whole literal.
  */

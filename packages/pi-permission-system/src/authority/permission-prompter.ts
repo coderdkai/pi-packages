@@ -32,8 +32,9 @@ export interface PromptPermissionDetails {
    * The complete structured description of this ask (ADR 0011 §2).
    *
    * Required: every ask carries one, and the type is what guarantees it rather
-   * than a convention each gate has to remember. `message` is a render over it
-   * for the duration of the transition, so the two cannot disagree.
+   * than a convention each gate has to remember. Every consumer — the dialog,
+   * the wire, the broadcast, the review log, the agent-facing denial text — is
+   * a render over it, so no two of them can disagree.
    */
   payload: PromptPayload;
   toolCallId?: string;

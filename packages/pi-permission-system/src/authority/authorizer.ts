@@ -49,9 +49,9 @@ export interface Authorizer {
  * ADR 0007's terminal-cannot-defer invariant.
  *
  * One method, one responsibility. `DenyingAuthorizer` ignores `details`;
- * `LocalUserAuthorizer` reads `message`/`sessionLabel` and derives the UI
- * event from it; `ParentAuthorizer` reads `message` and derives the
- * forwarded display from it.
+ * `LocalUserAuthorizer` renders `payload` for the human and derives the UI
+ * event from the request facts; `ParentAuthorizer` ships `payload` over the
+ * wire so the serving node renders it under its own budget.
  */
 export interface TerminalAuthorizer {
   authorize(
