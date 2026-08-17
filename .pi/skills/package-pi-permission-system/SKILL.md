@@ -59,13 +59,24 @@ permission:
 The dependency direction is inverted — pi-subagents has zero knowledge of pi-permission-system.
 The `session-created` handler MUST stay synchronous: the core emits it on the same call stack right before `bindExtensions()`, and the event bus dispatches listeners synchronously, so a synchronous handler lands the registry entry before binding proceeds.
 
-A **second** process-global registry, `ServingSessionRegistry` (`src/authority/serving-registry.ts`, accessor `getServingSessionRegistry()`), records which sessions are draining a forwarded-permission inbox.
-`ForwardingManager` marks the session id it polls and clears it on stop; `ParentAuthorizer` reads it each poll tick and abandons a request whose target has looked unserved for `PERMISSION_FORWARDING_SERVING_GRACE_MS`, instead of waiting out the full timeout and reporting the block as a user denial (Refs #719).
-The judgement applies **only** to a target resolved with `source: "registry"` — `resolvePermissionForwardingTarget` returns that provenance precisely so an out-of-process child (`source: "env"`), which shares no `globalThis` with its parent, is never fast-failed on an absent mark (out-of-process liveness is [#721]).
-A stale mark left by a session that died without `session_shutdown` suppresses the fast-fail and falls back to the timeout — the safe direction.
-Every `ParentAuthorizer` abandonment path sets `confirmationUnavailable: true` with a path-naming `denialReason`; `renderUnavailableDenial` renders that reason, so `PermissionGateParams.unavailableReason` is a function of the decision (as `userDeniedReason` already was), not a precomputed string.
+A serving session announces that it is draining a forwarded-permission inbox on **two** channels, and `ForwardingManager` publishes to both through one `ServingAnnouncer` (`composeServingAnnouncers`), so adding or removing a channel never reaches the poll loop.
+`ParentAuthorizer` asks one collaborator — `ForwardingLivenessJudge` (`src/authority/forwarding-liveness.ts`), a `TargetServingLookup` — whether its **target** is being drained, and abandons a request whose target has looked unserved for `PERMISSION_FORWARDING_SERVING_GRACE_MS` instead of waiting out the full timeout and reporting the block as a user denial (Refs #719, #721).
+The judge routes on `PermissionForwardingTarget.source`, which `resolvePermissionForwardingTarget` already produces, so "which channel can answer" is decided where the target is found and never re-derived at the poll loop:
 
-[#721]: https://github.com/gotgenes/pi-packages/issues/721
+- `source: "registry"` (an in-process child) → the process-global `ServingSessionRegistry` (`src/authority/serving-registry.ts`, accessor `getServingSessionRegistry()`).
+  A stale mark left by a session that died without `session_shutdown` suppresses the fast-fail and falls back to the timeout — the safe direction.
+- `source: "env"` (a child in its own process, sharing no `globalThis`) → the filesystem heartbeat at `<forwardingDir>/serving/<encoded-session-id>.json`, holding the served session id, the serving pid, and its refresh time.
+  `absent` / `dead_pid` / `stale` all count as unserved; only `alive` keeps the child waiting.
+  Absence is deliberately **not** the safe direction here — a cleanly exited parent leaves nothing behind, which is the reported case (#735 scenario 1) — so a parent session running a pre-heartbeat version is fast-failed until it restarts.
+  That upgrade-ordering requirement is documented in `docs/subagent-integration.md`; do not "fix" it by treating absence as unknown, which would restore the ten-minute stall.
+- `source: "self"` → no channel; the target is never judged.
+
+The heartbeat records live **beside** `sessions/`, never inside it: a record under `sessions/<id>/` would make that session root permanently non-empty and entangle liveness with the request/response cleanup whose removal ordering produced the #398 ENOENT write loop.
+For the same reason the `serving/` directory is created on demand and never removed.
+`ForwardingManager` re-announces on every poll tick, and that refresh runs **ahead of the `processing` guard** — a parent holding `processInbox` open for a deliberating human is serving throughout, and refreshing behind the guard would let its record decay exactly when it is most demonstrably alive, fast-failing every other child.
+A regression test pins it ("re-announces while a drain is still in flight").
+Every `ParentAuthorizer` abandonment path sets `confirmationUnavailable: true` with a path-naming `denialReason`; `renderUnavailableDenial` renders that reason, so `PermissionGateParams.unavailableReason` is a function of the decision (as `userDeniedReason` already was), not a precomputed string.
+The `forwarded_permission.no_serving_session` entry records `servingChannel` and `servingState` beside the ids observed, since "exited", "killed", and "polling a different session id" are different diagnoses the shared denial string does not distinguish.
 
 **The `SubagentSessionRegistry` is process-global.**
 Access it via `getSubagentSessionRegistry()` (`src/authority/subagent-registry.ts`), backed by `globalThis` + `Symbol.for("@gotgenes/pi-permission-system:subagent-registry")`.
@@ -218,9 +229,11 @@ This resolver-internal boundary is a deliberate, formalized seam, not transition
   These casts bypass `tsc`, so a missing field fails only at the full-suite run, not `check` or the cycle-scoped file (#644: `permission-events.test.ts` surfaced `ctx.isProjectTrusted is not a function` at runtime).
 - To test the file-based permission-forwarding round-trip (a subagent's `ask` reaching the parent), do not `await` the child's `pi.fire("tool_call", …)` directly — `ParentAuthorizer.authorize` (`src/authority/approval-escalator.ts`) polls for a response until `getTimeoutMs()` elapses (the `forwardingTimeoutMs` config default is ten minutes).
   Instead: fire without awaiting, poll the parent's `requests/` dir (`createPermissionForwardingLocation(forwardingDir, parentSessionId)`) for the child's request file, write an approval JSON to `responses/<id>.json`, then await the fire.
-  Such a test must also `getServingSessionRegistry().markServing(parentSessionId)` — it answers by hand instead of running the parent's poll timer, and without that mark the child correctly abandons the request as unserved after ~2 s.
-  See the `subagent registry sharing` tests in `test/composition-root.test.ts`.
-  A `ParentAuthorizer` unit test builds its deps with `makeParentAuthorizerDeps` (`test/helpers/forwarding-fixtures.ts`), whose `serving` default reports every session as serving and whose `getTimeoutMs` override makes the timeout path testable without waiting it out.
+  Such a test must also announce that the parent is serving — it answers by hand instead of running the parent's poll timer, and without the announcement the child correctly abandons the request as unserved after ~2 s.
+  Which announcement depends on how the test's child resolves its target: `getServingSessionRegistry().markServing(parentSessionId)` for an in-process child, and `publishServingHeartbeat(forwardingDir, parentSessionId)` (`test/helpers/forwarding-fixtures.ts`) for one resolving from `PI_SUBAGENT_PARENT_SESSION`.
+  See the `subagent registry sharing` and `out-of-process forwarding liveness` tests in `test/composition-root.test.ts`.
+  A `ParentAuthorizer` unit test builds its deps with `makeParentAuthorizerDeps` (`test/helpers/forwarding-fixtures.ts`), whose `serving` default reports every target as serving and whose `getTimeoutMs` override makes the timeout path testable without waiting it out.
+  A test that targets a liveness path passes `makeLivenessJudge({ forwardingDir, registry?, isProcessAlive? })` instead — the real judge over real records, so a double cannot drift from the routing under test.
 
 ## Debugging
 

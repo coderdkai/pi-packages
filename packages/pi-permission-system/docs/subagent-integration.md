@@ -35,7 +35,20 @@ For in-process child sessions, detection and forwarding use the event-driven reg
 ### When nobody answers
 
 A forwarded request is only useful if some session is draining the inbox it was written into.
-The polling session publishes the session id it polls, and an in-process child checks that its target is published before committing to a long wait.
+The polling session publishes the session id it polls, and a child checks that its target is published before committing to a long wait.
+
+The announcement goes out on two channels, because a child cannot always reach the same one.
+A child running inside its parent's process reads a process-global registry.
+A child running as a separate `pi` process (the `PI_SUBAGENT_PARENT_SESSION` path) shares no memory with its parent, so it reads a heartbeat record the serving session refreshes under `<agent dir>/sessions/permission-forwarding/serving/`, holding the served session id, the serving process id, and the time it was last refreshed.
+
+For an out-of-process target, four things count as "not draining":
+
+| What the child finds                              | What it means                                                                |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| No record                                         | The parent exited, never served, or runs a version that does not publish one |
+| A record naming a process that is gone            | The parent was killed rather than shut down                                  |
+| A record nobody has refreshed for several seconds | The parent's process survives but has stopped polling                        |
+| A record for a different session id               | The child is forwarding somewhere nobody is listening                        |
 
 If the target is not draining its inbox, the child gives up after a two-second grace window rather than waiting out `forwardingTimeoutMs`, and the tool is blocked with:
 
@@ -47,6 +60,7 @@ permission requests.
 
 The grace window exists so a request that arrives while the parent is switching sessions is not abandoned in the gap.
 A target that *is* draining its inbox is waited on for the full `forwardingTimeoutMs`, however long the human takes to decide.
+That includes a parent whose human is still deliberating at an earlier forwarded prompt: it keeps refreshing its heartbeat throughout, so a second child does not read it as gone.
 
 Every other way the forwarding path can give up — an unresolvable parent session, forwarding directories that cannot be created, a request that cannot be written, an unreadable response, and the timeout itself — is reported the same way: as approval being unavailable, with a reason naming the specific failure.
 None of them is reported as a user denial, because no user was ever asked.
@@ -68,8 +82,13 @@ The serving node records its decider on the response — a rule of its own (with
 That is the difference between a human approving a subagent's request and the parent's policy approving it on their behalf — two outcomes that were previously indistinguishable in the log.
 An older parent that sends no decider yields `"decision": null`: the hop is still recorded, and the answer is still honored.
 
-This liveness signal is process-local, so it applies to in-process children only.
-A child running as a separate `pi` process (the `PI_SUBAGENT_PARENT_SESSION` path) cannot observe its parent's polling and still waits the full timeout.
+### Upgrading
+
+Upgrade the parent before relying on the out-of-process signal — in practice, restart the interactive session after upgrading the package.
+
+A parent session still running a version that predates the heartbeat publishes none, and a child on a version that expects one reads that absence as "not draining" and gives up in about two seconds.
+That only happens in the window where an upgrade lands while a parent session is already running, and it resolves as soon as that session restarts.
+Nothing needs to be edited, and in-process children are unaffected: parent and child there are the same running copy by construction.
 
 ---
 
