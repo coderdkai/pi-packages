@@ -78,7 +78,14 @@ function makeService(): PermissionsService & {
   };
 }
 
-function ctxWithRegistry(): {
+/** The authorize callback shape `registerAuthorizer` receives. */
+type RegisteredAuthorizer = (
+  details: PromptPermissionDetails,
+  query: unknown,
+  log: { review: () => void; debug: () => void },
+) => Promise<unknown>;
+
+function ctxWithRegistry(cwd = "/project"): {
   cwd: string;
   modelRegistry: {
     find: () => Model<any>;
@@ -86,7 +93,7 @@ function ctxWithRegistry(): {
   };
 } {
   return {
-    cwd: "/project",
+    cwd,
     modelRegistry: {
       find: () => MODEL,
       getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "sk-test" }),
@@ -200,11 +207,8 @@ describe("createModelJudgeExtension", () => {
     pi.lifecycle.get("session_start")?.({}, ctxWithRegistry());
     pi.events.get(READY_CHANNEL)?.({});
 
-    const authorize = service.registerAuthorizer.mock.calls[0]?.[1] as (
-      details: PromptPermissionDetails,
-      query: unknown,
-      log: { review: () => void; debug: () => void },
-    ) => Promise<unknown>;
+    const authorize = service.registerAuthorizer.mock
+      .calls[0]?.[1] as RegisteredAuthorizer;
     const verdict = await authorize(
       {
         requestId: "r1",
