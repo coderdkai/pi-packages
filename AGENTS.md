@@ -19,6 +19,7 @@ When adding a new package, wire it into all of:
 Publishing is automatic — `scripts/publish-released.sh` derives the package list from release-please's `paths_released`, so no publish-script edit is needed.
 A brand-new package's **first** release is the exception: npm Trusted Publishing cannot create a package that does not exist, so the CI `publish` job 404s on `v1.0.0`.
 Publish the first version manually (`pnpm login`, then `pnpm --filter @gotgenes/<pkg> publish --access public --no-git-checks` — no `--provenance`), then configure the Trusted Publisher on npmjs.org (repo `gotgenes/pi-packages`, workflow `ci.yml`).
+The publish needs an interactive terminal when the registry requires an OTP (`ERR_PNPM_OTP_NON_INTERACTIVE`) — the operator runs it, not the agent (Refs #732).
 Every release after that publishes automatically (Refs #600).
 
 If `release-please`'s CI job fails after it has already tagged/released, GitHub skips the downstream `publish` job — and a rerun does not recover it, since release-please finds nothing new to release and reports `releases_created: false`.
@@ -60,6 +61,8 @@ Without this discipline, the per-change doc-update commits that append provenanc
 - To check a GitHub issue/PR's state (including upstream repos), use `gh issue view N --repo owner/repo`, not web search.
 - Never run a state-mutating command (`gh issue close`, `gh pr merge`, `git push`) to discover what it does — it executes.
   Probe with a read-only query (`gh api .../issues/N --jq .state`) or `--help` (Refs #661).
+  When such a command fails with a transient error (HTTP 5xx), verify whether it applied before retrying — `gh pr merge` can 503 after the merge lands.
+  Probe with REST (`gh api repos/OWNER/REPO/pulls/N --jq .merged`), which stays up when the GraphQL endpoint behind `gh pr view --json` and `gh pr merge` is degraded (Refs #732).
 - For Pi SDK internals (prompt assembly, caching, session lifecycle), read Pi's own source at the sibling checkout `../pi` when present, rather than the installed `dist/` bundles or their sourcemaps.
   Dispatch an `Explore` subagent with `model: "sonnet-5"` for a multi-hop trace there (e.g. "how does `ui.custom` pass keybindings to the factory?") — a targeted read of a known file is fine inline, but a hunt costs 5–10 greps of this session's context, and `Explore`'s haiku default is too weak for the reasoning.
   The checkout tracks Pi's `main` and runs ahead of the pinned dependency.

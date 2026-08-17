@@ -54,4 +54,80 @@ Package tests went 47 → 48; `check`, root `lint`, full `test`, and `fallow dea
 - Pre-completion reviewer: PASS, no warnings.
   It independently confirmed the missed-caller grep, the teardown ordering, and the `fix:` (not `fix!:`) typing.
 
+## Stage: Final Retrospective (2026-08-17T18:42:50Z)
+
+### Session summary
+
+All three stages — planning, TDD, and ship — ran in a single session, landing `@gotgenes/pi-permission-model-judge` v1.1.3 with the global config scope resolved through the SDK's `getAgentDir()`.
+The implementation itself was one preparatory `refactor:` commit plus one `fix:` commit and finished clean on the first pass.
+The ship phase coincided with a live GitHub incident that broke the release automation twice and required two separate manual recoveries.
+
+### Observations
+
+#### What went well
+
+- The planning-time spike was the highest-leverage thing in the session, and it worked exactly as the `/plan-issue` guidance intends.
+  Writing the intended regression test as a throwaway and *running* it against unfixed `main` disproved the obvious assertion: `registerAuthorizer` was called, and passed, because this machine has a real `~/.pi/agent/extensions/pi-permission-model-judge/config.json` that the hardcoded default happily loaded.
+  A registration-only test would have been green locally and red on CI — an environment-dependent false green shipped as a regression test.
+  The plan therefore specified a content-discriminating assertion (`instructions` reaching the model as `systemPrompt`), and the landed red was `complete` called 0 times, exactly as measured.
+- Splitting REST from GraphQL turned out to be the key diagnostic during the incident.
+  `gh api repos/...` stayed healthy while `gh pr view --json` and `gh pr merge` (both GraphQL) returned HTTP 503, which made it possible to read PR state and confirm outcomes throughout.
+- Verifying before retrying prevented a real hazard.
+  The third `release_pr_merge` attempt failed *on the merge mutation itself* rather than on its precheck; probing `gh api .../pulls/763 --jq .merged` returned `false`, which is what made the fourth attempt safe.
+  A blind retry there could have acted on an already-merged PR.
+- Closing #732 *before* merging the release PR was deliberate and worth keeping.
+  Release-please renders `closes #732` into the PR body, so merging first risks GitHub auto-closing the issue and pre-empting the curated comment that `AGENTS.md` exists to protect.
+- The `tidy-first-assessor`'s rejections carried more value than its single recommendation.
+  It declined a `driveAuthorizer()` helper by citing the `testing` skill's rule that the repeated act is the test subject, declined a shared temp-config fixture on structural grounds, and — rather than assuming — checked that Vitest's outer-then-inner `beforeEach` ordering let a nested `describe` add env stubbing without disturbing the file-scoped hooks.
+- The package under test caught the agent's own mistake mid-session: a `Read` with a malformed absolute path was denied by the `external_directory` gate with a teaching reason naming the correct path — the exact typo-path class this extension judges.
+
+#### What caused friction (agent side)
+
+- `other` — `fetch_content` on `githubstatus.com` returned the *resolved* Aug 6–7 incident rather than current status, so it could not confirm the operator's report.
+  Impact: one wasted call, no rework; disclosed rather than presented as current, and replaced with a live API probe that produced better evidence (an actual 503).
+  The generalizable lesson is that a live read-only API call is stronger evidence of degradation than a status page.
+- `instruction-violation` (self-identified) — one `Read` used a hand-built absolute path that dropped the `pi-packages/packages/` prefix, tripping the `external_directory` gate.
+  `AGENTS.md` already states this rule verbatim (Refs #726).
+  Impact: one denied tool call, no rework; corrected immediately with a repo-relative path.
+  No doc change is warranted — the rule exists, the gate fired, and the failure was caught in one step.
+- `other` — `release_pr_merge` has no transient-error retry, so a single logical merge took four tool calls during the incident.
+  Impact: four calls where one should suffice, plus the manual state verification between them.
+  This is a tooling gap in `pi-github-tools`, not a process gap.
+- `other` — the manual-publish recovery failed on `ERR_PNPM_OTP_NON_INTERACTIVE` because the registry required a one-time password and the agent has no interactive TTY.
+  Impact: one failed publish attempt and an extra round trip to hand the command to the operator.
+  The `AGENTS.md` runbook names `pnpm login` but does not flag that the publish itself must be operator-run under 2FA.
+
+#### What caused friction (user side)
+
+- The GitHub-incident context arrived after the first CI failure rather than before it.
+  This is timing, not omission — the incident manifested mid-ship — but it is a good example of operator-held context that the agent could not obtain reliably on its own, since the status-page fetch returned stale data.
+- The "hold everything" decision was reversed roughly ten minutes later, and the incident had not cleared: the post-tag failure the hold was meant to avoid then happened anyway.
+  Framed as opportunity, the two genuinely distinct options were a substantially longer wait or accepting the recovery cost up front; a short pause was not a third option.
+  Worth noting the caution was still correct — the risk flagged before merging is precisely the one that materialized.
+- The question "How is this normally done, though?"
+  was a well-placed redirect.
+  It moved the recovery from reconstruction-from-memory to reading `.github/workflows/ci.yml:95–126`, which produced a faithful reproduction: the same `jq` mutation and the same `chore: advance release-please last-release-sha baseline [skip ci]` message the bot uses.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the main session ran on `anthropic/claude-opus-5` throughout.
+  Both subagents ran on `anthropic/claude-sonnet-5` per their frontmatter: `tidy-first-assessor` (preparatory-refactor triage) and `pre-completion-reviewer` (quality gate).
+  Both are judgment-heavy read-only tasks, so the assignment is appropriate; no reasoning-weak model on judgment work and no high-cost model on mechanical work.
+- **Escalation-delay tracking** — no `rabbit-hole` friction points.
+  The longest same-error sequence was four `release_pr_merge` attempts against transient 503s, which is retrying infrastructure rather than persisting with a wrong approach, and each retry was gated on a fresh state check.
+  Nothing crossed the five-call escalation bar.
+- **Feedback-loop gap analysis** — no gap.
+  All four gates (`check`, root `lint`, `test`, `fallow dead-code`) ran as a green baseline before any edit; `vitest` plus `tsc` ran after the tidy commit; the red was confirmed before implementing; the package suite and `tsc` ran before the `fix:` commit; and all four gates ran again afterward.
+  `pnpm run check` immediately followed the required-parameter signature change, which is what the `testing` skill prescribes for a shared-signature edit.
+- **Unused-tool detection** — nothing to flag.
+  `colgrep` went unused, correctly: every search in this issue was exact-symbol matching (`getAgentDir`, `defaultAgentDir`, `agentDir`), which is grep's case per the `colgrep` skill's decision table.
+
+### Changes made
+
+1. `AGENTS.md` — extended the state-mutating-command bullet in § Workflow with the verify-before-retry rule: a transient 5xx on `gh pr merge` may follow a merge that landed, so probe `gh api repos/OWNER/REPO/pulls/N --jq .merged` (REST stays up when GraphQL is degraded) before retrying.
+2. `AGENTS.md` — noted on the manual-publish command that it needs an interactive terminal under registry 2FA (`ERR_PNPM_OTP_NON_INTERACTIVE`), so the operator runs it rather than the agent.
+3. Filed #764 against `pi-github-tools` — `release_pr_merge` needs transient-error retry and, more importantly, must re-read merge state before reporting a failure of the merge call itself, so a caller never has to guess whether a retry is safe.
+
+Considered and deliberately not changed: the repo-relative path rule (already in `AGENTS.md`, Refs #726, and self-identified here), a `githubstatus.com` staleness note (too narrow; its actionable half is covered by change 1), the `/plan-issue` spike guidance (already prescribes planning-time measurement and worked as written), and `/ship-issue` steps 4 and 6b (both performed correctly under the failure).
+
 [#762]: https://github.com/gotgenes/pi-packages/issues/762
