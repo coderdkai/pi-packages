@@ -65,6 +65,8 @@ Load this skill when writing, debugging, or planning tests.
   Use `toEqual` for a full-shape assertion, or assert a discriminating field the negative case cannot produce.
 - When proving a guard test is not vacuous, build the probe to match the guard's exact predicate.
   A near-miss probe (`void runRpcSession;` against a guard matching `runRpcSession(`) leaves the guard silent and looks like proof it is broken (Refs #678).
+- A new test that passes during the Red step is either an invariant pin or a broken probe — decide which before moving to Green.
+  The broken case is a probe string that also appears elsewhere in the output: `toContain("x")` matched the unrelated fixture path `secret.txt` and passed pre-fix (Refs #760).
 - An equivalence test (incremental vs. freshly built, cached vs. uncached) pins self-consistency, not correctness, when both sides run the code under test.
   Assert independently — a count, a golden row — anything the equivalence cannot see (Refs #689).
 - Prefer a concrete test asserting current (even imperfect) behavior over `test.todo`.
