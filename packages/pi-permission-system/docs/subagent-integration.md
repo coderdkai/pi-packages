@@ -54,6 +54,20 @@ None of them is reported as a user denial, because no user was ever asked.
 The two sides of the exchange are correlatable in the review log: the serving session writes `forwarded_permission.serving_started` with the id it polls, and the child writes `forwarded_permission.request_created` with the `targetSessionId` it forwarded to.
 When a forwarded request goes unanswered, comparing those two entries distinguishes a parent that was not polling from one polling a different session.
 
+When a forwarded request *is* answered, the child's own terminal entry names both which session answered and what within it decided.
+The serving node records its decider on the response — a rule of its own (with the surface, pattern, and origin that matched), the link that ruled, or the human who answered its dialog — and the child records it nested under a `forwarded` frame:
+
+```json
+{
+  "kind": "forwarded",
+  "responderSessionId": "019ff969-c34c-70be-9034-fae19c852932",
+  "decision": { "kind": "user", "via": "dialog" }
+}
+```
+
+That is the difference between a human approving a subagent's request and the parent's policy approving it on their behalf — two outcomes that were previously indistinguishable in the log.
+An older parent that sends no decider yields `"decision": null`: the hop is still recorded, and the answer is still honored.
+
 This liveness signal is process-local, so it applies to in-process children only.
 A child running as a separate `pi` process (the `PI_SUBAGENT_PARENT_SESSION` path) cannot observe its parent's polling and still waits the full timeout.
 
