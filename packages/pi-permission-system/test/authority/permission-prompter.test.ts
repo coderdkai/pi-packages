@@ -154,6 +154,57 @@ describe("PermissionPrompter", () => {
       );
     });
 
+    it("records who decided on the outcome entry", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+      const authorizer = makeAuthorizer({
+        approved: true,
+        state: "approved",
+        decidedBy: { kind: "user", via: "dialog" },
+      });
+
+      await prompter.prompt(authorizer, makeDetails());
+
+      expect(logger.review).toHaveBeenCalledWith(
+        "permission_request.approved",
+        expect.objectContaining({
+          decidedBy: { kind: "user", via: "dialog" },
+        }),
+      );
+    });
+
+    it("records the decider on a denial too", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+      const authorizer = makeAuthorizer({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        decidedBy: { kind: "unavailable", reason: "nobody was home" },
+      });
+
+      await prompter.prompt(authorizer, makeDetails());
+
+      expect(logger.review).toHaveBeenCalledWith(
+        "permission_request.denied",
+        expect.objectContaining({
+          decidedBy: { kind: "unavailable", reason: "nobody was home" },
+        }),
+      );
+    });
+
+    it("leaves the waiting entry unattributed — nothing has decided yet", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+
+      await prompter.prompt(makeAuthorizer(), makeDetails());
+
+      const waiting = logger.review.mock.calls.find(
+        (call) => call[0] === "permission_request.waiting",
+      );
+      expect(waiting?.[1]).not.toHaveProperty("decidedBy");
+    });
+
     it("returns the decision from the authorizer", async () => {
       const decision: PermissionPromptDecision = {
         approved: false,

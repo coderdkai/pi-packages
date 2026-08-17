@@ -298,7 +298,11 @@ describe("presentInlinePermissionPrompt", () => {
       expect(captured.component).toBeDefined();
       captured.component?.handleInput("y");
       captured.component?.handleInput("y");
-      expect(await promise).toEqual({ approved: true, state: "approved" });
+      expect(await promise).toEqual({
+        approved: true,
+        state: "approved",
+        decidedBy: { kind: "user", via: "dialog" },
+      });
     });
 
     it("bounds a pathological forwarded ask instead of filling the viewport", () => {
@@ -354,7 +358,30 @@ describe("presentInlinePermissionPrompt", () => {
         "Title\ntool : read\npath : /repo/secret.txt",
         expect.any(Array),
       );
-      expect(decision).toEqual({ approved: true, state: "approved" });
+      expect(decision).toEqual({
+        approved: true,
+        state: "approved",
+        decidedBy: { kind: "user", via: "select" },
+      });
+    });
+
+    it("attributes a denial to the surface the human answered on", async () => {
+      const select = vi.fn().mockResolvedValue("No");
+      const view = makeView("rpc", true, {
+        select,
+        input: vi.fn(),
+        custom: vi.fn(),
+      });
+
+      const decision = await requestPermissionDecision(view, "Title", ASK);
+
+      // The denial is the human's, and which surface they used is what
+      // separates "the operator declined" from "a prompt they never saw".
+      expect(decision).toEqual({
+        approved: false,
+        state: "denied",
+        decidedBy: { kind: "user", via: "select" },
+      });
     });
   });
 

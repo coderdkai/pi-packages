@@ -1,3 +1,4 @@
+import type { DecisionSource } from "#src/authority/decision-source";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type {
   ForwardedAccessFacts,
@@ -131,6 +132,7 @@ export class PermissionPrompter implements PermissionPrompterApi {
           ? "confirmation_unavailable"
           : decision.state,
         denialReason: decision.denialReason,
+        decidedBy: decision.decidedBy,
       },
     );
 
@@ -139,14 +141,20 @@ export class PermissionPrompter implements PermissionPrompterApi {
 
   // ── Private helpers ──────────────────────────────────────────────────────
 
+  /**
+   * The `waiting` entry carries no `decidedBy` — nothing has decided yet, and
+   * a `null` there would read as "decided by nobody" rather than "not yet".
+   */
   private writeReviewEntry(
     event: string,
     details: PromptPermissionDetails & {
       resolution?: string;
       denialReason?: string;
+      decidedBy?: DecisionSource;
     },
   ): void {
     this.deps.logger.review(event, {
+      ...(details.decidedBy ? { decidedBy: details.decidedBy } : {}),
       requestId: details.requestId,
       source: details.source,
       agentName: details.agentName,

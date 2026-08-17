@@ -4,10 +4,15 @@ import type {
   KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { type Component, matchesKey } from "@earendil-works/pi-tui";
+import type {
+  DecisionSource,
+  UserDecisionSurface,
+} from "#src/authority/decision-source";
 import {
   type PermissionPromptDecision,
   type RequestPermissionOptions,
   requestPermissionDecisionFromUi,
+  type UnattributedDecision,
 } from "#src/authority/permission-dialog";
 import {
   initialPromptState,
@@ -64,15 +69,23 @@ export interface PromptPreferences {
  *
  * The single entry the `LocalUserAuthorizer` calls; keeps the mode dispatch in
  * one place so the fallback and the inline component never both render.
+ *
+ * It is therefore also the one place that knows which surface the human
+ * answered on, so it is where the decision is attributed to that surface
+ * (#726). Having the dialog model and the fallback each name themselves would
+ * be two sites that must agree with this branch.
  */
-export function requestPermissionDecision(
+export async function requestPermissionDecision(
   view: PermissionPromptView,
   title: string,
   payload: PromptPayload,
   options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
   if (view.mode === "tui") {
-    return presentInlinePermissionPrompt(view, title, payload, options);
+    return attributeToHuman(
+      await presentInlinePermissionPrompt(view, title, payload, options),
+      "dialog",
+    );
   }
   // The fallback renders once and cannot re-render, so it neither paints nor
   // offers an expansion; it substitutes a nominal width for the terminal size
@@ -81,12 +94,23 @@ export function requestPermissionDecision(
     ...view.budget,
     width: FALLBACK_RENDER_WIDTH,
   });
-  return requestPermissionDecisionFromUi(
-    view.ui,
-    title,
-    rendered.lines.join("\n"),
-    options,
+  return attributeToHuman(
+    await requestPermissionDecisionFromUi(
+      view.ui,
+      title,
+      rendered.lines.join("\n"),
+      options,
+    ),
+    "select",
   );
+}
+
+function attributeToHuman(
+  decision: UnattributedDecision,
+  via: UserDecisionSurface,
+): PermissionPromptDecision {
+  const decidedBy: DecisionSource = { kind: "user", via };
+  return { ...decision, decidedBy };
 }
 
 /** The width the `select`/`input` fallback renders against. */
@@ -113,13 +137,13 @@ export function presentInlinePermissionPrompt(
   title: string,
   payload: PromptPayload,
   options?: RequestPermissionOptions,
-): Promise<PermissionPromptDecision> {
+): Promise<UnattributedDecision> {
   const config: PromptModelConfig = {
     doublePressToConfirm: view.doublePressToConfirm,
     sessionLabel: options?.sessionLabel ?? DEFAULT_SESSION_LABEL,
     sessionScope: options?.sessionScope,
   };
-  return view.ui.custom<PermissionPromptDecision>(
+  return view.ui.custom<UnattributedDecision>(
     (tui, theme, keybindings, done) =>
       new PermissionPromptComponent(
         theme,
@@ -176,7 +200,7 @@ class PermissionPromptComponent implements Component {
     private readonly budget: RenderBudget,
     private readonly handleAppAction: (data: string) => boolean,
     private readonly requestRender: () => void,
-    private readonly done: (decision: PermissionPromptDecision) => void,
+    private readonly done: (decision: UnattributedDecision) => void,
   ) {
     this.state = initialPromptState(config);
   }
