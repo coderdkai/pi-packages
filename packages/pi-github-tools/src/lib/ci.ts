@@ -115,7 +115,8 @@ export async function findRun(args: FindRunArgs): Promise<string> {
     if (delay > 0) {
       try {
         await sleep(delay * 1000, signal);
-      } catch {
+      } catch (error) {
+        if (!signal?.aborted) throw error;
         return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       elapsed += delay;
@@ -142,7 +143,8 @@ export async function findRun(args: FindRunArgs): Promise<string> {
         ],
         retryOptions,
       );
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
@@ -158,7 +160,8 @@ export async function findRun(args: FindRunArgs): Promise<string> {
           ["run", "view", String(matchingRun.databaseId), "--json", "jobs"],
           retryOptions,
         ));
-      } catch {
+      } catch (error) {
+        if (!signal?.aborted) throw error;
         return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       return formatFind(matchingRun, jobs);
@@ -224,7 +227,8 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
         ],
         retryOptions,
       );
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
     }
 
@@ -247,7 +251,8 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
 
     try {
       await sleep(pollInterval * 1000, signal);
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
     }
     elapsed += pollInterval;

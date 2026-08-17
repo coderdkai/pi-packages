@@ -40,6 +40,14 @@ function mockCmdFail(stderr: string) {
   });
 }
 
+/** Make the next sleep abort the controller, as a real abort would. */
+function mockSleepAborts(controller: AbortController) {
+  mockSleep.mockImplementationOnce(() => {
+    controller.abort();
+    return Promise.reject(new Error("The operation was aborted."));
+  });
+}
+
 describe("findReleasePR", () => {
   it("finds a release-please PR on first poll", async () => {
     mockGhJson([
@@ -78,7 +86,7 @@ describe("findReleasePR", () => {
   it("returns abort message when signal fires during sleep", async () => {
     const controller = new AbortController();
     mockGhJson([]);
-    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+    mockSleepAborts(controller);
 
     const result = await findReleasePR({
       timeout: 120,
@@ -86,6 +94,14 @@ describe("findReleasePR", () => {
     });
     expect(result).toContain("aborted:");
     expect(result).toContain("cancelled by user");
+  });
+
+  it("surfaces a gh failure instead of blaming the user", async () => {
+    mockCmdFail("HTTP 404: Not Found");
+
+    await expect(findReleasePR({ timeout: 120 })).rejects.toThrow(
+      /HTTP 404: Not Found/,
+    );
   });
 
   it("retries a transient failure and reports the wait", async () => {
@@ -401,7 +417,7 @@ describe("mergeReleasePR", () => {
         },
       ],
     });
-    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+    mockSleepAborts(controller);
 
     const result = await mergeReleasePR({
       prNumber: 42,
@@ -635,8 +651,7 @@ describe("watchRelease", () => {
     mockCmd("");
     // No tags
     mockCmd("\n");
-    // sleep rejects to simulate abort
-    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+    mockSleepAborts(controller);
 
     const result = await watchRelease({
       timeout: 180,
@@ -644,5 +659,13 @@ describe("watchRelease", () => {
     });
     expect(result).toContain("aborted:");
     expect(result).toContain("cancelled by user");
+  });
+
+  it("surfaces a git failure instead of blaming the user", async () => {
+    mockCmdFail("fatal: unable to access remote");
+
+    await expect(watchRelease({ timeout: 180 })).rejects.toThrow(
+      /git fetch --tags failed/,
+    );
   });
 });

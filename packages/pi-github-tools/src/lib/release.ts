@@ -80,7 +80,8 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
     if (delay > 0) {
       try {
         await sleep(delay * 1000, signal);
-      } catch {
+      } catch (error) {
+        if (!signal?.aborted) throw error;
         return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       elapsed += delay;
@@ -107,7 +108,8 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
         ],
         retryOptions,
       );
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
@@ -203,7 +205,8 @@ export async function mergeReleasePR(
 
     try {
       await sleep(pollInterval * 1000, signal);
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return abortedMergeResult(elapsed);
     }
     elapsed += pollInterval;
@@ -405,7 +408,8 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
     try {
       await git(["fetch", "--tags"], signal);
       tagOutput = await git(["tag", "--points-at", "HEAD"], signal);
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  elapsed: ${elapsed}s`);
     }
     const tags = tagOutput
@@ -418,7 +422,8 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
       let headSha: string;
       try {
         headSha = await git(["rev-parse", "HEAD"], signal);
-      } catch {
+      } catch (error) {
+        if (!signal?.aborted) throw error;
         return formatAborted(`  elapsed: ${elapsed}s`);
       }
       return [
@@ -442,7 +447,8 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
 
     try {
       await sleep(pollInterval * 1000, signal);
-    } catch {
+    } catch (error) {
+      if (!signal?.aborted) throw error;
       return formatAborted(`  elapsed: ${elapsed}s`);
     }
     elapsed += pollInterval;

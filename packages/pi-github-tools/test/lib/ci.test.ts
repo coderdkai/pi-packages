@@ -34,6 +34,14 @@ function mockGhFail(stderr: string) {
   });
 }
 
+/** Make the next sleep abort the controller, as a real abort would. */
+function mockSleepAborts(controller: AbortController) {
+  mockSleep.mockImplementationOnce(() => {
+    controller.abort();
+    return Promise.reject(new Error("The operation was aborted."));
+  });
+}
+
 describe("transient failures", () => {
   const sha = "abc1234567890abcdef1234567890abcdef123456";
 
@@ -227,8 +235,7 @@ describe("findRun", () => {
     const controller = new AbortController();
     // First poll: no match
     mockGhJson([]);
-    // sleep rejects to simulate abort
-    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+    mockSleepAborts(controller);
 
     const result = await findRun({
       workflow: "ci",
@@ -238,6 +245,14 @@ describe("findRun", () => {
     });
     expect(result).toContain("aborted:");
     expect(result).toContain("cancelled by user");
+  });
+
+  it("surfaces a gh failure instead of blaming the user", async () => {
+    mockGhFail("HTTP 404: Not Found");
+
+    await expect(
+      findRun({ workflow: "ci", expectedSha: sha, timeout: 120 }),
+    ).rejects.toThrow(/HTTP 404: Not Found/);
   });
 });
 
@@ -334,8 +349,7 @@ describe("watchRun", () => {
       headSha: "abc1234",
       jobs: [{ name: "build", status: "in_progress", conclusion: null }],
     });
-    // sleep rejects to simulate abort
-    mockSleep.mockRejectedValueOnce(new Error("The operation was aborted."));
+    mockSleepAborts(controller);
 
     const result = await watchRun({
       workflow: "ci",
@@ -345,6 +359,14 @@ describe("watchRun", () => {
     });
     expect(result).toContain("aborted:");
     expect(result).toContain("cancelled by user");
+  });
+
+  it("surfaces a gh failure instead of blaming the user", async () => {
+    mockGhFail("HTTP 404: Not Found");
+
+    await expect(watchRun({ workflow: "ci", runId: 100 })).rejects.toThrow(
+      /HTTP 404: Not Found/,
+    );
   });
 });
 
