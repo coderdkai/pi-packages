@@ -135,6 +135,10 @@ It expands both the prompt itself — to the complete request, unbounded by `pro
 It only toggles the display — it never resolves, commits, or arms the pending decision.
 While you are typing a denial reason it is not intercepted, so a rebound printable key still reaches the reason editor.
 
+The reason editor is Pi's own line editor, so it behaves like the chat input: pasting works, as do cursor movement, word and line deletion, the kill ring, and undo.
+The reason is a single line — a pasted line break becomes a space, and a long reason scrolls sideways rather than growing the dialog.
+`enter` submits it, and `esc` (or `Ctrl+C`) returns to the decision list without denying.
+
 ### What a prompt shows
 
 The prompt renders one fact per line, with the requesting agent (and, for a forwarded subagent ask, its session), the tool, the gate surface, the matched rule, the decision-relevant value, and — for a wrapper such as `xargs` — the command that will actually run.
