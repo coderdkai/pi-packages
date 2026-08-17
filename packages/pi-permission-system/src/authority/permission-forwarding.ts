@@ -201,7 +201,15 @@ export function normalizePermissionForwardingSessionId(
   return trimmed;
 }
 
-function encodeSessionIdForPath(sessionId: string): string {
+/**
+ * Make a session id safe to name a path segment.
+ *
+ * Exported because the forwarding tree has two layouts keyed by session id —
+ * `sessions/<id>/` and the serving-heartbeat records beside it — and a second
+ * encoding would be a silent way for the two to disagree about which file
+ * belongs to which session.
+ */
+export function encodeSessionIdForPath(sessionId: string): string {
   return encodeURIComponent(sessionId);
 }
 
