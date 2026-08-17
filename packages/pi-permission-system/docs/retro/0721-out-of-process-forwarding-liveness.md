@@ -48,6 +48,44 @@ Seven TDD steps, three of them `refactor:` for the module nothing imports yet, t
   The operator chose "heartbeat only" rather than "heartbeat now, claim as a follow-up," and the claim needs [#722]'s diagnosis before it is more than speculation.
   Both open questions in the plan are conditional on future evidence, so nothing was filed.
 
+## Stage: Implementation — TDD (2026-08-17T04:19:34Z)
+
+### Session summary
+
+Landed all seven planned TDD steps in order with no preparatory commits — the Tidy-First assessor found nothing warranted, judging the plan's own step 1–3 (build the isolated module) / 4–5 (wire it in) split to already be the tidy-first move.
+The `pi-permission-system` suite grew from 3065 to 3123 tests (+58) across 142 → 143 files.
+All deterministic gates stayed green throughout: `check`, root `lint` (0 findings), full workspace `test`, and `fallow dead-code`.
+
+### Observations
+
+- **Pre-completion reviewer: PASS** — ready for `/ship-issue`, with no warnings.
+  It independently traced the highest-risk invariant rather than accepting proximity as proof: it confirmed the refresh-ahead-of-the-guard test stubs `processInbox` to never resolve and asserts three `markServing` calls over 750 ms, so moving the refresh behind the guard would fail it.
+- **A plan test got rejected during Red, which is the point of writing it first.**
+  Step 1's planned "rewrites when the record was removed underneath it" implied an `existsSync` probe on the throttle path — a syscall on every poll tick to save at most one refresh window.
+  Dropping it and asserting the bounded self-healing instead ("republishes at the next refresh boundary") matches the argument the plan already makes for pid-reuse pruning, and the 1 s window sits inside the 2 s grace so no child can abandon in it.
+- **The two new composition-root tests passed on first run, as the plan predicted.**
+  That is only reassuring because they are mutually discriminating: identical setup except for the `publishServingHeartbeat` call, one blocking with the not-serving reason and one still waiting when the parent answers.
+  Either alone would have been weak evidence.
+- **`makeLivenessJudge` wires the real judge over real records rather than a fake.**
+  What the liveness tests are about is *which channel answers for which target*, and a hand-written double is free to disagree with exactly the routing under test.
+- **Deviation: `test/authority/authorizer.test.ts` was listed in the plan but never touched.**
+  It reaches `AuthorizerSelectionDeps` only through `makeAuthorizerSelectionDeps`, so the shared fixture absorbed the `servingRegistry` → `serving` rename entirely.
+  The reviewer confirmed no coverage gap.
+- **Deviation: `test/authority/serving-registry.test.ts` was touched but not listed.**
+  The plan's module table said "add `composeServingAnnouncers`" without naming its test file; the fan-out/clear/no-channels cases landed there.
+- **Two self-inflicted `Edit` failures, both rules `AGENTS.md` already states.**
+  One batch was rejected because I retyped a test block's wrapping from memory instead of the file (`makeManager(serving).start(...)` had been reflowed across three lines).
+  Twice I emitted an ignored `oldText2`/`newText2` key inside an `edits[]` entry — silently dropped, and only the reported block count proves nothing was lost.
+  Counting reported blocks against intended edits caught it both times.
+- **`vi` was missing from `serving-registry.test.ts`'s imports**, which surfaced as two failures only when that file ran alone — the combined run's summary attributed them ambiguously.
+  Running the single file was what localized it.
+- **The Biome/ESLint assertion loop fired once**, on a `record as ServingHeartbeat` in a `.filter().map()` chain.
+  Restructuring to a `for...of` with an explicit guard removed the assertion rather than trading it for a `!`, per the documented fix.
+- **A version number nearly shipped into the docs.**
+  The upgrade-ordering note first named "older than 25.2.0"; the package is at 26.1.0 and release-please owns the next number, so the claim was unverifiable at write time.
+  Rewritten to describe the condition ("a version that predates the heartbeat") rather than assert a number.
+- **The `[#398]` and `[#719]` reference definitions were missing** from `architecture.md` after the `Landed:` note cited them — caught by grepping for the definitions rather than trusting `rumdl`, which flags unused definitions but not undefined references.
+
 [#398]: https://github.com/gotgenes/pi-packages/issues/398
 [#719]: https://github.com/gotgenes/pi-packages/issues/719
 [#722]: https://github.com/gotgenes/pi-packages/issues/722
