@@ -22,6 +22,7 @@ import {
   registerLink,
 } from "#test/helpers/authorizer-fixtures";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import {
   createForwardingTempDir,
   type ForwardingTempDir,
@@ -68,6 +69,7 @@ function makeCapturingEscalator() {
       return Promise.resolve<PermissionPromptDecision>({
         approved: true,
         state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
       });
     }),
     /** The details of the most recent escalation. */
@@ -295,9 +297,11 @@ describe("processInbox — recorded-authority resolution", () => {
     });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
 
     const server = new ForwardedRequestServer(
       makeServerDeps({
@@ -365,9 +369,11 @@ describe("processInbox — recorded-authority resolution", () => {
       }),
     });
 
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
@@ -393,9 +399,11 @@ describe("processInbox — recorded-authority resolution", () => {
     temp.writeRequest({ id: "req-legacy" });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
 
     const server = new ForwardedRequestServer(
       makeServerDeps({
@@ -433,9 +441,11 @@ describe("processInbox — recorded-authority resolution", () => {
     });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
 
     const server = new ForwardedRequestServer(
       makeServerDeps({
@@ -701,9 +711,11 @@ describe("processInbox — the serving node's chain adjudicates a forwarded ask"
       kind: "deny",
       reason: "destructive",
     });
-    const requestPermissionDecision = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const requestPermissionDecision = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     const logger = makeAuthorizerLog();
     // The real chain owner, wired exactly as index.ts wires it: the same
     // AuthorizerSelection is both the gate's AskEscalator and the forwarded
@@ -809,9 +821,11 @@ describe("processInbox — grant-scope selection", () => {
     });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
 
     const server = new ForwardedRequestServer(
       makeServerDeps({
@@ -844,9 +858,11 @@ describe("processInbox — grant-scope selection", () => {
     });
 
     const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
-    const escalate = vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved_for_session" });
+    const escalate = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved_for_session",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     const recordSessionApproval = vi.fn();
 
     const server = new ForwardedRequestServer(

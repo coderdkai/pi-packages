@@ -23,6 +23,7 @@ import {
   registerLink as register,
 } from "#test/helpers/authorizer-fixtures";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import { makePromptDetails as makeDetails } from "#test/helpers/prompt-details-fixtures";
 
 // ── Test helpers ──────────────────────────────────────────────────────────
@@ -78,7 +79,11 @@ describe("AuthorizerSelection", () => {
         expect.any(LocalUserAuthorizer),
         details,
       );
-      expect(result).toEqual({ approved: true, state: "approved" });
+      expect(result).toEqual({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      });
     });
 
     it("uses the most recently selected authorizer", async () => {
@@ -108,6 +113,7 @@ describe("AuthorizerSelection", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
         denialReason: "user declined",
       };
       const prompter = makePrompterApi();

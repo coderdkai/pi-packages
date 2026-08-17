@@ -85,9 +85,9 @@ export interface GateBypass {
    *
    * The gate that bypasses *is* the decider, so it states its own provenance
    * and the runner relays it onto the log entry rather than inferring one from
-   * the event name (#726). Optional only while the sites are migrated onto it.
+   * the event name (#726). Required, so a bypass added later cannot omit it.
    */
-  decidedBy?: DecisionSource;
+  decidedBy: DecisionSource;
   /** Optional review log entry to emit. */
   log?: { event: string; details: Record<string, unknown> };
   /** Optional decision event to emit. */

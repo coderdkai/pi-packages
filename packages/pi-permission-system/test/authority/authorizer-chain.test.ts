@@ -5,6 +5,7 @@ import type { PermissionPromptDecision } from "#src/authority/permission-dialog"
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
 import type { AuthorizerLog, PermissionQuery } from "#src/service";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import { makePromptDetails as makeDetails } from "#test/helpers/prompt-details-fixtures";
 
 /** A shared review-log seam; identity-comparable for injection assertions. */
@@ -27,7 +28,11 @@ function makeQuery(): PermissionQuery {
  * reached; a test whose subject is the terminal's own decision passes one.
  */
 function makeTerminal(
-  decision: PermissionPromptDecision = { approved: true, state: "approved" },
+  decision: PermissionPromptDecision = {
+    approved: true,
+    state: "approved",
+    decidedBy: DECIDED_BY_HUMAN,
+  },
 ) {
   return {
     authorize: vi
@@ -68,7 +73,11 @@ describe("composeAuthorizerChain", () => {
   });
 
   it("maps an allow verdict to an approved decision and injects the query", async () => {
-    const terminal = makeTerminal({ approved: false, state: "denied" });
+    const terminal = makeTerminal({
+      approved: false,
+      state: "denied",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     const link = makeLink({ kind: "allow" }, "model-judge");
     const query = makeQuery();
     const details = makeDetails();
@@ -139,6 +148,7 @@ describe("composeAuthorizerChain", () => {
     const terminalDecision: PermissionPromptDecision = {
       approved: false,
       state: "denied",
+      decidedBy: DECIDED_BY_HUMAN,
       confirmationUnavailable: true,
     };
     const terminal = makeTerminal(terminalDecision);
@@ -186,7 +196,11 @@ describe("composeAuthorizerChain", () => {
   });
 
   it("reaches the terminal when every link defers", async () => {
-    const terminal = makeTerminal({ approved: true, state: "approved" });
+    const terminal = makeTerminal({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     const first = makeLink({ kind: "defer" }, "first");
     const second = makeLink({ kind: "defer" }, "second");
 
@@ -200,7 +214,11 @@ describe("composeAuthorizerChain", () => {
 
     // The terminal's own decision passes through unchanged — a link that
     // deferred is not the decider.
-    expect(decision).toEqual({ approved: true, state: "approved" });
+    expect(decision).toEqual({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
     expect(terminal.authorize).toHaveBeenCalledOnce();
   });
 });

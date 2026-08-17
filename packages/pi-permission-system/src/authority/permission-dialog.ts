@@ -31,11 +31,11 @@ export type PermissionPromptDecision = {
   /**
    * What decided this request, stamped by the site that decided it.
    *
-   * Optional only while the producers are migrated onto it; it becomes
-   * required, which is what makes "every decision names its decider" a
-   * compile-time guarantee rather than a convention (#726).
+   * Required: every decision names its decider, and the type is what
+   * guarantees it rather than a convention each producer has to remember — the
+   * same discipline `PromptPermissionDetails.payload` carries (#726).
    */
-  decidedBy?: DecisionSource;
+  decidedBy: DecisionSource;
 };
 
 /**

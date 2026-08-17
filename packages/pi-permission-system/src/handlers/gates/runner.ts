@@ -66,7 +66,7 @@ export class GateRunner {
         this.reporter.writeReviewLog(gate.log.event, {
           ...gate.log.details,
           requestId,
-          ...(gate.decidedBy ? { decidedBy: gate.decidedBy } : {}),
+          decidedBy: gate.decidedBy,
         });
       }
       if (gate.decision) {

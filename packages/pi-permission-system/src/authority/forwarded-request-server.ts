@@ -306,7 +306,7 @@ export class ForwardedRequestServer implements InboxProcessor {
     return {
       approved: true,
       state: "approved",
-      ...(decision.decidedBy ? { decidedBy: decision.decidedBy } : {}),
+      decidedBy: decision.decidedBy,
     };
   }
 

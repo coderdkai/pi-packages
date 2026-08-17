@@ -4,6 +4,7 @@ import {
   applyPermissionGate,
   type PermissionGateParams,
 } from "#src/permission-gate";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 
 function makeParams(
   overrides: Partial<PermissionGateParams> = {},
@@ -79,6 +80,7 @@ describe("applyPermissionGate", () => {
     const unavailableDecision: PermissionPromptDecision = {
       approved: false,
       state: "denied",
+      decidedBy: DECIDED_BY_HUMAN,
       confirmationUnavailable: true,
     };
 
@@ -126,6 +128,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -140,6 +143,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied_with_reason",
+        decidedBy: DECIDED_BY_HUMAN,
         denialReason: "not now",
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
@@ -158,6 +162,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -174,6 +179,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: true,
         state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -188,6 +194,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: true,
         state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -204,6 +211,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: true,
         state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -222,6 +230,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: true,
         state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -237,6 +246,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: true,
         state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({
@@ -251,6 +261,7 @@ describe("applyPermissionGate", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
       };
       const promptForApproval = vi.fn().mockResolvedValue(decision);
       const params = makeParams({

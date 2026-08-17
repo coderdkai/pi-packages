@@ -19,6 +19,7 @@ import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
 import type { PermissionQuery } from "#src/service";
 import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import { makePromptPreferences } from "#test/helpers/prompt-view-fixtures";
 
 /** The full constructor bag `AuthorizerSelection` takes (the ctor intersection). */
@@ -39,9 +40,11 @@ export function makePrompterApi(): PermissionPrompterApi & {
   prompt: Mock<PermissionPrompterApi["prompt"]>;
 } {
   return {
-    prompt: vi
-      .fn<PermissionPrompterApi["prompt"]>()
-      .mockResolvedValue({ approved: true, state: "approved" }),
+    prompt: vi.fn<PermissionPrompterApi["prompt"]>().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    }),
   };
 }
 
@@ -87,7 +90,11 @@ export function makeAuthorizerSelectionDeps(
       overrides.getPromptPreferences ?? (() => makePromptPreferences()),
     requestPermissionDecision:
       overrides.requestPermissionDecision ??
-      vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
+      vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
     registry: overrides.registry,
     servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),

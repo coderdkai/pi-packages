@@ -3,6 +3,7 @@ import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type { requestPermissionDecision } from "#src/authority/permission-prompt-component";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import {
   makePromptDetails,
   makePromptPayload,
@@ -49,9 +50,11 @@ function makeDeps(
   const ui = makePromptUi();
   const decisionFn =
     overrides.requestPermissionDecision ??
-    vi
-      .fn<typeof requestPermissionDecision>()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    vi.fn<typeof requestPermissionDecision>().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
   return {
     deps: {
       ui,
@@ -157,7 +160,11 @@ describe("LocalUserAuthorizer", () => {
     const ui = makePromptUi();
     const decisionFn = vi.fn<typeof requestPermissionDecision>(() => {
       calls.push("dialog");
-      return Promise.resolve({ approved: true, state: "approved" });
+      return Promise.resolve({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      });
     });
     const authorizer = new LocalUserAuthorizer({
       ui,
@@ -280,6 +287,7 @@ describe("LocalUserAuthorizer", () => {
     const decision: PermissionPromptDecision = {
       approved: false,
       state: "denied",
+      decidedBy: DECIDED_BY_HUMAN,
     };
     const { deps } = makeDeps({
       requestPermissionDecision: vi

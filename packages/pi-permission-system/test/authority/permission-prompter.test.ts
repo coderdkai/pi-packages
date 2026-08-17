@@ -6,6 +6,7 @@ import {
   type PermissionPrompterDeps,
   type PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import {
   makePromptDetails,
   makePromptPayload,
@@ -21,7 +22,11 @@ import {
  * its own decision.
  */
 function makeAuthorizer(
-  decision: PermissionPromptDecision = { approved: true, state: "approved" },
+  decision: PermissionPromptDecision = {
+    approved: true,
+    state: "approved",
+    decidedBy: DECIDED_BY_HUMAN,
+  },
 ): TerminalAuthorizer {
   return {
     authorize: vi
@@ -87,7 +92,11 @@ describe("PermissionPrompter", () => {
     it("logs permission_request.approved when the authorizer approves", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      });
 
       await prompter.prompt(authorizer, makeDetails());
 
@@ -103,7 +112,11 @@ describe("PermissionPrompter", () => {
     it("logs permission_request.denied when the authorizer denies", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: false, state: "denied" });
+      const authorizer = makeAuthorizer({
+        approved: false,
+        state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
+      });
 
       await prompter.prompt(authorizer, makeDetails());
 
@@ -123,6 +136,7 @@ describe("PermissionPrompter", () => {
         approved: false,
         state: "denied",
         confirmationUnavailable: true,
+        decidedBy: DECIDED_BY_HUMAN,
       });
 
       await prompter.prompt(authorizer, makeDetails());
@@ -142,6 +156,7 @@ describe("PermissionPrompter", () => {
         approved: false,
         state: "denied_with_reason",
         denialReason: "too sensitive",
+        decidedBy: DECIDED_BY_HUMAN,
       });
 
       await prompter.prompt(authorizer, makeDetails());
@@ -209,6 +224,7 @@ describe("PermissionPrompter", () => {
       const decision: PermissionPromptDecision = {
         approved: false,
         state: "denied_with_reason",
+        decidedBy: DECIDED_BY_HUMAN,
         denialReason: "sensitive",
       };
       const authorizer = makeAuthorizer(decision);

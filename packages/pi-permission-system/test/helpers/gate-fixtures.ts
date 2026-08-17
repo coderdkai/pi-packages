@@ -17,6 +17,7 @@ import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
 import {
   makeGatePromptDetails,
@@ -118,9 +119,11 @@ export function makeGateRunner(
     (vi.fn() as SessionApprovalRecorder["recordSessionApproval"]);
   const escalate =
     overrides.escalate ??
-    vi
-      .fn<AskEscalator["escalate"]>()
-      .mockResolvedValue({ approved: true, state: "approved" });
+    vi.fn<AskEscalator["escalate"]>().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      decidedBy: DECIDED_BY_HUMAN,
+    });
   const isYoloEnabled =
     overrides.isYoloEnabled ?? ((): boolean => overrides.yolo ?? false);
   const runner = new GateRunner(

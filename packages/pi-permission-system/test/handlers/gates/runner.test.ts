@@ -4,6 +4,7 @@ import type { GateBypass } from "#src/handlers/gates/descriptor";
 import type { PermissionDecisionEvent } from "#src/permission-events";
 import { EXTENSION_TAG } from "#src/presentation/agent-renderer";
 import { SessionApproval } from "#src/session-approval";
+import { DECIDED_BY_HUMAN } from "#test/helpers/decision-fixtures";
 import { makeDescriptor, makeGateRunner } from "#test/helpers/gate-fixtures";
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
 import { makePromptPayload } from "#test/helpers/prompt-details-fixtures";
@@ -226,9 +227,11 @@ describe("GateRunner — descriptor path", () => {
   it("returns allow and emits user_approved when ask + user approves", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     const result = await runner.run(makeDescriptor(), null);
     expect(result).toEqual({ action: "allow" });
@@ -243,9 +246,11 @@ describe("GateRunner — descriptor path", () => {
   it("returns allow, emits user_approved_for_session, and records session rule on approved_for_session", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     const descriptor = makeDescriptor({
       sessionApproval: SessionApproval.single("read", "*"),
@@ -265,9 +270,11 @@ describe("GateRunner — descriptor path", () => {
   it("calls recordSessionApproval once with the full SessionApproval when sessionApproval has multiple patterns", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     const approval = SessionApproval.multiple("external_directory", [
       "/outside/a/*",
@@ -283,7 +290,11 @@ describe("GateRunner — descriptor path", () => {
   it("returns block and emits user_denied when ask + user denies", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi.fn().mockResolvedValue({ approved: false, state: "denied" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: false,
+        state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     const result = await runner.run(makeDescriptor(), null);
     expect(result).toMatchObject({ action: "block" });
@@ -419,9 +430,11 @@ describe("GateRunner — descriptor path", () => {
   it("does not call recordSessionApproval when user approves once (no sessionApproval)", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     await runner.run(makeDescriptor(), null);
     expect(deps.recordSessionApproval).not.toHaveBeenCalled();
@@ -451,9 +464,11 @@ describe("GateRunner — descriptor path", () => {
   it("does not call recordSessionApproval when user approves for session but no sessionApproval on descriptor", async () => {
     const { runner, deps } = makeGateRunner({
       resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
     });
     // No sessionApproval on descriptor
     await runner.run(makeDescriptor(), null);
@@ -621,7 +636,10 @@ describe("GateRunner.run — null and bypass dispatch", () => {
 
   it("returns allow for a bypass with no log or decision", async () => {
     const { runner, deps } = makeGateRunner();
-    const bypass: GateBypass = { action: "allow" };
+    const bypass: GateBypass = {
+      action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
+    };
     const result = await runner.run(bypass, null);
     expect(result).toEqual({ action: "allow" });
     expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
@@ -632,12 +650,14 @@ describe("GateRunner.run — null and bypass dispatch", () => {
     const { runner, deps } = makeGateRunner();
     const bypass: GateBypass = {
       action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
       log: { event: "infra.bypass", details: { path: "/x" } },
     };
     await runner.run(bypass, null);
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith("infra.bypass", {
       path: "/x",
       requestId: expect.stringMatching(/^perm-/),
+      decidedBy: { kind: "infrastructure_read" },
     });
     expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
   });
@@ -653,7 +673,11 @@ describe("GateRunner.run — null and bypass dispatch", () => {
       agentName: null,
       matchedPattern: null,
     };
-    const bypass: GateBypass = { action: "allow", decision };
+    const bypass: GateBypass = {
+      action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
+      decision,
+    };
     await runner.run(bypass, null);
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith({
       ...decision,
@@ -744,6 +768,7 @@ describe("GateRunner — request identity", () => {
     const { runner, reviewWrites } = makeRecordingRunner();
     const bypass: GateBypass = {
       action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
       log: {
         event: "permission_request.infrastructure_auto_allowed",
         details: { path: "/x" },
@@ -826,6 +851,7 @@ describe("GateRunner — request identity", () => {
     const { runner, reviewWrites, decisions } = makeRecordingRunner();
     const bypass: GateBypass = {
       action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
       log: {
         event: "permission_request.infrastructure_auto_allowed",
         details: { path: "/x" },

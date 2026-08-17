@@ -1,8 +1,8 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import type {
-  PermissionPromptDecision,
   RequestPermissionOptions,
+  UnattributedDecision,
 } from "#src/authority/permission-dialog";
 import {
   type PermissionPromptUi,
@@ -37,7 +37,7 @@ type PromptFactory = (
   tui: { requestRender: () => void },
   theme: ReturnType<typeof plainTheme>,
   keybindings: { matches(data: string, action: string): boolean },
-  done: (decision: PermissionPromptDecision) => void,
+  done: (decision: UnattributedDecision) => void,
 ) => CapturedComponent;
 
 /** Pi's default binding for the `app.tools.expand` action. */
@@ -60,9 +60,9 @@ function makeFakeView(
   const custom = (
     factory: PromptFactory,
     options: unknown,
-  ): Promise<PermissionPromptDecision> => {
+  ): Promise<UnattributedDecision> => {
     captured.options = options;
-    return new Promise<PermissionPromptDecision>((resolve) => {
+    return new Promise<UnattributedDecision>((resolve) => {
       captured.component = factory(
         { requestRender: vi.fn() },
         plainTheme(),
@@ -136,7 +136,7 @@ async function runPrompt(
   doublePressToConfirm: boolean,
   keys: string[],
   options?: RequestPermissionOptions,
-): Promise<PermissionPromptDecision> {
+): Promise<UnattributedDecision> {
   const { view, captured } = makeFakeView(doublePressToConfirm);
   const promise = presentInlinePermissionPrompt(
     view,
@@ -437,6 +437,8 @@ describe("presentInlinePermissionPrompt", () => {
 
       captured.component?.handleInput("y");
       captured.component?.handleInput("y");
+      // Unattributed: the inline component states the outcome, and the
+      // dispatcher above it names the surface the human answered on.
       expect(await promise).toEqual({ approved: true, state: "approved" });
     });
 
