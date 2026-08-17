@@ -182,6 +182,69 @@ describe("createPermissionSystemLogger", () => {
       });
     });
 
+    test("bounds a string nested inside the decision provenance record", () => {
+      config.reviewLogFieldMaxWidth = 20;
+
+      makeLogger().review("permission_request.denied", {
+        decidedBy: {
+          kind: "authorizer",
+          name: "model-judge",
+          verdict: "deny",
+          reason: "f".repeat(500),
+        },
+      });
+
+      // decidedBy is the first nested object the review stream carries, and
+      // the bound lives at writeLine rather than at each producer precisely so
+      // a new record shape cannot escape it.
+      expect(writtenReviewEntry().decidedBy).toEqual({
+        kind: "authorizer",
+        name: "model-judge",
+        verdict: "deny",
+        reason: `${"f".repeat(20)}\u2026`,
+      });
+    });
+
+    test("bounds a string nested two frames deep in a relayed provenance record", () => {
+      config.reviewLogFieldMaxWidth = 10;
+
+      makeLogger().review("permission_request.approved", {
+        decidedBy: {
+          kind: "forwarded",
+          responderSessionId: "parent-session",
+          decision: {
+            kind: "unavailable",
+            reason: "g".repeat(500),
+          },
+        },
+      });
+
+      expect(writtenReviewEntry()).toMatchObject({
+        decidedBy: {
+          decision: { reason: `${"g".repeat(10)}\u2026` },
+        },
+      });
+    });
+
+    test("masks a sensitive-keyed value nested in a provenance record", () => {
+      makeLogger().review("permission_request.denied", {
+        decidedBy: {
+          kind: "authorizer",
+          name: "model-judge",
+          verdict: "deny",
+          apiKey: "TEST_VALUE_SECRET",
+        },
+      });
+
+      // A cap is not redaction, and both have to reach the nested record.
+      expect(readFileSync(reviewLogPath, "utf8")).not.toContain(
+        "TEST_VALUE_SECRET",
+      );
+      expect(writtenReviewEntry()).toMatchObject({
+        decidedBy: { apiKey: "[redacted]" },
+      });
+    });
+
     test("leaves the debug log unbounded, since it exists to be read in full", () => {
       config.debugLog = true;
       config.reviewLogFieldMaxWidth = 10;
