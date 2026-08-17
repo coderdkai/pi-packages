@@ -20,8 +20,15 @@ function makeQuery(): PermissionQuery {
   };
 }
 
-/** A terminal stub returning a fixed decision; exposes the vi.fn for assertions. */
-function makeTerminal(decision: PermissionPromptDecision) {
+/**
+ * A terminal stub returning a fixed decision; exposes the vi.fn for assertions.
+ *
+ * The default is filler for the tests that assert the terminal is never
+ * reached; a test whose subject is the terminal's own decision passes one.
+ */
+function makeTerminal(
+  decision: PermissionPromptDecision = { approved: true, state: "approved" },
+) {
   return {
     authorize: vi
       .fn<
@@ -51,7 +58,7 @@ function makeLink(verdict: AuthorizerVerdict, name = "link") {
 
 describe("composeAuthorizerChain", () => {
   it("returns the terminal instance itself when there are no links", () => {
-    const terminal = makeTerminal({ approved: true, state: "approved" });
+    const terminal = makeTerminal();
 
     const composed = composeAuthorizerChain([], terminal, makeQuery(), log);
 
@@ -77,7 +84,7 @@ describe("composeAuthorizerChain", () => {
   });
 
   it("maps a deny verdict with a reason to a denied_with_reason decision", async () => {
-    const terminal = makeTerminal({ approved: true, state: "approved" });
+    const terminal = makeTerminal();
     const link = makeLink({
       kind: "deny",
       reason: "wrong path; use pi-packages",
@@ -95,7 +102,7 @@ describe("composeAuthorizerChain", () => {
   });
 
   it("maps a deny verdict without a reason to a plain denied decision", async () => {
-    const terminal = makeTerminal({ approved: true, state: "approved" });
+    const terminal = makeTerminal();
     const link = makeLink({ kind: "deny" });
 
     const composed = composeAuthorizerChain([link], terminal, makeQuery(), log);
@@ -124,7 +131,7 @@ describe("composeAuthorizerChain", () => {
   });
 
   it("tries links in order and the first non-defer verdict wins", async () => {
-    const terminal = makeTerminal({ approved: true, state: "approved" });
+    const terminal = makeTerminal();
     const first = makeLink({ kind: "defer" });
     const second = makeLink({ kind: "deny", reason: "no" });
     const third = makeLink({ kind: "allow" });

@@ -13,8 +13,15 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * A terminal stub returning a fixed decision.
+ *
+ * The default is filler for the tests whose subject is the review entry's
+ * shape rather than the outcome; a test asserting a particular outcome passes
+ * its own decision.
+ */
 function makeAuthorizer(
-  decision: PermissionPromptDecision,
+  decision: PermissionPromptDecision = { approved: true, state: "approved" },
 ): TerminalAuthorizer {
   return {
     authorize: vi
@@ -54,7 +61,7 @@ describe("PermissionPrompter", () => {
     it("logs permission_request.waiting before the outcome", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
 
       await prompter.prompt(authorizer, makeDetails());
 
@@ -68,7 +75,7 @@ describe("PermissionPrompter", () => {
     });
 
     it("calls authorizer.authorize with the details", async () => {
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
       const prompter = new PermissionPrompter(makeDeps());
       const details = makeDetails();
 
@@ -168,7 +175,7 @@ describe("PermissionPrompter", () => {
     it("includes all standard fields in the waiting log entry", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
       const details = makeDetails({
         toolCallId: "tc-1",
         skillName: "librarian",
@@ -200,7 +207,7 @@ describe("PermissionPrompter", () => {
     it("uses null for optional fields not present in details", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
 
       await prompter.prompt(authorizer, makeDetails());
 
@@ -220,7 +227,7 @@ describe("PermissionPrompter", () => {
     it("records the payload's request facts rather than its prompt wording", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
 
       await prompter.prompt(
         authorizer,
@@ -247,7 +254,7 @@ describe("PermissionPrompter", () => {
     it("persists neither the payload nor the prompt sentence", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));
-      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+      const authorizer = makeAuthorizer();
 
       await prompter.prompt(authorizer, makeDetails());
 
