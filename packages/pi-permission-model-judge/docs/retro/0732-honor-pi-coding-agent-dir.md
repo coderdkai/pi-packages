@@ -33,4 +33,25 @@ Ran a disposable spike test to measure the red before planning the TDD cycle, an
 - Classified as `fix:`, not `fix!:`, per the operator's choice of a clean fix with no legacy fallback.
   The behavior change on upgrade is real but narrow, and is called out in the commit body and the close comment.
 
+## Stage: Implementation — TDD (2026-08-17T17:31:51Z)
+
+### Session summary
+
+Landed the plan's single TDD cycle plus one Tidy-First preparatory commit: `config-loader.ts` no longer reads `homedir()` or `process.cwd()`, and `extension.ts` supplies both scopes with `agentDir` resolved from the SDK's `getAgentDir()`.
+Package tests went 47 → 48; `check`, root `lint`, full `test`, and `fallow dead-code` are green, and the pre-completion reviewer returned PASS.
+
+### Observations
+
+- The `tidy-first-assessor` returned exactly one Recommended item — widen `ctxWithRegistry()` to take a `cwd` — and it was the right call: the new test is the first in that file to need a `ctx.cwd` other than the hardcoded `"/project"` while still needing the same `modelRegistry` shape.
+  Its Optional `RegisteredAuthorizer` type alias was folded into the same `refactor:` commit so the `fix:` commit stayed purely behavioral.
+- It explicitly declined two things worth recording: a `driveAuthorizer()` helper wrapping the system-under-test call (against the `testing` skill's rule that the repeated act *is* the test subject), and sharing a temp-config fixture with `config-loader.test.ts` (same mechanics, different logical purpose — unit-testing merge semantics vs. an end-to-end wiring fixture).
+  It also checked, rather than assumed, that Vitest's outer-then-inner `beforeEach` / inner-then-outer `afterEach` ordering lets a nested `describe` add env stubbing without fighting the file-scoped hooks.
+- The planning session's spike paid off exactly as intended.
+  The landed red was `complete` called 0 times, not a registration failure — on this machine the link *did* register from the real `~/.pi/agent` config, which is the false green the plan predicted and designed the assertion around.
+- No deviations from the plan's Module-Level Changes: all three listed files were touched and nothing listed went untouched.
+  `docs/configuration.md` correctly needed no edit — it already claimed `PI_CODING_AGENT_DIR` support, so the fix made an existing line true.
+- A tool call in this session tripped the permission system's own `external_directory` gate by dropping the `pi-packages/packages/` prefix from a `Read` path — the exact typo-path class this package exists to judge, and a live reminder to pass file-tool paths repo-relative.
+- Pre-completion reviewer: PASS, no warnings.
+  It independently confirmed the missed-caller grep, the teardown ordering, and the `fix:` (not `fix!:`) typing.
+
 [#762]: https://github.com/gotgenes/pi-packages/issues/762
