@@ -43,6 +43,19 @@ export interface Authorizer {
 }
 
 /**
+ * A resolved chain link together with the operator-configured name it came
+ * from.
+ *
+ * `AuthorizerRegistry` already keys links by name, and `AuthorizerSelection`
+ * has the name in scope when it resolves the operator's `authorizerChain`; the
+ * name is carried through composition so a decision record can say *which*
+ * link decided rather than only which links were consulted.
+ */
+export interface NamedAuthorizer extends Authorizer {
+  readonly name: string;
+}
+
+/**
  * The terminal link: on `ask`, rules on a single request and is told the
  * decision. Structurally cannot defer — it always returns a full
  * {@link PermissionPromptDecision}, which is the type-level enforcement of

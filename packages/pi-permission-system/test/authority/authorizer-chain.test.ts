@@ -31,9 +31,10 @@ function makeTerminal(decision: PermissionPromptDecision) {
   };
 }
 
-/** A non-terminal link stub returning a fixed verdict. */
-function makeLink(verdict: AuthorizerVerdict) {
+/** A non-terminal link stub returning a fixed verdict, under a given name. */
+function makeLink(verdict: AuthorizerVerdict, name = "link") {
   return {
+    name,
     authorize: vi
       .fn<
         (

@@ -1,7 +1,7 @@
 import type { AuthorizerLog, PermissionQuery } from "#src/service";
 import type {
-  Authorizer,
   AuthorizerVerdict,
+  NamedAuthorizer,
   TerminalAuthorizer,
 } from "./authorizer";
 import { createDeniedPermissionDecision } from "./permission-dialog";
@@ -12,9 +12,9 @@ import { createDeniedPermissionDecision } from "./permission-dialog";
  * context-selected `terminal` that always decides.
  *
  * The signature is the type-level terminal-cannot-defer invariant: `links` are
- * deferring {@link Authorizer}s while `terminal` is a {@link TerminalAuthorizer}
- * (returns a full decision), so a deferring link cannot occupy the terminal
- * slot.
+ * deferring {@link NamedAuthorizer}s while `terminal` is a
+ * {@link TerminalAuthorizer} (returns a full decision), so a deferring link
+ * cannot occupy the terminal slot.
  *
  * Each link is handed the session-scoped `query` and the review-log `log` at
  * `authorize` time (ADR 0007 §3) so it queries the deterministic engine at gate
@@ -24,7 +24,7 @@ import { createDeniedPermissionDecision } from "./permission-dialog";
  * ships until a link registers.
  */
 export function composeAuthorizerChain(
-  links: readonly Authorizer[],
+  links: readonly NamedAuthorizer[],
   terminal: TerminalAuthorizer,
   query: PermissionQuery,
   log: AuthorizerLog,
