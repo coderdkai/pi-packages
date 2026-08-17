@@ -75,6 +75,11 @@ export async function withRetry<T>(
   return fn();
 }
 
+/** One-line progress notice a polling loop can stream while it backs off. */
+export function formatRetryNotice(info: RetryAttempt): string {
+  return `transient gh failure, retry ${info.attempt}/${MAX_RETRIES} in ${info.delayMs / 1000}s: ${info.error.message}`;
+}
+
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }

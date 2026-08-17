@@ -9,9 +9,10 @@
 
 import { findRetryDelay, formatAborted, formatProgress } from "./ci-helpers";
 import type { MergeMethod } from "./config";
-import { gh, ghJson, git } from "./github";
+import { gh, ghJson, ghJsonRetrying, git } from "./github";
 import { classifyMergeState, type MergeReadiness } from "./merge-state";
 import { sleep } from "./process";
+import { formatRetryNotice } from "./retry";
 
 export type { MergeMethod };
 
@@ -27,6 +28,13 @@ interface ReleasePR {
 interface PRState extends MergeReadiness {
   number: number;
   title: string;
+}
+
+/** The PR fields the REST verification reads after a failed merge call. */
+interface MergeVerification {
+  merged: boolean;
+  state: string;
+  merge_commit_sha: string | null;
 }
 
 export interface ToolResult {
@@ -142,7 +150,7 @@ export async function mergeReleasePR(
       return abortedMergeResult(elapsed);
     }
 
-    const pr = await ghJson<PRState>(
+    const pr = await ghJsonRetrying<PRState>(
       [
         "pr",
         "view",
@@ -150,7 +158,15 @@ export async function mergeReleasePR(
         "--json",
         "number,title,mergeable,mergeStateStatus,statusCheckRollup",
       ],
-      signal,
+      {
+        signal,
+        onRetry: (info) => {
+          // The backoff is wall clock the caller asked us to bound, so it
+          // counts against `timeout` just like a poll interval does.
+          elapsed += Math.round(info.delayMs / 1000);
+          onProgress?.(formatRetryNotice(info));
+        },
+      },
     );
 
     const decision = classifyMergeState(pr);
@@ -232,8 +248,60 @@ async function performMerge(
   title: string,
   signal: AbortSignal | undefined,
 ): Promise<ToolResult> {
-  await gh(["pr", "merge", String(prNumber), `--${method}`], signal);
+  try {
+    await gh(["pr", "merge", String(prNumber), `--${method}`], signal);
+  } catch (error) {
+    return resolveMergeFailure(prNumber, title, messageOf(error), signal);
+  }
 
+  return mergedResult(prNumber, title, [], signal);
+}
+
+/**
+ * A failed merge call is ambiguous — the merge may have applied before the
+ * response was lost.
+ * Re-read the PR over REST, which stays available when the GraphQL endpoint
+ * behind `gh pr merge` is degraded, rather than leaving the caller to guess
+ * whether a retry is safe.
+ */
+async function resolveMergeFailure(
+  prNumber: number,
+  title: string,
+  mergeError: string,
+  signal: AbortSignal | undefined,
+): Promise<ToolResult> {
+  let verification: MergeVerification;
+  try {
+    verification = await ghJsonRetrying<MergeVerification>(
+      mergeVerificationArgs(prNumber),
+      { signal },
+    );
+  } catch (error) {
+    return unverifiedMergeFailureResult(prNumber, mergeError, messageOf(error));
+  }
+
+  if (verification.merged) {
+    return mergedResult(
+      prNumber,
+      title,
+      [
+        `note: the merge call failed (${mergeError}) but the merge landed`,
+        `verified: merged via REST (merge_commit_sha: ${verification.merge_commit_sha})`,
+      ],
+      signal,
+    );
+  }
+
+  return mergeFailureResult(prNumber, mergeError, verification.state);
+}
+
+/** Pull the merged result and report the new HEAD SHA, plus any extra lines. */
+async function mergedResult(
+  prNumber: number,
+  title: string,
+  extraLines: string[],
+  signal: AbortSignal | undefined,
+): Promise<ToolResult> {
   await git(["pull", "--ff-only"], signal);
 
   const headSha = await git(["rev-parse", "HEAD"], signal);
@@ -243,9 +311,60 @@ async function performMerge(
       `Merged PR #${prNumber}: ${title}`,
       `head_sha: ${headSha}`,
       `short_sha: ${headSha.substring(0, 7)}`,
+      ...extraLines,
     ].join("\n"),
     isError: false,
   };
+}
+
+/** Format the failure result for a merge call that verifiably did not apply. */
+function mergeFailureResult(
+  prNumber: number,
+  mergeError: string,
+  state: string,
+): ToolResult {
+  return {
+    content: [
+      `failed to merge PR #${prNumber}`,
+      "  merged: false",
+      `  state: ${state}`,
+      `  error: ${mergeError}`,
+      "  verified: not merged via REST",
+      "  safe to retry: yes",
+    ].join("\n"),
+    isError: true,
+  };
+}
+
+/** Format the failure result when the verification read failed too. */
+function unverifiedMergeFailureResult(
+  prNumber: number,
+  mergeError: string,
+  verificationError: string,
+): ToolResult {
+  return {
+    content: [
+      `failed to merge PR #${prNumber}`,
+      "  merged: unknown",
+      `  error: ${mergeError}`,
+      `  verification_error: ${verificationError}`,
+      `  safe to retry: no — verify by hand with: gh api 'repos/{owner}/{repo}/pulls/${prNumber}' --jq '{state:.state,merged:.merged}'`,
+    ].join("\n"),
+    isError: true,
+  };
+}
+
+function mergeVerificationArgs(prNumber: number): string[] {
+  return [
+    "api",
+    `repos/{owner}/{repo}/pulls/${prNumber}`,
+    "--jq",
+    "{state:.state,merged:.merged,merge_commit_sha:.merge_commit_sha}",
+  ];
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // ---------- watchRelease ----------
