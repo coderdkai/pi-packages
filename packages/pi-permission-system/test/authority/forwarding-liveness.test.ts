@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -203,5 +204,173 @@ describe("ServingHeartbeatStore.clearServing", () => {
     clock += 1;
     store.markServing("sess-1");
     expect(readRecord("sess-1").updatedAt).toBe(clock);
+  });
+});
+
+/** Publishes a record directly, standing in for another process's session. */
+function publishRecord(
+  sessionId: string,
+  overrides: Partial<ServingHeartbeat> = {},
+): void {
+  mkdirSync(servingHeartbeatDir(forwardingDir), { recursive: true });
+  writeFileSync(
+    servingHeartbeatPath(forwardingDir, sessionId),
+    JSON.stringify({ sessionId, pid: 4242, updatedAt: clock, ...overrides }),
+    "utf-8",
+  );
+}
+
+/** Publishes an unusable record, standing in for a truncated or foreign write. */
+function publishRaw(sessionId: string, contents: string): void {
+  mkdirSync(servingHeartbeatDir(forwardingDir), { recursive: true });
+  writeFileSync(
+    servingHeartbeatPath(forwardingDir, sessionId),
+    contents,
+    "utf-8",
+  );
+}
+
+/** Only pid 4242 is running, unless a test says otherwise. */
+const onlyOwnPidAlive = (pid: number): boolean => pid === 4242;
+
+describe("ServingHeartbeatStore.read", () => {
+  it("reports absent when the session has published nothing", () => {
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("absent");
+  });
+
+  it("reports alive for a fresh record whose process is running", () => {
+    publishRecord("sess-1");
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("alive");
+  });
+
+  it("reports alive one tick short of the staleness window", () => {
+    publishRecord("sess-1");
+    clock += SERVING_HEARTBEAT_STALE_MS - 1;
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("alive");
+  });
+
+  it("reports stale once the record outlives the staleness window", () => {
+    publishRecord("sess-1");
+    clock += SERVING_HEARTBEAT_STALE_MS;
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("stale");
+  });
+
+  it("reports dead_pid when the recorded process is gone", () => {
+    publishRecord("sess-1", { pid: 9999 });
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("dead_pid");
+  });
+
+  it("names the dead process rather than the age, when the record is both", () => {
+    publishRecord("sess-1", { pid: 9999 });
+    clock += SERVING_HEARTBEAT_STALE_MS;
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("dead_pid");
+  });
+
+  it("reports absent for an unparseable record", () => {
+    publishRaw("sess-1", "{ truncated");
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.read("sess-1")).toBe("absent");
+  });
+
+  it("reports absent rather than probing a pid that names no process", () => {
+    // `process.kill(0, 0)` addresses the caller's own process group, so a
+    // malformed record must never reach the liveness probe.
+    publishRecord("sess-1", { pid: 0 });
+    const isProcessAlive = vi.fn(onlyOwnPidAlive);
+    const { store } = makeStore({ isProcessAlive });
+    expect(store.read("sess-1")).toBe("absent");
+    expect(isProcessAlive).not.toHaveBeenCalled();
+  });
+
+  it("does not flood the log while a child polls an unreadable record", () => {
+    publishRaw("sess-1", "{ truncated");
+    const { store, logger } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.read("sess-1");
+    store.read("sess-1");
+    expect(logger.review).not.toHaveBeenCalled();
+  });
+});
+
+describe("ServingHeartbeatStore.servingIds", () => {
+  it("is empty when nothing has been published", () => {
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.servingIds()).toEqual([]);
+  });
+
+  it("lists the sessions whose records read as alive", () => {
+    publishRecord("sess-1");
+    publishRecord("sess-2");
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect([...store.servingIds()].sort()).toEqual(["sess-1", "sess-2"]);
+  });
+
+  it("omits a session whose process is gone", () => {
+    publishRecord("sess-1");
+    publishRecord("sess-2", { pid: 9999 });
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.servingIds()).toEqual(["sess-1"]);
+  });
+
+  it("reports the session's own id, not its encoded filename", () => {
+    publishRecord("a/b");
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    expect(store.servingIds()).toEqual(["a/b"]);
+  });
+});
+
+describe("ServingHeartbeatStore pruning", () => {
+  it("removes a record left behind by a process that is gone", () => {
+    publishRecord("dead-session", { pid: 9999 });
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.markServing("sess-1");
+    expect(
+      existsSync(servingHeartbeatPath(forwardingDir, "dead-session")),
+    ).toBe(false);
+  });
+
+  it("removes a record no reader could use", () => {
+    publishRaw("corrupt-session", "{ truncated");
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.markServing("sess-1");
+    expect(
+      existsSync(servingHeartbeatPath(forwardingDir, "corrupt-session")),
+    ).toBe(false);
+  });
+
+  it("keeps a stale record whose process is still running", () => {
+    // Being behind on refreshes is not proof of death, and the reader already
+    // reports it as stale without the record having to be removed.
+    publishRecord("slow-session", {
+      updatedAt: clock - SERVING_HEARTBEAT_STALE_MS,
+    });
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.markServing("sess-1");
+    expect(
+      existsSync(servingHeartbeatPath(forwardingDir, "slow-session")),
+    ).toBe(true);
+  });
+
+  it("publishes its own record alongside the sweep", () => {
+    publishRecord("dead-session", { pid: 9999 });
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.markServing("sess-1");
+    expect(readRecord("sess-1").sessionId).toBe("sess-1");
+  });
+
+  it("sweeps once per session rather than on every refresh", () => {
+    const { store } = makeStore({ isProcessAlive: onlyOwnPidAlive });
+    store.markServing("sess-1");
+    publishRecord("dead-session", { pid: 9999 });
+    clock += SERVING_HEARTBEAT_REFRESH_MS;
+    store.markServing("sess-1");
+    expect(
+      existsSync(servingHeartbeatPath(forwardingDir, "dead-session")),
+    ).toBe(true);
   });
 });

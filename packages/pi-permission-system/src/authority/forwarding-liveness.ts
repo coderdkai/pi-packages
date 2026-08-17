@@ -16,9 +16,11 @@
  * refreshed while it polls and withdrawn when it stops.
  */
 
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   ensureDirectoryExists,
+  isErrnoCode,
   logPermissionForwardingError,
   safeDeleteFile,
   writeJsonFileAtomic,
@@ -60,6 +62,29 @@ export interface ServingHeartbeat {
   updatedAt: number;
 }
 
+/**
+ * How a session's heartbeat reads right now.
+ *
+ * Only `"alive"` means someone is draining the inbox. The other three are the
+ * ways a target can be unserved, kept apart because they are the diagnosis a
+ * stalled forward needs: `"absent"` is a session that exited (or never served,
+ * or runs a version that does not publish), `"dead_pid"` one that was killed,
+ * and `"stale"` one whose process survives but stopped polling.
+ */
+export type HeartbeatState = "alive" | "absent" | "stale" | "dead_pid";
+
+/**
+ * Read side of the heartbeat channel, consumed by a forwarding child.
+ *
+ * Separate from the announce seam because the two have no caller in common: a
+ * serving session only publishes, and a forwarding child only reads (ISP).
+ */
+export interface HeartbeatReader {
+  read(sessionId: string): HeartbeatState;
+  /** Every session whose record reads as alive, for the abandonment diagnostic. */
+  servingIds(): readonly string[];
+}
+
 /** Constructor config for {@link ServingHeartbeatStore}. */
 export interface ServingHeartbeatStoreDeps {
   forwardingDir: string;
@@ -68,6 +93,8 @@ export interface ServingHeartbeatStoreDeps {
   now?: () => number;
   /** The process to record. Injected so a test can publish a pid it controls. */
   pid?: number;
+  /** Injected so a test can decide which pids are running. */
+  isProcessAlive?: (pid: number) => boolean;
 }
 
 const SERVING_HEARTBEAT_DIRECTORY_NAME = "serving";
@@ -107,18 +134,23 @@ export function servingHeartbeatPath(
  * from a timer, and a filesystem failure must degrade to the pre-existing
  * timeout rather than break the poll loop.
  */
-export class ServingHeartbeatStore implements ServingAnnouncer {
+export class ServingHeartbeatStore
+  implements ServingAnnouncer, HeartbeatReader
+{
   private readonly forwardingDir: string;
   private readonly logger: DebugReviewLogger;
   private readonly now: () => number;
   private readonly pid: number;
+  private readonly isProcessAlive: (pid: number) => boolean;
   private published: { sessionId: string; at: number } | null = null;
+  private hasSweptDeadRecords = false;
 
   constructor(deps: ServingHeartbeatStoreDeps) {
     this.forwardingDir = deps.forwardingDir;
     this.logger = deps.logger;
     this.now = deps.now ?? Date.now;
     this.pid = deps.pid ?? process.pid;
+    this.isProcessAlive = deps.isProcessAlive ?? isRunningProcess;
   }
 
   /** Publish (or refresh) `sessionId`'s heartbeat. Throttled; never throws. */
@@ -138,6 +170,7 @@ export class ServingHeartbeatStore implements ServingAnnouncer {
     ) {
       return;
     }
+    this.sweepDeadRecordsOnce();
 
     const heartbeat: ServingHeartbeat = {
       sessionId,
@@ -173,7 +206,102 @@ export class ServingHeartbeatStore implements ServingAnnouncer {
     );
   }
 
+  /** How `sessionId`'s heartbeat reads right now. */
+  read(sessionId: string): HeartbeatState {
+    const record = this.readRecord(
+      servingHeartbeatPath(this.forwardingDir, sessionId),
+    );
+    return record === null ? "absent" : this.classify(record);
+  }
+
+  /** Every session whose record reads as alive. */
+  servingIds(): readonly string[] {
+    const ids: string[] = [];
+    for (const { record } of this.listRecords()) {
+      if (record !== null && this.classify(record) === "alive") {
+        ids.push(record.sessionId);
+      }
+    }
+    return ids;
+  }
+
   // ── Private methods ────────────────────────────────────────────────
+
+  /**
+   * Delete the records of processes that are provably gone, once per session.
+   *
+   * Without this the directory grows one record per session that was killed
+   * rather than shut down, forever. Bounded to a single directory read at the
+   * first announcement, and safe under pid reuse: a wrongly swept owner
+   * republishes within the refresh window, which is shorter than the grace a
+   * forwarding child waits out.
+   *
+   * Only a dead pid is proof. A record that is merely stale belongs to a
+   * process that still exists, and the reader already reports it as stale
+   * without anyone having to remove it.
+   */
+  private sweepDeadRecordsOnce(): void {
+    if (this.hasSweptDeadRecords) {
+      return;
+    }
+    this.hasSweptDeadRecords = true;
+    for (const { path, record } of this.listRecords()) {
+      if (record !== null && this.isProcessAlive(record.pid)) {
+        continue;
+      }
+      safeDeleteFile(
+        this.logger,
+        path,
+        "abandoned permission forwarding serving heartbeat",
+      );
+    }
+  }
+
+  /** Every published record, paired with its path; unusable ones read as `null`. */
+  private listRecords(): {
+    path: string;
+    record: ServingHeartbeat | null;
+  }[] {
+    const directory = servingHeartbeatDir(this.forwardingDir);
+    let names: string[];
+    try {
+      names = readdirSync(directory);
+    } catch {
+      return [];
+    }
+    return names
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => {
+        const path = join(directory, name);
+        return { path, record: this.readRecord(path) };
+      });
+  }
+
+  /**
+   * Read a record, or `null` when it is missing or unusable.
+   *
+   * Silent by design: a forwarding child calls this on every poll tick, so a
+   * warning per unreadable read would flood the review log at four lines a
+   * second. The unusability is already reported once, as the `absent` state on
+   * the abandonment entry.
+   */
+  private readRecord(path: string): ServingHeartbeat | null {
+    try {
+      return asServingHeartbeat(JSON.parse(readFileSync(path, "utf-8")));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Which of the four states a well-formed record is in. */
+  private classify(record: ServingHeartbeat): HeartbeatState {
+    if (!this.isProcessAlive(record.pid)) {
+      return "dead_pid";
+    }
+    return this.now() - record.updatedAt >= SERVING_HEARTBEAT_STALE_MS
+      ? "stale"
+      : "alive";
+  }
 
   /**
    * Whether the record on disk is recent enough to leave alone.
@@ -188,5 +316,54 @@ export class ServingHeartbeatStore implements ServingAnnouncer {
       this.published.sessionId === sessionId &&
       at - this.published.at < SERVING_HEARTBEAT_REFRESH_MS
     );
+  }
+}
+
+// ── Module-private helpers ────────────────────────────────────────────────
+
+/**
+ * Narrow a parsed record, or `undefined`.
+ *
+ * `pid` must be a positive integer specifically: `process.kill(0, 0)` addresses
+ * the caller's own process group and `kill(-n)` a foreign one, so a malformed
+ * record must be rejected before it can reach the liveness probe.
+ */
+function asServingHeartbeat(value: unknown): ServingHeartbeat | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const candidate = value as Partial<ServingHeartbeat>;
+  if (
+    typeof candidate.sessionId !== "string" ||
+    candidate.sessionId.length === 0 ||
+    typeof candidate.pid !== "number" ||
+    !Number.isInteger(candidate.pid) ||
+    candidate.pid <= 0 ||
+    typeof candidate.updatedAt !== "number" ||
+    !Number.isFinite(candidate.updatedAt)
+  ) {
+    return null;
+  }
+  return {
+    sessionId: candidate.sessionId,
+    pid: candidate.pid,
+    updatedAt: candidate.updatedAt,
+  };
+}
+
+/**
+ * Whether `pid` names a running process.
+ *
+ * Signal `0` performs the permission and existence checks without delivering
+ * anything. `EPERM` means the process exists under another user — reported as
+ * alive, the direction that falls back to the timeout rather than abandoning a
+ * request someone may still answer.
+ */
+function isRunningProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return isErrnoCode(error, "EPERM");
   }
 }
