@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import type {
   PermissionsService,
@@ -9,7 +13,7 @@ import {
 } from "@gotgenes/pi-permission-system";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LoadConfigResult } from "#src/config-loader";
+import { getGlobalConfigPath, type LoadConfigResult } from "#src/config-loader";
 import { createModelJudgeExtension } from "#src/extension";
 import type { CompleteFn } from "#src/model-review";
 import { assistantToolCall } from "#test/fixtures/assistant-message";
@@ -226,6 +230,78 @@ describe("createModelJudgeExtension", () => {
       reason: "Doubled; use pi-packages.",
     });
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The production seam: `createModelJudgeExtension` with no injected
+ * `loadConfig`, so the global scope is resolved the way it is in a real
+ * session.
+ */
+describe("global config scope", () => {
+  const SCOPED_INSTRUCTIONS = "Judge paths using the scoped global config.";
+  const SCOPED_PATTERN = "scoped-agent-dir-marker";
+
+  let root: string;
+  let projectCwd: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "model-judge-scope-"));
+    const agentDir = join(root, "agent");
+    projectCwd = join(root, "project");
+    mkdirSync(projectCwd, { recursive: true });
+
+    const globalConfigPath = getGlobalConfigPath(agentDir);
+    mkdirSync(dirname(globalConfigPath), { recursive: true });
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        provider: "anthropic",
+        model: "claude-haiku",
+        instructions: SCOPED_INSTRUCTIONS,
+        typoPatterns: [SCOPED_PATTERN],
+      }),
+    );
+    vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reads the global config from the directory PI_CODING_AGENT_DIR names", async () => {
+    const pi = makeFakePi();
+    const complete: CompleteFn = vi.fn(async () => denyReply());
+    createModelJudgeExtension(pi.api as never, { complete });
+    publishPermissionsService(service);
+    pi.lifecycle.get("session_start")?.({}, ctxWithRegistry(projectCwd));
+    pi.events.get(READY_CHANNEL)?.({});
+
+    const authorize = service.registerAuthorizer.mock
+      .calls[0]?.[1] as RegisteredAuthorizer;
+    await authorize(
+      {
+        requestId: "r1",
+        source: "tool_call",
+        agentName: null,
+        message: "external directory",
+        surface: "external_directory",
+        path: `/x/${SCOPED_PATTERN}/a.ts`,
+      },
+      {},
+      { review: vi.fn(), debug: vi.fn() },
+    );
+
+    // Asserting on the loaded `instructions` — which `reviewPath` sends as the
+    // system prompt — is what makes this a real red. Asserting only that the
+    // link registered passes on a machine that happens to have a config at the
+    // hardcoded `~/.pi/agent`, and fails on one that does not.
+    expect(complete).toHaveBeenCalledWith(
+      MODEL,
+      expect.objectContaining({ systemPrompt: SCOPED_INSTRUCTIONS }),
+      expect.objectContaining({ toolChoice: "any" }),
+    );
   });
 });
 

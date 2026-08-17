@@ -13,7 +13,10 @@
  */
 
 import { complete as realComplete } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  type ExtensionAPI,
+  getAgentDir,
+} from "@earendil-works/pi-coding-agent";
 import {
   getPermissionsService,
   PERMISSIONS_READY_CHANNEL,
@@ -44,8 +47,13 @@ export function createModelJudgeExtension(
   pi: ExtensionAPI,
   dependencies: ModelJudgeDependencies = {},
 ): void {
+  // `getAgentDir()` is read here rather than hoisted out of the lambda so the
+  // env read happens only on the production path, and only when a config is
+  // actually loaded — it honors `PI_CODING_AGENT_DIR`, matching where
+  // pi-permission-system looks for the same global scope.
   const loadConfig =
-    dependencies.loadConfig ?? ((cwd: string) => loadModelJudgeConfig({ cwd }));
+    dependencies.loadConfig ??
+    ((cwd: string) => loadModelJudgeConfig({ cwd, agentDir: getAgentDir() }));
   const complete: CompleteFn =
     dependencies.complete ??
     ((model, context, options) => realComplete(model, context, options));
