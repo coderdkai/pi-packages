@@ -88,6 +88,8 @@ describe("describeExternalDirectoryGate", () => {
     expect(bypass.log).toMatchObject({
       event: "permission_request.infrastructure_auto_allowed",
     });
+    // Containment allowed this, not a rule the operator wrote.
+    expect(bypass.decidedBy).toEqual({ kind: "infrastructure_read" });
   });
 
   it("returns GateBypass respecting custom infraDirs", () => {

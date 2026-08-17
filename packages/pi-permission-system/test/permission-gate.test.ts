@@ -13,6 +13,12 @@ function makeParams(
     promptForApproval: vi.fn<() => Promise<PermissionPromptDecision>>(),
     writeLog: vi.fn(),
     logContext: { source: "test" },
+    decidedByRule: {
+      kind: "rule",
+      surface: "bash",
+      pattern: "*",
+      origin: "global",
+    },
     messages: {
       denyReason: "Denied by policy.",
       unavailableReason: (d) =>
@@ -52,6 +58,12 @@ describe("applyPermissionGate", () => {
           source: "tool_call",
           toolName: "bash",
           resolution: "policy_denied",
+          decidedBy: {
+            kind: "rule",
+            surface: "bash",
+            pattern: "*",
+            origin: "global",
+          },
         },
       );
     });

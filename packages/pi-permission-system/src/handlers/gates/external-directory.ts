@@ -45,6 +45,8 @@ export function describeExternalDirectoryGate(
   if (normalizer.isInfrastructureRead(tcc.toolName, accessPath, infraDirs)) {
     return {
       action: "allow",
+      // Containment allowed this, not a rule the operator wrote.
+      decidedBy: { kind: "infrastructure_read" },
       log: {
         event: "permission_request.infrastructure_auto_allowed",
         details: {

@@ -1,3 +1,4 @@
+import type { DecisionSource } from "#src/authority/decision-source";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
 import type { PermissionDecisionEvent } from "#src/permission-events";
 import type { PromptPayload } from "#src/presentation/prompt-payload";
@@ -79,6 +80,14 @@ export type DecisionEventFacts = Omit<PermissionDecisionEvent, "requestId">;
  */
 export interface GateBypass {
   action: "allow";
+  /**
+   * What decided this short-circuit.
+   *
+   * The gate that bypasses *is* the decider, so it states its own provenance
+   * and the runner relays it onto the log entry rather than inferring one from
+   * the event name (#726). Optional only while the sites are migrated onto it.
+   */
+  decidedBy?: DecisionSource;
   /** Optional review log entry to emit. */
   log?: { event: string; details: Record<string, unknown> };
   /** Optional decision event to emit. */

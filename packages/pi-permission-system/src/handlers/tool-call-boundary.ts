@@ -76,12 +76,15 @@ function recordGateError(
 ): void {
   try {
     audit.recordError();
+    const reason = errorMessage(error);
     reporter.writeReviewLog("permission_request.blocked", {
       requestId: createPermissionRequestId(),
       toolName: bestEffortToolName(event),
       command: bestEffortCommand(event),
       resolution: "gate_error",
-      error: errorMessage(error),
+      error: reason,
+      // The boundary decided, by failing closed -- no rule and no human did.
+      decidedBy: { kind: "gate_error", reason },
     });
   } catch {
     // The block is the guarantee; its bookkeeping is not.

@@ -84,6 +84,14 @@ export function describeBashPathGate(
   if (allSessionCovered) {
     return {
       action: "allow",
+      // Every token was covered, each possibly by a different session pattern
+      // -- the surface is one value and the pattern is not. The entry's
+      // `tokens` lists what was covered.
+      decidedBy: {
+        kind: "session_approval",
+        surface: "path",
+        pattern: null,
+      },
       log: {
         event: "permission_request.session_approved",
         details: {

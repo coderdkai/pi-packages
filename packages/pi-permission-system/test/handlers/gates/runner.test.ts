@@ -39,7 +39,15 @@ describe("GateRunner — descriptor path", () => {
     );
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
       "permission_request.blocked",
-      expect.objectContaining({ resolution: "policy_denied" }),
+      expect.objectContaining({
+        resolution: "policy_denied",
+        decidedBy: {
+          kind: "rule",
+          surface: "read",
+          pattern: "*",
+          origin: "builtin",
+        },
+      }),
     );
   });
 
@@ -92,6 +100,11 @@ describe("GateRunner — descriptor path", () => {
       expect.objectContaining({
         resolution: "session_approved",
         sessionApprovalPattern: "git *",
+        decidedBy: {
+          kind: "session_approval",
+          surface: "bash",
+          pattern: "git *",
+        },
       }),
     );
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
@@ -115,13 +128,38 @@ describe("GateRunner — descriptor path", () => {
     expect(deps.escalate).not.toHaveBeenCalled();
     expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
       "permission_request.auto_approved",
-      expect.objectContaining({ resolution: "auto_approved" }),
+      expect.objectContaining({
+        resolution: "auto_approved",
+        decidedBy: { kind: "yolo", pattern: "*" },
+      }),
     );
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         result: "allow",
         resolution: "auto_approved",
         origin: "yolo",
+      }),
+    );
+  });
+
+  it("preserves the synthetic sentinel that raised a yolo-granted ask", async () => {
+    const { runner, deps } = makeGateRunner({
+      resolveResult: makeCheckResult({
+        state: "ask",
+        matchedPattern: "<opaque-bash-wrapper>",
+      }),
+      isYoloEnabled: () => true,
+    });
+
+    await runner.run(makeDescriptor(), null);
+
+    // Which sentinel raised the ask is what makes a yolo grant over a
+    // synthesized ask legible; "yolo allowed it" alone does not say why it
+    // was asked.
+    expect(deps.reporter.writeReviewLog).toHaveBeenCalledWith(
+      "permission_request.auto_approved",
+      expect.objectContaining({
+        decidedBy: { kind: "yolo", pattern: "<opaque-bash-wrapper>" },
       }),
     );
   });
@@ -714,6 +752,26 @@ describe("GateRunner — request identity", () => {
     await runner.run(bypass, null);
     expect(reviewWrites).toHaveLength(1);
     expect(reviewWrites[0].details.requestId).toMatch(/^perm-/);
+  });
+
+  it("stamps the bypass's own decider onto its review entry", async () => {
+    const { runner, reviewWrites } = makeRecordingRunner();
+    const bypass: GateBypass = {
+      action: "allow",
+      decidedBy: { kind: "infrastructure_read" },
+      log: {
+        event: "permission_request.infrastructure_auto_allowed",
+        details: { path: "/x" },
+      },
+    };
+
+    await runner.run(bypass, null);
+
+    // The gate that short-circuits is the decider; the runner relays what it
+    // states rather than inferring one from the event name.
+    expect(reviewWrites[0].details.decidedBy).toEqual({
+      kind: "infrastructure_read",
+    });
   });
 
   it("keeps the tool call id alongside the minted id on the review entry", async () => {

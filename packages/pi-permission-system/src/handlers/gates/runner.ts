@@ -66,6 +66,7 @@ export class GateRunner {
         this.reporter.writeReviewLog(gate.log.event, {
           ...gate.log.details,
           requestId,
+          ...(gate.decidedBy ? { decidedBy: gate.decidedBy } : {}),
         });
       }
       if (gate.decision) {
@@ -123,12 +124,22 @@ export class GateRunner {
       requestId,
     };
 
+    // Each resolution below states its own decider. The provenance is built
+    // at the branch that decides rather than merged into `logContext`: that
+    // context holds what every resolution of this gate shares, and who decided
+    // is by definition not shared (#726).
+
     // 2. Session-hit fast path
     if (check.source === "session") {
       this.reporter.writeReviewLog("permission_request.session_approved", {
         ...logContext,
         resolution: "session_approved",
         sessionApprovalPattern: check.matchedPattern,
+        decidedBy: {
+          kind: "session_approval",
+          surface: descriptor.surface,
+          pattern: check.matchedPattern ?? null,
+        },
       });
       this.emitDecision(
         requestId,
@@ -152,6 +163,9 @@ export class GateRunner {
       this.reporter.writeReviewLog("permission_request.auto_approved", {
         ...logContext,
         resolution: "auto_approved",
+        // The pattern that raised the ask, sentinel included: "yolo allowed
+        // it" alone does not say why it was asked in the first place.
+        decidedBy: { kind: "yolo", pattern: check.matchedPattern ?? null },
       });
       this.emitDecision(
         requestId,
@@ -202,6 +216,12 @@ export class GateRunner {
       writeLog: (event, details) =>
         this.reporter.writeReviewLog(event, details),
       logContext,
+      decidedByRule: {
+        kind: "rule",
+        surface: descriptor.surface,
+        pattern: check.matchedPattern ?? null,
+        origin: check.origin,
+      },
       messages,
     });
 

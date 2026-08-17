@@ -115,6 +115,7 @@ describe("createFailClosedToolCall", () => {
         command: "cd /repo && git push",
         resolution: "gate_error",
         error: "parser init failed",
+        decidedBy: { kind: "gate_error", reason: "parser init failed" },
       }),
     );
   });

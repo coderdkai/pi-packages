@@ -200,6 +200,11 @@ describe("describeBashExternalDirectoryGate", () => {
       event: "permission_request.session_approved",
       details: expect.objectContaining({ resolution: "session_approved" }),
     });
+    expect(bypass.decidedBy).toEqual({
+      kind: "session_approval",
+      surface: "external_directory",
+      pattern: null,
+    });
   });
 
   it("returns GateDescriptor with multi-pattern sessionApproval for uncovered paths", async () => {

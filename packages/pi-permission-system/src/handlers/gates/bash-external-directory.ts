@@ -47,6 +47,15 @@ export function describeBashExternalDirectoryGate(
   if (uncoveredPaths.length === 0) {
     return {
       action: "allow",
+      // A whole-command bypass covers every external path at once, and each
+      // may have matched a different session pattern -- so the surface is one
+      // value and the pattern is not. The entry's `externalPaths` lists what
+      // was covered.
+      decidedBy: {
+        kind: "session_approval",
+        surface: "external_directory",
+        pattern: null,
+      },
       log: {
         event: "permission_request.session_approved",
         details: {

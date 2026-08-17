@@ -162,6 +162,11 @@ describe("describeBashPathGate", () => {
     expect(result).not.toBeNull();
     expect(isGateBypass(result)).toBe(true);
     expect((result as GateBypass).action).toBe("allow");
+    expect((result as GateBypass).decidedBy).toEqual({
+      kind: "session_approval",
+      surface: "path",
+      pattern: null,
+    });
   });
 
   it("returns null when command is missing", async () => {
