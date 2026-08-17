@@ -96,13 +96,33 @@ Merge method precedence (highest to lowest):
 3. `"merge"` (hardcoded fallback)
 
 Returns merge confirmation with new HEAD SHA on success.
-On failure, returns a structured error with a `reason:` line naming the specific cause:
+
+When the merge call itself fails (a transport error, not a refusal), the tool re-reads the PR over REST before reporting, so a caller never has to guess whether a retry is safe:
+
+- Merged anyway — the pull completes and the normal success block is returned, followed by a `note:` naming the transport error and a `verified: merged via REST` line.
+- Not merged — an error headed `failed to merge PR #N` with `merged: false` and `safe to retry: yes`.
+- Verification also failed — the same header with `merged: unknown`, a `verification_error:` line, and the manual probe to run.
+
+When the PR is refused *before* any merge is attempted, the error is headed `PR #N is not mergeable` and carries a `reason:` line naming the specific cause:
 
 - `no checks reported (statusCheckRollup is empty)` — the PR has no CI runs at all (the legacy `GITHUB_TOKEN`-does-not-trigger-workflows case); merge manually if appropriate.
 - `check failed: <names>` — one or more checks concluded with a failure.
 - `mergeable is <value>` / `merge state is <value>` — the PR is genuinely blocked (conflicting, dirty, behind, etc.).
 
 A `timeout:` result (also an error) means checks or mergeability did not resolve within `timeout`; retry or investigate.
+
+### Transient-failure retry
+
+Every read-only `gh` call these tools make — `ci_find`, `ci_watch`, `ci_list`, `release_pr_find`, and `release_pr_merge`'s precheck and verification — retries a transient failure up to three times, waiting 1 s, 4 s, then 9 s.
+The retry count and backoff curve match [`@octokit/plugin-retry`](https://github.com/octokit/plugin-retry.js)'s defaults.
+
+Retried: HTTP 5xx, GitHub's `no server is currently available` GraphQL error, and transport errors (connection reset, unexpected EOF, i/o timeout, TLS handshake timeout).
+Not retried: any 4xx, including rate limiting — retrying those is useless or harmful.
+
+Mutations (`gh pr merge`, `gh issue close`) are never retried automatically.
+For a merge, the verification described above is what makes a retry decision safe.
+
+In a polling tool the backoff counts against the call's `timeout`, so retries cannot silently extend the wait the caller asked for.
 
 #### `release_watch`
 

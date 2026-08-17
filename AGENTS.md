@@ -63,6 +63,7 @@ Without this discipline, the per-change doc-update commits that append provenanc
   Probe with a read-only query (`gh api .../issues/N --jq .state`) or `--help` (Refs #661).
   When such a command fails with a transient error (HTTP 5xx), verify whether it applied before retrying — `gh pr merge` can 503 after the merge lands.
   Probe with REST (`gh api repos/OWNER/REPO/pulls/N --jq .merged`), which stays up when the GraphQL endpoint behind `gh pr view --json` and `gh pr merge` is degraded (Refs #732).
+  This applies to a hand-run `gh pr merge`; `release_pr_merge` performs that verification itself and reports `merged: false` / `merged: unknown` explicitly (Refs #764).
 - For Pi SDK internals (prompt assembly, caching, session lifecycle), read Pi's own source at the sibling checkout `../pi` when present, rather than the installed `dist/` bundles or their sourcemaps.
   Dispatch an `Explore` subagent with `model: "sonnet-5"` for a multi-hop trace there (e.g. "how does `ui.custom` pass keybindings to the factory?") — a targeted read of a known file is fine inline, but a hunt costs 5–10 greps of this session's context, and `Explore`'s haiku default is too weak for the reasoning.
   The checkout tracks Pi's `main` and runs ahead of the pinned dependency.
@@ -126,7 +127,8 @@ So a refactor-only plan's `Release Recommendation` rationale must not claim it w
 Release is driven by the release-please PR merge over `main` commits, independent of any issue's open/closed state: holding an issue open does not defer its already-merged `fix:`/`feat:` commits from releasing at the next merge, and the only lever to defer a release is leaving the release-please PR unmerged (Refs #625).
 
 Release-please PRs merge by **rebase** (linear `chore: release main`), per `defaultMergeMethod: rebase` (`.pi/extensions/pi-github-tools/config.json`) — set in `cacc724f`.
-Prefer `release_pr_merge` — it waits out an in-progress check or an undecided mergeability state on its own; on its `reason: no checks reported` refusal (the `GITHUB_TOKEN` case), fall back to `gh pr merge <N> --rebase`, never `--merge`.
+Prefer `release_pr_merge` — it waits out an in-progress check or an undecided mergeability state on its own, retries a transient 5xx, and verifies over REST whether a failed merge call actually landed; on its `reason: no checks reported` refusal (the `GITHUB_TOKEN` case), fall back to `gh pr merge <N> --rebase`, never `--merge`.
+A `failed to merge` result carries the answer: `merged: false` is safe to retry, `merged: unknown` is not — verify by hand first.
 Do not infer the method from older history — releases before `cacc724f` are merge commits.
 This holds for releases cut outside `/ship-issue` (e.g. an extended review session), where the ship-prompt guidance is not loaded.
 

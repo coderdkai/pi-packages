@@ -120,6 +120,8 @@ Skip this step entirely if step 4b recorded a defer/batch decision — the relea
    If it bumps a package unrelated to the issue being shipped, note it to the user before merging.
 4. Use `release_pr_merge` with the PR number.
    The tool waits out an in-progress check or an undecided (`UNKNOWN`) mergeability state on its own, streaming progress — do not add a manual wait loop.
+   It also retries a transient 5xx, so a single failure is already several attempts — do not retry it blindly.
+   - If `release_pr_merge` returns `failed to merge PR #N`, the merge call itself failed and the tool has already checked whether it landed: `merged: false` is safe to retry, `merged: unknown` is not — run the probe it prints before doing anything else.
    - If `release_pr_merge` returns an error (not mergeable), read its `reason:` line.
      `reason: no checks reported (statusCheckRollup is empty)` is the expected case for a release-please PR created by the default `GITHUB_TOKEN` (no CI runs); merge with `gh pr merge <N> --rebase` (matches the `defaultMergeMethod: rebase` config so the release lands as a linear commit, not a merge bubble), then `git pull --ff-only`.
      Any other reason (`check failed: ...`, `mergeable is ...`, `merge state is ...`) or a `timeout:` result means the PR is genuinely blocked or still unsettled — stop and report; let the user decide.
@@ -152,6 +154,7 @@ Do **not** recommend the next issue to plan here — `/retro` surfaces the next 
 
 - Never force-push.
 - Never merge a release-please PR that is genuinely blocked (`CONFLICTING`/`DIRTY`/`BEHIND` or a failing check); a `reason: no checks reported` refusal is the expected `GITHUB_TOKEN` case (step 6.4).
+- Never retry `release_pr_merge` on a `merged: unknown` result — verify the PR's state by hand first (step 6.4).
 - If CI fails, the issue stays open.
 - If the release-triggered CI run (step 6b) fails, do not proceed to step 7 until resolved — see the `AGENTS.md` recovery runbook.
 - If multiple release-please PRs exist for the same component, stop and ask — that's a configuration issue, not a normal merge.
