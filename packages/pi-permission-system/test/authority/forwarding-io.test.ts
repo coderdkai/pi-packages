@@ -19,6 +19,7 @@ import {
   logPermissionForwardingError,
   logPermissionForwardingWarning,
   readForwardedPermissionRequest,
+  readForwardedPermissionResponse,
   tryRemoveDirectoryIfEmpty,
   writeJsonFileAtomic,
 } from "#src/authority/forwarding-io";
@@ -397,6 +398,73 @@ describe("readForwardedPermissionRequest — payload field", () => {
     expect(parsed?.surface).toBe("read");
     expect(parsed?.value).toBe("/tmp/x");
     expect(parsed?.payload).toBeUndefined();
+  });
+});
+
+describe("readForwardedPermissionResponse — decidedBy field", () => {
+  let root: string;
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function writeAndRead(raw: unknown) {
+    root = mkdtempSync(join(tmpdir(), "io-decided-by-"));
+    const filePath = join(root, "res.json");
+    writeJsonFileAtomic(null, filePath, raw);
+    return readForwardedPermissionResponse(null, filePath);
+  }
+
+  function baseResponse() {
+    return {
+      approved: true,
+      state: "approved",
+      responderSessionId: "parent-session",
+      respondedAt: 1000,
+    };
+  }
+
+  it("round-trips the responder's decider", () => {
+    const decidedBy = { kind: "user", via: "dialog" } as const;
+
+    // The reader rebuilds an allowlist of known fields, so an added one is
+    // silently dropped until it is listed — which is invisible to tsc.
+    expect(writeAndRead({ ...baseResponse(), decidedBy })?.decidedBy).toEqual(
+      decidedBy,
+    );
+  });
+
+  it("round-trips a nested forwarded decider from a relay hop", () => {
+    const decidedBy = {
+      kind: "forwarded",
+      responderSessionId: "root-session",
+      decision: {
+        kind: "rule",
+        surface: "bash",
+        pattern: "*",
+        origin: "global",
+      },
+    } as const;
+
+    expect(writeAndRead({ ...baseResponse(), decidedBy })?.decidedBy).toEqual(
+      decidedBy,
+    );
+  });
+
+  it("drops a malformed decider without rejecting the response", () => {
+    const parsed = writeAndRead({
+      ...baseResponse(),
+      decidedBy: { kind: "user", via: "smoke-signal" },
+    });
+
+    // The decision itself still has to reach the child; only its unusable
+    // provenance is discarded.
+    expect(parsed?.approved).toBe(true);
+    expect(parsed?.decidedBy).toBeUndefined();
+  });
+
+  it("leaves decidedBy absent for an older responder", () => {
+    expect(writeAndRead(baseResponse())?.decidedBy).toBeUndefined();
   });
 });
 

@@ -117,7 +117,13 @@ describe("processInbox — recorded-authority resolution", () => {
       accessIntent,
     });
 
-    const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const resolve = vi.fn(() =>
+      makeCheckResult({
+        state: "allow",
+        matchedPattern: "git *",
+        origin: "global",
+      }),
+    );
     const escalate = vi.fn();
     const logger = { review: vi.fn(), debug: vi.fn() };
 
@@ -136,13 +142,24 @@ describe("processInbox — recorded-authority resolution", () => {
 
     expect(resolve).toHaveBeenCalledWith(accessIntent);
     expect(escalate).not.toHaveBeenCalled();
+    // The serving node's own rule decided, and the response names it: the
+    // child's log entry would otherwise say only that the parent approved.
     expect(readResponse(temp, "req-allow")).toMatchObject({
       approved: true,
       state: "approved",
+      decidedBy: {
+        kind: "rule",
+        surface: "bash",
+        pattern: "git *",
+        origin: "global",
+      },
     });
     expect(logger.review).toHaveBeenCalledWith(
       "forwarded_permission.auto_approved",
-      expect.objectContaining({ requestId: "req-allow" }),
+      expect.objectContaining({
+        requestId: "req-allow",
+        decidedBy: expect.objectContaining({ kind: "rule" }),
+      }),
     );
   });
 
@@ -159,7 +176,13 @@ describe("processInbox — recorded-authority resolution", () => {
       accessIntent,
     });
 
-    const resolve = vi.fn(() => makeCheckResult({ state: "deny" }));
+    const resolve = vi.fn(() =>
+      makeCheckResult({
+        state: "deny",
+        matchedPattern: "rm *",
+        origin: "project",
+      }),
+    );
     const escalate = vi.fn();
     const logger = { review: vi.fn(), debug: vi.fn() };
 
@@ -181,11 +204,72 @@ describe("processInbox — recorded-authority resolution", () => {
     expect(readResponse(temp, "req-deny")).toMatchObject({
       approved: false,
       state: "denied",
+      decidedBy: {
+        kind: "rule",
+        surface: "bash",
+        pattern: "rm *",
+        origin: "project",
+      },
     });
     expect(logger.review).toHaveBeenCalledWith(
       "forwarded_permission.auto_denied",
-      expect.objectContaining({ requestId: "req-deny" }),
+      expect.objectContaining({
+        requestId: "req-deny",
+        decidedBy: expect.objectContaining({ kind: "rule" }),
+      }),
     );
+  });
+
+  test("relays the escalated decision's own decider onto the response", async () => {
+    temp = createForwardingTempDir("parent-session");
+    temp.writeRequest({ id: "req-human", accessIntent: undefined });
+
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        escalator: {
+          escalate: vi.fn().mockResolvedValue({
+            approved: true,
+            state: "approved",
+            decidedBy: { kind: "user", via: "dialog" },
+          }),
+        },
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    // This is the reported case: the child could not tell a human approval at
+    // the parent from the parent's policy auto-approving on its behalf.
+    expect(readResponse(temp, "req-human")).toMatchObject({
+      decidedBy: { kind: "user", via: "dialog" },
+    });
+  });
+
+  test("attributes a failed escalation to the error, not to a denial anyone made", async () => {
+    temp = createForwardingTempDir("parent-session");
+    temp.writeRequest({ id: "req-boom", accessIntent: undefined });
+
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        escalator: {
+          escalate: vi.fn().mockRejectedValue(new Error("prompt exploded")),
+        },
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    expect(readResponse(temp, "req-boom")).toMatchObject({
+      approved: false,
+      state: "denied",
+      decidedBy: { kind: "gate_error", reason: "prompt exploded" },
+    });
   });
 
   test("escalates an ask through the AskEscalator with the forwarded provenance details", async () => {
@@ -649,13 +733,20 @@ describe("processInbox — the serving node's chain adjudicates a forwarded ask"
     );
 
     // The link's deny is what the child receives, and the human terminal was
-    // never reached — the chain adjudicated the forwarded ask.
+    // never reached — the chain adjudicated the forwarded ask. The child can
+    // now see that from its own record: the link is named on the wire.
     expect(readResponse(temp, "req-chain")).toEqual({
       approved: false,
       state: "denied_with_reason",
       denialReason: "destructive",
       responderSessionId: "parent-session",
       respondedAt: expect.any(Number),
+      decidedBy: {
+        kind: "authorizer",
+        name: "model-judge",
+        verdict: "deny",
+        reason: "destructive",
+      },
     });
     expect(requestPermissionDecision).not.toHaveBeenCalled();
   });
@@ -677,6 +768,7 @@ describe("processInbox — grant-scope selection", () => {
     const escalate = vi.fn().mockResolvedValue({
       approved: true,
       state: "approved_for_serving_session",
+      decidedBy: { kind: "user", via: "dialog" },
     });
     const recordSessionApproval = vi.fn();
 
@@ -697,9 +789,11 @@ describe("processInbox — grant-scope selection", () => {
       expect.objectContaining({ surface: "bash", patterns: ["git *"] }),
     );
     // Translated: the child receives a plain approve and records nothing.
+    // The translation rewrites the scope, never the decider.
     expect(readResponse(temp, "req-whole")).toMatchObject({
       approved: true,
       state: "approved",
+      decidedBy: { kind: "user", via: "dialog" },
     });
   });
 

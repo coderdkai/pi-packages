@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { DecisionSource } from "#src/authority/decision-source";
 import {
   type ForwarderContext,
   getSessionId,
@@ -22,6 +23,7 @@ import type { AskEscalator } from "./authorizer-selection";
 import {
   cleanupPermissionForwardingLocationIfEmpty,
   ensureDirectoryExists,
+  formatUnknownErrorMessage,
   getExistingPermissionForwardingLocation,
   listRequestFiles,
   logPermissionForwardingError,
@@ -276,6 +278,9 @@ export class ForwardedRequestServer implements InboxProcessor {
    * `approved` so the child records nothing (its next identical action
    * re-forwards and resolves as recorded authority). Every other decision
    * passes through unchanged (`approved_for_session` → the child records).
+   *
+   * The translation rewrites the grant's *scope*, never its decider: the human
+   * who chose the wider scope is still the one who decided (#726).
    */
   private applyGrantScope(
     request: ForwardedPermissionRequest,
@@ -298,7 +303,11 @@ export class ForwardedRequestServer implements InboxProcessor {
         patterns: request.sessionApproval.patterns,
       });
     }
-    return { approved: true, state: "approved" };
+    return {
+      approved: true,
+      state: "approved",
+      ...(decision.decidedBy ? { decidedBy: decision.decidedBy } : {}),
+    };
   }
 
   /**
@@ -327,6 +336,7 @@ export class ForwardedRequestServer implements InboxProcessor {
         responsePath,
         resolution: decision.state,
         denialReason: decision.denialReason ?? null,
+        decidedBy: decision.decidedBy,
       },
     );
     try {
@@ -336,6 +346,9 @@ export class ForwardedRequestServer implements InboxProcessor {
         denialReason: decision.denialReason,
         responderSessionId: currentSessionId,
         respondedAt: Date.now(),
+        // Carried onto the wire so the requester can name what decided inside
+        // this session, not merely that this session answered (#726).
+        decidedBy: decision.decidedBy,
       } satisfies ForwardedPermissionResponse);
     } catch (error) {
       logPermissionForwardingError(
@@ -366,29 +379,48 @@ export class ForwardedRequestServer implements InboxProcessor {
     request: ForwardedPermissionRequest,
     logDetails: Record<string, unknown>,
   ): Promise<PermissionPromptDecision> {
-    const state = request.accessIntent
-      ? this.policy.resolve(request.accessIntent).state
-      : "ask";
+    const check = request.accessIntent
+      ? this.policy.resolve(request.accessIntent)
+      : null;
 
-    if (state === "allow") {
-      this.logger.review("forwarded_permission.auto_approved", logDetails);
-      return { approved: true, state: "approved" };
-    }
-    if (state === "deny") {
-      this.logger.review("forwarded_permission.auto_denied", logDetails);
-      return { approved: false, state: "denied" };
+    if (check && check.state !== "ask") {
+      // The rule is carried in full rather than left to the event name: the
+      // response file has no surface, pattern, or origin column for the
+      // requester's record to lean on.
+      const decidedBy: DecisionSource = {
+        kind: "rule",
+        surface: request.accessIntent?.surface ?? check.toolName,
+        pattern: check.matchedPattern ?? null,
+        origin: check.origin,
+      };
+      const approved = check.state === "allow";
+      this.logger.review(
+        approved
+          ? "forwarded_permission.auto_approved"
+          : "forwarded_permission.auto_denied",
+        { ...logDetails, decidedBy },
+      );
+      return approved
+        ? { approved: true, state: "approved", decidedBy }
+        : { approved: false, state: "denied", decidedBy };
     }
 
     this.logger.review("forwarded_permission.prompted", logDetails);
     try {
       return await this.escalator.escalate(buildForwardedAskDetails(request));
     } catch (error) {
+      const reason = formatUnknownErrorMessage(error);
       logPermissionForwardingError(
         this.logger,
         `Failed to escalate forwarded permission request '${request.id}'`,
         error,
       );
-      return { approved: false, state: "denied" };
+      // Nobody denied this; the escalation broke and the node failed closed.
+      return {
+        approved: false,
+        state: "denied",
+        decidedBy: { kind: "gate_error", reason },
+      };
     }
   }
 

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { DecisionSource } from "#src/authority/decision-source";
 import type { PermissionUiPromptSource } from "#src/permission-events";
 import type { PromptPayload } from "#src/presentation/prompt-payload";
 import type { PermissionDecisionState } from "./permission-dialog";
@@ -163,6 +164,18 @@ export type ForwardedPermissionResponse = {
   denialReason?: string;
   responderSessionId: string;
   respondedAt: number;
+  /**
+   * What decided, inside the responding session (#726).
+   *
+   * `responderSessionId` names *where* the decision was made; this names
+   * *what* made it, which is the difference between a human at the parent's
+   * dialog and the parent's policy answering on their behalf.
+   *
+   * Optional for version-skew tolerance: an older responder omits it, and the
+   * requester records the hop with a `null` inner decision rather than
+   * rejecting the answer.
+   */
+  decidedBy?: DecisionSource;
 };
 
 export type PermissionForwardingLocation = {

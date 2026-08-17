@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 
+import { asDecisionSource } from "#src/authority/decision-source";
 import { isPermissionDecisionState } from "#src/authority/permission-dialog";
 import {
   createPermissionForwardingLocation,
@@ -466,6 +467,10 @@ export function readForwardedPermissionResponse(
         typeof parsed.respondedAt === "number"
           ? parsed.respondedAt
           : Date.now(),
+      // Tolerant like the request's `accessIntent`: an unusable provenance
+      // record is dropped, but the decision itself still has to reach the
+      // requester, so it never rejects the response.
+      decidedBy: asDecisionSource(parsed.decidedBy),
     };
   } catch (error) {
     logPermissionForwardingWarning(

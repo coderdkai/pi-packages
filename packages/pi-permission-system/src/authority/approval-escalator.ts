@@ -23,6 +23,7 @@ import type { PermissionPromptDecision } from "#src/authority/permission-dialog"
 import {
   type ForwardedAccessFacts,
   type ForwardedPermissionRequest,
+  type ForwardedPermissionResponse,
   type ForwardedPromptDisplay,
   type ForwardedSessionApproval,
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
@@ -121,6 +122,30 @@ function abandon(denialReason: string): PermissionPromptDecision {
     confirmationUnavailable: true,
     denialReason,
     decidedBy: { kind: "unavailable", reason: denialReason },
+  };
+}
+
+/**
+ * Adopt the responder's answer, recording the hop it came through.
+ *
+ * The requester's own terminal entry has to answer two questions, and they are
+ * different: *which session* answered, and *what within it* decided. Nesting
+ * keeps both rather than flattening the responder's source into this node's
+ * record, where it would read as a local decision (#726).
+ *
+ * A responder that sent no usable source yields `decision: null` — the hop is
+ * still a fact, and an older parent is not an error.
+ */
+function relayDecision(
+  response: ForwardedPermissionResponse,
+): PermissionPromptDecision {
+  return {
+    ...response,
+    decidedBy: {
+      kind: "forwarded",
+      responderSessionId: response.responderSessionId,
+      decision: response.decidedBy ?? null,
+    },
   };
 }
 
@@ -339,6 +364,7 @@ export class ParentAuthorizer implements TerminalAuthorizer {
           this.logger,
           responsePath,
         );
+        const relayed = response ? relayDecision(response) : null;
         this.logger.review("forwarded_permission.response_received", {
           requestId,
           approved: response?.approved ?? null,
@@ -347,10 +373,11 @@ export class ParentAuthorizer implements TerminalAuthorizer {
           responderSessionId: response?.responderSessionId ?? null,
           targetSessionId,
           responsePath,
+          decidedBy: relayed?.decidedBy,
         });
         this.discardRequest(location, requestPath, responsePath);
         return (
-          response ??
+          relayed ??
           abandon("The parent session's permission response could not be read")
         );
       }

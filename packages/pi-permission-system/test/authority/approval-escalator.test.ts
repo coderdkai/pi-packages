@@ -58,6 +58,104 @@ async function waitForRequestFile(
 
 // ── ParentAuthorizer ──────────────────────────────────────────────────────
 
+/**
+ * Drive one forwarded exchange to completion: escalate, wait for the request
+ * file, answer it with `response`, and resolve.
+ */
+async function exchangeWith(
+  temp: ReturnType<typeof createForwardingTempDir>,
+  response: Record<string, unknown>,
+) {
+  const authorizer = new ParentAuthorizer(
+    makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+    makeParentAuthorizerDeps({
+      forwardingDir: temp.forwardingDir,
+      registry: makeSubagentRegistry("child-session", {
+        parentSessionId: "parent-session",
+      }),
+    }),
+  );
+  const decisionPromise = authorizer.authorize(
+    makePromptDetails({ requestId: "perm-child-request" }),
+  );
+  const request = await waitForRequestFile(temp.location.requestsDir);
+  writeFileSync(
+    join(temp.location.responsesDir, `${request.id}.json`),
+    JSON.stringify(response),
+    "utf-8",
+  );
+  return decisionPromise;
+}
+
+describe("ParentAuthorizer provenance relay", () => {
+  test("nests the responder's own decider under the forwarding hop", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      // The reported case: a human at the parent, or the parent's policy?
+      // The child's own terminal entry has to answer that.
+      await expect(
+        exchangeWith(temp, {
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+          decidedBy: { kind: "user", via: "dialog" },
+        }),
+      ).resolves.toMatchObject({
+        decidedBy: {
+          kind: "forwarded",
+          responderSessionId: "parent-session",
+          decision: { kind: "user", via: "dialog" },
+        },
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("still names the responding session when an older parent sends no decider", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      await expect(
+        exchangeWith(temp, {
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+        }),
+      ).resolves.toMatchObject({
+        decidedBy: {
+          kind: "forwarded",
+          responderSessionId: "parent-session",
+          decision: null,
+        },
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  test("discards a malformed decider rather than relaying a corrupt one", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      await expect(
+        exchangeWith(temp, {
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+          decidedBy: { kind: "user", via: "smoke-signal" },
+        }),
+      ).resolves.toMatchObject({
+        decidedBy: {
+          kind: "forwarded",
+          responderSessionId: "parent-session",
+          decision: null,
+        },
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+});
+
 describe("ParentAuthorizer", () => {
   test("writes a forwarded request carrying the display fields and resolves with the parent's response", async () => {
     const temp = createForwardingTempDir("parent-session");
