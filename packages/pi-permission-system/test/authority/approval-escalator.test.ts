@@ -480,6 +480,23 @@ const forwardedAsk = makePromptDetails({
   toolName: "bash",
 });
 
+/**
+ * The shape every abandonment resolves to.
+ *
+ * `denialReason` and the provenance `reason` are the same value by
+ * construction: the string that names which path gave up is the string the
+ * record attributes it to, so the two cannot drift (#726).
+ */
+function unavailableDecision(denialReason: unknown) {
+  return {
+    approved: false,
+    state: "denied",
+    confirmationUnavailable: true,
+    denialReason,
+    decidedBy: { kind: "unavailable", reason: denialReason },
+  };
+}
+
 describe("ParentAuthorizer abandonment", () => {
   test("reports an unresolvable target as unavailable, not user-denied", async () => {
     const authorizer = new ParentAuthorizer(
@@ -489,13 +506,11 @@ describe("ParentAuthorizer abandonment", () => {
       }),
     );
 
-    await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-      approved: false,
-      state: "denied",
-      confirmationUnavailable: true,
-      denialReason:
+    await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+      unavailableDecision(
         "Could not resolve a parent session to forward this permission request to",
-    });
+      ),
+    );
   });
 
   test("reports unusable forwarding directories as unavailable", async () => {
@@ -516,13 +531,11 @@ describe("ParentAuthorizer abandonment", () => {
         }),
       );
 
-      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason:
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(
           "Permission forwarding directories could not be prepared for session 'parent-session'",
-      });
+        ),
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -544,12 +557,11 @@ describe("ParentAuthorizer abandonment", () => {
         }),
       );
 
-      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason: "The forwarded permission request could not be written",
-      });
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(
+          "The forwarded permission request could not be written",
+        ),
+      );
       // The directories it created for an exchange that never happened are
       // cleaned up, so the chmod'd directory is already gone.
       expect(existsSync(temp.location.requestsDir)).toBe(false);
@@ -582,13 +594,11 @@ describe("ParentAuthorizer abandonment", () => {
         "utf-8",
       );
 
-      await expect(decisionPromise).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason:
+      await expect(decisionPromise).resolves.toEqual(
+        unavailableDecision(
           "The parent session's permission response could not be read",
-      });
+        ),
+      );
     } finally {
       temp.cleanup();
     }
@@ -608,12 +618,11 @@ describe("ParentAuthorizer abandonment", () => {
         }),
       );
 
-      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason: "Session 'parent-session' did not answer within 0.4s",
-      });
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(
+          "Session 'parent-session' did not answer within 0.4s",
+        ),
+      );
     } finally {
       temp.cleanup();
     }
@@ -636,13 +645,11 @@ describe("ParentAuthorizer abandonment", () => {
       );
 
       const started = Date.now();
-      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason:
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(
           "Session 'parent-session' is not serving forwarded permission requests",
-      });
+        ),
+      );
       expect(Date.now() - started).toBeLessThan(60_000);
     } finally {
       temp.cleanup();
@@ -708,12 +715,9 @@ describe("ParentAuthorizer abandonment", () => {
         }),
       );
 
-      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual({
-        approved: false,
-        state: "denied",
-        confirmationUnavailable: true,
-        denialReason: expect.stringContaining("did not answer within"),
-      });
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(expect.stringContaining("did not answer within")),
+      );
     } finally {
       vi.unstubAllEnvs();
       temp.cleanup();

@@ -110,6 +110,9 @@ export interface ParentAuthorizerDeps {
  * `confirmationUnavailable` is what keeps this out of the "User denied …"
  * message (#719): a user who was never asked denied nothing. `denialReason`
  * names which path gave up, and the gate renders it to the model.
+ *
+ * The provenance record reuses that same string rather than restating it, so
+ * what the model is told and what the log attributes cannot drift (#726).
  */
 function abandon(denialReason: string): PermissionPromptDecision {
   return {
@@ -117,6 +120,7 @@ function abandon(denialReason: string): PermissionPromptDecision {
     state: "denied",
     confirmationUnavailable: true,
     denialReason,
+    decidedBy: { kind: "unavailable", reason: denialReason },
   };
 }
 

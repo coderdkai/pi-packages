@@ -15,6 +15,10 @@ describe("DenyingAuthorizer", () => {
       approved: false,
       state: "denied",
       confirmationUnavailable: true,
+      decidedBy: {
+        kind: "unavailable",
+        reason: "No live authority was reachable for this session",
+      },
     });
   });
 
@@ -33,6 +37,10 @@ describe("DenyingAuthorizer", () => {
       approved: false,
       state: "denied",
       confirmationUnavailable: true,
+      decidedBy: {
+        kind: "unavailable",
+        reason: "No live authority was reachable for this session",
+      },
     });
   });
 });
