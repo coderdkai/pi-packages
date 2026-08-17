@@ -25,5 +25,26 @@ Wrote `packages/pi-permission-system/docs/plans/0760-reason-field-paste.md`: fou
   The conflict is confined to the render path, but its fate is worth deciding around this ship.
 - No follow-up issues were filed: nothing in the plan names deferred work beyond the already-tracked [#751].
 
+## Stage: Implementation — TDD (2026-08-17T16:20:31Z)
+
+### Session summary
+
+All four planned TDD cycles landed as planned, plus a one-line comment fixup the reviewer flagged: the pure `collapsePastedNewlines` helper, the delegation of the dialog's reason step to the pi-tui `Input` line editor, removal of the write-only `PromptViewState.reasonDraft`, and the architecture/configuration doc updates.
+The target package went from 3123 to 3136 tests (+13: eight for `bracketed-paste.ts`, five for the component).
+The `tidy-first-assessor` found no preparatory tidying warranted, and the pre-completion reviewer returned PASS.
+
+### Observations
+
+- The Red step caught a **vacuous assertion** in my own new test: `expect(after.join("\n")).toContain("x")` passed before the fix because the fixture's rendered `path : /repo/secret.txt` line contains an `x` in `.txt`.
+  It surfaced only because I checked which of the five new cases actually went red and then probed the render with a temporary `toBe("PROBE")`.
+  Switched the probe character to `q`, which appears nowhere else in that render.
+  A single-character `toContain` probe against a render that includes filesystem paths is a trap worth remembering.
+- Two of the five new component cases pass against the pre-fix code by design — the stray-paste-at-the-decision-step case and the expand-key case pin invariants that were already true (the plan's Invariants table says so).
+  The reviewer verified this empirically by checking out the pre-fix tree and re-running the suite, and confirmed the three paste-specific cases all fail without the fix.
+- One deviation from the plan, in the safe direction: instead of `setValue("")` on entering the reason step, the component builds a **fresh** `Input` per visit (`createReasonEditor`).
+  The framework editor carries an undo stack and a kill ring, so a reused instance would let a reason the operator backed out of be undone back into a later ask.
+- The reviewer's one WARN was a stale comment naming the deleted `isPrintable` guard in an untouched test case; fixed as a separate `test:` commit.
+- Only one `feat`/`fix` line reaches the changelog (`fix(pi-permission-system): accept pasted text in the denial-reason field`), which is the correct user-observable framing — the helper and the model cleanup are `refactor:`.
+
 [#751]: https://github.com/gotgenes/pi-packages/issues/751
 [#757]: https://github.com/gotgenes/pi-packages/pull/757
