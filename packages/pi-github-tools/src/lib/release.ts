@@ -7,7 +7,7 @@
  *   - watchRelease    → release_watch
  */
 
-import { findRetryDelay, formatProgress } from "./ci-helpers";
+import { findRetryDelay, formatAborted, formatProgress } from "./ci-helpers";
 import type { MergeMethod } from "./config";
 import { gh, ghJson, git } from "./github";
 import { classifyMergeState, type MergeReadiness } from "./merge-state";
@@ -55,11 +55,7 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
     attempt++;
 
     if (signal?.aborted) {
-      return [
-        "aborted: cancelled by user",
-        `  retries: ${attempt}`,
-        `  elapsed: ${elapsed}s`,
-      ].join("\n");
+      return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
     const delay = findRetryDelay(attempt);
@@ -67,11 +63,7 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
       try {
         await sleep(delay * 1000, signal);
       } catch {
-        return [
-          "aborted: cancelled by user",
-          `  retries: ${attempt}`,
-          `  elapsed: ${elapsed}s`,
-        ].join("\n");
+        return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       elapsed += delay;
     }
@@ -98,11 +90,7 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
         signal,
       );
     } catch {
-      return [
-        "aborted: cancelled by user",
-        `  retries: ${attempt}`,
-        `  elapsed: ${elapsed}s`,
-      ].join("\n");
+      return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
     if (prs.length > 0) {
@@ -232,9 +220,7 @@ function timeoutMergeResult(
 /** Format the abort result when the signal fires while waiting for the PR to become mergeable. */
 function abortedMergeResult(elapsed: number): ToolResult {
   return {
-    content: ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
-      "\n",
-    ),
+    content: formatAborted(`  elapsed: ${elapsed}s`),
     isError: true,
   };
 }
@@ -281,9 +267,7 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     if (signal?.aborted) {
-      return ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
-        "\n",
-      );
+      return formatAborted(`  elapsed: ${elapsed}s`);
     }
 
     let tagOutput: string;
@@ -291,9 +275,7 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
       await git(["fetch", "--tags"], signal);
       tagOutput = await git(["tag", "--points-at", "HEAD"], signal);
     } catch {
-      return ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
-        "\n",
-      );
+      return formatAborted(`  elapsed: ${elapsed}s`);
     }
     const tags = tagOutput
       .split("\n")
@@ -306,9 +288,7 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
       try {
         headSha = await git(["rev-parse", "HEAD"], signal);
       } catch {
-        return ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
-          "\n",
-        );
+        return formatAborted(`  elapsed: ${elapsed}s`);
       }
       return [
         `tag: ${tag}`,
@@ -332,9 +312,7 @@ export async function watchRelease(args: WatchReleaseArgs): Promise<string> {
     try {
       await sleep(pollInterval * 1000, signal);
     } catch {
-      return ["aborted: cancelled by user", `  elapsed: ${elapsed}s`].join(
-        "\n",
-      );
+      return formatAborted(`  elapsed: ${elapsed}s`);
     }
     elapsed += pollInterval;
   }

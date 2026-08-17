@@ -6,7 +6,12 @@
  *   - watchRun → ci_watch
  *   - listRuns → ci_list
  */
-import { type CIJob, findRetryDelay, formatProgress } from "./ci-helpers";
+import {
+  type CIJob,
+  findRetryDelay,
+  formatAborted,
+  formatProgress,
+} from "./ci-helpers";
 import { ghJson } from "./github";
 import { sleep } from "./process";
 
@@ -92,11 +97,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
     attempt++;
 
     if (signal?.aborted) {
-      return [
-        "aborted: cancelled by user",
-        `  retries: ${attempt}`,
-        `  elapsed: ${elapsed}s`,
-      ].join("\n");
+      return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
     const delay = findRetryDelay(attempt);
@@ -104,11 +105,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
       try {
         await sleep(delay * 1000, signal);
       } catch {
-        return [
-          "aborted: cancelled by user",
-          `  retries: ${attempt}`,
-          `  elapsed: ${elapsed}s`,
-        ].join("\n");
+        return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       elapsed += delay;
     }
@@ -135,11 +132,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
         signal,
       );
     } catch {
-      return [
-        "aborted: cancelled by user",
-        `  retries: ${attempt}`,
-        `  elapsed: ${elapsed}s`,
-      ].join("\n");
+      return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
     }
 
     if (runs.length > 0) {
@@ -155,11 +148,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
           signal,
         ));
       } catch {
-        return [
-          "aborted: cancelled by user",
-          `  retries: ${attempt}`,
-          `  elapsed: ${elapsed}s`,
-        ].join("\n");
+        return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
       }
       return formatFind(matchingRun, jobs);
     }
@@ -201,11 +190,7 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     if (signal?.aborted) {
-      return [
-        "aborted: cancelled by user",
-        `  elapsed: ${elapsed}s`,
-        `  run_id: ${runId}`,
-      ].join("\n");
+      return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
     }
 
     let run: WatchPoll;
@@ -221,11 +206,7 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
         signal,
       );
     } catch {
-      return [
-        "aborted: cancelled by user",
-        `  elapsed: ${elapsed}s`,
-        `  run_id: ${runId}`,
-      ].join("\n");
+      return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
     }
 
     const progressLine = formatProgress(run.jobs, elapsed);
@@ -248,11 +229,7 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
     try {
       await sleep(pollInterval * 1000, signal);
     } catch {
-      return [
-        "aborted: cancelled by user",
-        `  elapsed: ${elapsed}s`,
-        `  run_id: ${runId}`,
-      ].join("\n");
+      return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
     }
     elapsed += pollInterval;
   }
