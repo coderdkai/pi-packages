@@ -575,8 +575,8 @@ describe("presentInlinePermissionPrompt", () => {
     });
 
     it("does not intercept the expand key while a denial reason is typed", async () => {
-      // Bound to a printable key on purpose: the default Ctrl+O is dropped by
-      // the reason editor's isPrintable guard anyway, so it cannot discriminate.
+      // Bound to a printable key on purpose: the default Ctrl+O is a control
+      // character the reason editor rejects anyway, so it cannot discriminate.
       const { view, captured, setToolsExpanded } = makeFakeView(false, "e");
       const promise = presentInlinePermissionPrompt(view, "Title", ASK);
 
