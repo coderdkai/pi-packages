@@ -96,6 +96,7 @@ A missing export throws `is not a function` at runtime but surfaces as `TS2305` 
 - When a fix changes shared helper functions, run the full suite before committing — not just the directly affected test file.
 - A disposable spike test's `console.log` is hidden by Vitest's default reporter; run it with `--reporter=verbose` (measured: `--silent=false` alone does **not** surface it, and `--reporter=basic` was removed in Vitest 4).
   Write findings to a file (`appendFileSync("/tmp/out.txt", …)`) when the output must outlive the run.
+- When a multi-file run reports a failure, re-run the failing file alone and read the unfiltered `tail` — a `grep`/`sed` filter over Vitest output often matches nothing and prints empty, which reads as "no failure" rather than "wrong filter" (Refs #721).
 
 ## Operator semantics
 
