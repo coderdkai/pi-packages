@@ -52,7 +52,6 @@ export interface PromptViewState {
   armedKey?: PromptKey;
   /** "Press y again to approve." while armed; empty otherwise. */
   hint: string;
-  reasonDraft: string;
   /** Set when an empty reason submit is rejected. */
   reasonError?: string;
   /** Scope step: false = subagent-only (default), true = whole serving session. */
@@ -80,7 +79,6 @@ export function initialPromptState(
     highlightedKey: "y",
     armedKey: undefined,
     hint: "",
-    reasonDraft: "",
     reasonError: undefined,
     scopeServing: false,
   };
@@ -169,7 +167,6 @@ function commit(
         highlightedKey: "r",
         armedKey: undefined,
         hint: "",
-        reasonDraft: "",
         reasonError: undefined,
       });
     case "s":
@@ -200,7 +197,6 @@ function reduceReasonStep(
       step: "decision",
       armedKey: undefined,
       hint: "",
-      reasonDraft: "",
       reasonError: undefined,
     });
   }
@@ -209,7 +205,6 @@ function reduceReasonStep(
     if (reason === undefined) {
       return render({
         ...state,
-        reasonDraft: event.draft,
         reasonError: "A reason is required.",
       });
     }
