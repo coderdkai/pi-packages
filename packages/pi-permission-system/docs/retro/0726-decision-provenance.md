@@ -33,6 +33,39 @@ Plan committed at `packages/pi-permission-system/docs/plans/0726-decision-proven
 - Sequencing note for whoever picks this up: [#610] (Step 10) also enriches the review-log write path, and the roadmap says land Steps 6 and 10 in sequence.
   This lands first.
 
+## Stage: Implementation — TDD (2026-08-17T01:47:50Z)
+
+### Session summary
+
+Landed all nine planned TDD cycles plus two Tidy-First preparatory commits (13 commits total).
+`decidedBy` is now stamped at all twelve terminal decision sites and carried across the forwarding wire, required on `PermissionPromptDecision` and `GateBypass`.
+Test count went 3010 → 3065 (+55) with `pnpm run check`, root `pnpm run lint`, and `pnpm fallow dead-code` all clean.
+
+### Observations
+
+- The `tidy-first-assessor` earned its keep by **rejecting** more than it recommended.
+  It declined a blanket `test/helpers/` decision factory over the ~150 literals — correctly, on the grounds that most are `toEqual` **assertions** pinning the value under test, which no factory can supply, and that pre-collapsing them would be the large-blast-radius commit the plan's own Risks table mitigates via per-producer decomposition.
+  It also declined a `GateBypass` builder (three sites sharing only `action: "allow"`) and a `PermissionGateParams` narrowing (already role-scoped).
+  Its two Recommended commits both paid off: naming the chain links first made cycle 3 a two-line change, and defaulting the filler decisions in two helpers absorbed edits cycles 2 and 3 would otherwise have made by hand.
+- One assessor claim needed checking rather than trusting: it described 12 call sites as "unexercised filler".
+  Reading them showed a mix — in `permission-prompter.test.ts` line 83's test *subject* is that an approval logs `permission_request.approved`, so hiding the decision in a default would have harmed it.
+  Adding the default and dropping the literal only at the genuinely-filler sites was the right resolution; a default parameter forces nothing.
+- **Design decision not in the plan:** `UnattributedDecision` (`Omit<PermissionPromptDecision, "decidedBy">`).
+  The plan sketched the dispatcher stamping `{kind:"user", via}` but did not name the type that makes it work under required-ness.
+  This is the same shape `GateBypass.decision` uses for the request id (#752's "a gate keeps emitting only what it knows"), which is why it felt idiomatic rather than invented.
+  It settles a real connascence question: having `reducePrompt` and `requestPermissionDecisionFromUi` each name their own surface would be two sites that must agree with the dispatcher's `mode === "tui"` branch.
+- **Deviation from the plan (minor):** the plan's cycle-5 sketch had the bash bypasses carrying a session pattern.
+  They cannot — a whole-command bypass covers many tokens at once, each possibly matched by a different session grant, so one pattern would be a guess.
+  They record the surface with `pattern: null`, and the entry's existing `tokens`/`externalPaths` lists what was covered.
+- Cycle 8 was a **characterization** cycle, not a feature one: two of its three tests passed on first run, because `capLogFieldWidths` already recursed and the redaction replacer descends by nature.
+  The plan predicted this correctly ("pins it rather than trusting the reading"), and `test:` was the right commit type.
+  The one failure was my own expectation being wrong — at width 10 the cap also shortened `name: "model-judge"`, which is correct behavior.
+- The scripted test migration in the required-ness flip is the risk the AGENTS.md scripted-substitution warning describes, and it did misfire twice: it added `decidedBy` to an assertion over `presentInlinePermissionPrompt` (deliberately unattributed) and missed a bypass log assertion.
+  Both were caught by `toEqual`'s exactness within one run — the exact-assertion convention is what made a scripted edit safe to attempt at all.
+  The reviewer re-read every `test/` hunk and found no further slips.
+- Two `Edit` calls failed on a wrong absolute path (`pi/pi-permission-system/...` instead of `pi/pi-packages/packages/pi-permission-system/...`) and were correctly blocked by the `external_directory` gate — the package's own gate catching a path mistake in a change to that package.
+- Anchoring an `Edit` on a decorative `─` rule line failed as AGENTS.md warns; re-anchoring on the adjacent unique `describe(...)` line worked first time.
+
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#746]: https://github.com/gotgenes/pi-packages/issues/746
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
