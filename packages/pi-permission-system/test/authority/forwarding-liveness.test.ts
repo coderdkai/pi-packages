@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ForwardingLivenessJudge,
+  type HeartbeatState,
   SERVING_HEARTBEAT_REFRESH_MS,
   SERVING_HEARTBEAT_STALE_MS,
   type ServingHeartbeat,
@@ -18,7 +20,10 @@ import {
   servingHeartbeatDir,
   servingHeartbeatPath,
 } from "#src/authority/forwarding-liveness";
-import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "#src/authority/permission-forwarding";
+import {
+  PERMISSION_FORWARDING_POLL_INTERVAL_MS,
+  type PermissionForwardingTarget,
+} from "#src/authority/permission-forwarding";
 
 let root: string;
 let forwardingDir: string;
@@ -372,5 +377,138 @@ describe("ServingHeartbeatStore pruning", () => {
     expect(
       existsSync(servingHeartbeatPath(forwardingDir, "dead-session")),
     ).toBe(true);
+  });
+});
+
+const REGISTRY_TARGET: PermissionForwardingTarget = {
+  sessionId: "parent",
+  source: "registry",
+};
+const ENV_TARGET: PermissionForwardingTarget = {
+  sessionId: "parent",
+  source: "env",
+};
+const SELF_TARGET: PermissionForwardingTarget = {
+  sessionId: "parent",
+  source: "self",
+};
+
+function makeRegistry(marked: string[] = []) {
+  return {
+    isServing: vi.fn((sessionId: string) => marked.includes(sessionId)),
+    servingIds: vi.fn((): readonly string[] => marked),
+  };
+}
+
+function makeHeartbeats(state: HeartbeatState, ids: string[] = []) {
+  return {
+    read: vi.fn((): HeartbeatState => state),
+    servingIds: vi.fn((): readonly string[] => ids),
+  };
+}
+
+describe("ForwardingLivenessJudge.isServing", () => {
+  it("answers an in-process target from the registry", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["parent"]),
+      heartbeats: makeHeartbeats("absent"),
+    });
+    expect(judge.isServing(REGISTRY_TARGET)).toBe(true);
+  });
+
+  it("reports an unmarked in-process target as not serving", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(),
+      heartbeats: makeHeartbeats("alive"),
+    });
+    expect(judge.isServing(REGISTRY_TARGET)).toBe(false);
+  });
+
+  it("answers an out-of-process target from the filesystem heartbeat", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(),
+      heartbeats: makeHeartbeats("alive"),
+    });
+    expect(judge.isServing(ENV_TARGET)).toBe(true);
+  });
+
+  it.each([
+    "absent",
+    "stale",
+    "dead_pid",
+  ] as const)("reports an out-of-process target as not serving when its heartbeat is %s", (state) => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["parent"]),
+      heartbeats: makeHeartbeats(state),
+    });
+    expect(judge.isServing(ENV_TARGET)).toBe(false);
+  });
+
+  it("declines to judge a session that owns the inbox it is forwarding to", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(),
+      heartbeats: makeHeartbeats("absent"),
+    });
+    expect(judge.isServing(SELF_TARGET)).toBeNull();
+  });
+
+  it("does not touch the filesystem for an in-process target", () => {
+    const heartbeats = makeHeartbeats("absent");
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["parent"]),
+      heartbeats,
+    });
+    judge.isServing(REGISTRY_TARGET);
+    expect(heartbeats.read).not.toHaveBeenCalled();
+  });
+
+  it("does not consult the registry for an out-of-process target", () => {
+    // Its parent lives in another process, so an absent mark would say nothing
+    // — reading one would fast-fail every out-of-process child.
+    const registry = makeRegistry();
+    const judge = new ForwardingLivenessJudge({
+      registry,
+      heartbeats: makeHeartbeats("alive"),
+    });
+    judge.isServing(ENV_TARGET);
+    expect(registry.isServing).not.toHaveBeenCalled();
+  });
+});
+
+describe("ForwardingLivenessJudge.describe", () => {
+  it("names the registry channel and the ids it observed", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["other-parent"]),
+      heartbeats: makeHeartbeats("alive", ["unrelated"]),
+    });
+    expect(judge.describe(REGISTRY_TARGET)).toEqual({
+      channel: "registry",
+      state: null,
+      servingIds: ["other-parent"],
+    });
+  });
+
+  it("names the heartbeat channel, the state it read, and the ids it observed", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["unrelated"]),
+      heartbeats: makeHeartbeats("dead_pid", ["other-parent"]),
+    });
+    expect(judge.describe(ENV_TARGET)).toEqual({
+      channel: "heartbeat",
+      state: "dead_pid",
+      servingIds: ["other-parent"],
+    });
+  });
+
+  it("reports no channel for a target it does not judge", () => {
+    const judge = new ForwardingLivenessJudge({
+      registry: makeRegistry(["unrelated"]),
+      heartbeats: makeHeartbeats("alive", ["unrelated"]),
+    });
+    expect(judge.describe(SELF_TARGET)).toEqual({
+      channel: "none",
+      state: null,
+      servingIds: [],
+    });
   });
 });

@@ -25,11 +25,15 @@ import {
   safeDeleteFile,
   writeJsonFileAtomic,
 } from "#src/authority/forwarding-io";
+import type { PermissionForwardingTarget } from "#src/authority/permission-forwarding";
 import {
   encodeSessionIdForPath,
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
 } from "#src/authority/permission-forwarding";
-import type { ServingAnnouncer } from "#src/authority/serving-registry";
+import type {
+  ServingAnnouncer,
+  ServingLookup,
+} from "#src/authority/serving-registry";
 import type { DebugReviewLogger } from "#src/session-logger";
 
 /**
@@ -85,16 +89,81 @@ export interface HeartbeatReader {
   servingIds(): readonly string[];
 }
 
-/** Constructor config for {@link ServingHeartbeatStore}. */
-export interface ServingHeartbeatStoreDeps {
-  forwardingDir: string;
-  logger: DebugReviewLogger;
-  /** Injected so the refresh throttle and staleness are testable without sleeping. */
-  now?: () => number;
-  /** The process to record. Injected so a test can publish a pid it controls. */
-  pid?: number;
-  /** Injected so a test can decide which pids are running. */
-  isProcessAlive?: (pid: number) => boolean;
+/**
+ * Query-side seam: is the session a forwarding target names being drained?
+ *
+ * Keyed on the target rather than a session id because the answer depends on
+ * how the target was resolved. An in-process child and its parent share a
+ * `globalThis`, so the registry answers for them; an out-of-process pair shares
+ * only the filesystem; and a session that owns the inbox it is forwarding to is
+ * not a case either channel describes.
+ *
+ * Consolidating that into one collaborator is what keeps `ParentAuthorizer`
+ * from holding two lookups and re-deciding which one applies — the decision has
+ * one home, and a third channel would not reach the poll loop.
+ */
+export interface TargetServingLookup {
+  /** `true` serving, `false` not serving, `null` when the target carries no signal. */
+  isServing(target: PermissionForwardingTarget): boolean | null;
+  /** What the judge observed, for the review entry a child writes when it gives up. */
+  describe(target: PermissionForwardingTarget): ServingObservation;
+}
+
+/** What answered a liveness question, and what it saw. */
+export interface ServingObservation {
+  channel: "registry" | "heartbeat" | "none";
+  /** The heartbeat state behind a `"heartbeat"` answer; `null` on the other channels. */
+  state: HeartbeatState | null;
+  servingIds: readonly string[];
+}
+
+/** Constructor config for {@link ForwardingLivenessJudge}. */
+export interface ForwardingLivenessJudgeDeps {
+  /** Answers for a target the requester shares a process with. */
+  registry: ServingLookup;
+  /** Answers for a target in another process. */
+  heartbeats: HeartbeatReader;
+}
+
+/**
+ * Routes a liveness question to the channel that can answer it.
+ *
+ * The routing key is `PermissionForwardingTarget.source`, which the resolver
+ * already produces — so "in-process" is decided once, where the target is
+ * found, rather than re-derived here (#719).
+ */
+export class ForwardingLivenessJudge implements TargetServingLookup {
+  constructor(private readonly deps: ForwardingLivenessJudgeDeps) {}
+
+  isServing(target: PermissionForwardingTarget): boolean | null {
+    switch (target.source) {
+      case "registry":
+        return this.deps.registry.isServing(target.sessionId);
+      case "env":
+        return this.deps.heartbeats.read(target.sessionId) === "alive";
+      case "self":
+        return null;
+    }
+  }
+
+  describe(target: PermissionForwardingTarget): ServingObservation {
+    switch (target.source) {
+      case "registry":
+        return {
+          channel: "registry",
+          state: null,
+          servingIds: this.deps.registry.servingIds(),
+        };
+      case "env":
+        return {
+          channel: "heartbeat",
+          state: this.deps.heartbeats.read(target.sessionId),
+          servingIds: this.deps.heartbeats.servingIds(),
+        };
+      case "self":
+        return { channel: "none", state: null, servingIds: [] };
+    }
+  }
 }
 
 const SERVING_HEARTBEAT_DIRECTORY_NAME = "serving";
@@ -120,6 +189,18 @@ export function servingHeartbeatPath(
     servingHeartbeatDir(forwardingDir),
     `${encodeSessionIdForPath(sessionId)}.json`,
   );
+}
+
+/** Constructor config for {@link ServingHeartbeatStore}. */
+export interface ServingHeartbeatStoreDeps {
+  forwardingDir: string;
+  logger: DebugReviewLogger;
+  /** Injected so the refresh throttle and staleness are testable without sleeping. */
+  now?: () => number;
+  /** The process to record. Injected so a test can publish a pid it controls. */
+  pid?: number;
+  /** Injected so a test can decide which pids are running. */
+  isProcessAlive?: (pid: number) => boolean;
 }
 
 /**
