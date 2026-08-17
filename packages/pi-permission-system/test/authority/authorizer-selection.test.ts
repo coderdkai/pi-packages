@@ -164,6 +164,12 @@ describe("AuthorizerSelection", () => {
         approved: false,
         state: "denied_with_reason",
         denialReason: "typo path",
+        decidedBy: {
+          kind: "authorizer",
+          name: "judge",
+          verdict: "deny",
+          reason: "typo path",
+        },
       });
     });
 
@@ -214,6 +220,12 @@ describe("AuthorizerSelection", () => {
         approved: false,
         state: "denied_with_reason",
         denialReason: "a-wins",
+        decidedBy: {
+          kind: "authorizer",
+          name: "a",
+          verdict: "deny",
+          reason: "a-wins",
+        },
       });
     });
 
@@ -236,11 +248,18 @@ describe("AuthorizerSelection", () => {
 
       const decision = await selection.escalate(makeDetailsOn("bash"));
 
-      // The unregistered "missing" link is skipped fail-safe; "present" decides.
+      // The unregistered "missing" link is skipped fail-safe; "present"
+      // decides, and is the name credited — the skipped one is not.
       expect(decision).toEqual({
         approved: false,
         state: "denied_with_reason",
         denialReason: "present-decided",
+        decidedBy: {
+          kind: "authorizer",
+          name: "present",
+          verdict: "deny",
+          reason: "present-decided",
+        },
       });
       expect(logger.review).toHaveBeenCalledWith(
         "authorizer_chain_unregistered_link",
@@ -353,7 +372,16 @@ describe("AuthorizerSelection", () => {
 
       // bash is not excluded, so the link's allow stands (a non-persistent
       // approved grant) — the denying terminal is never reached.
-      expect(decision).toEqual({ approved: true, state: "approved" });
+      expect(decision).toEqual({
+        approved: true,
+        state: "approved",
+        decidedBy: {
+          kind: "authorizer",
+          name: "judge",
+          verdict: "allow",
+          reason: null,
+        },
+      });
     });
 
     it("a registered but un-named link grants no authority (terminal identity)", async () => {

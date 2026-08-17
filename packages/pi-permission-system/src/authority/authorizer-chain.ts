@@ -1,10 +1,14 @@
+import type { DecisionSource } from "#src/authority/decision-source";
 import type { AuthorizerLog, PermissionQuery } from "#src/service";
 import type {
   AuthorizerVerdict,
   NamedAuthorizer,
   TerminalAuthorizer,
 } from "./authorizer";
-import { createDeniedPermissionDecision } from "./permission-dialog";
+import {
+  createDeniedPermissionDecision,
+  type PermissionPromptDecision,
+} from "./permission-dialog";
 
 /**
  * Compose the live-authority chain (ADR 0007): try each non-terminal `link`
@@ -36,7 +40,7 @@ export function composeAuthorizerChain(
     async authorize(details) {
       for (const link of links) {
         const verdict = await link.authorize(details, query, log);
-        const decision = decideFromVerdict(verdict);
+        const decision = decideFromVerdict(link.name, verdict);
         if (decision) {
           return decision;
         }
@@ -47,16 +51,40 @@ export function composeAuthorizerChain(
   };
 }
 
-/** Map a link's decisive verdict to a decision; `defer` yields `null`. */
-function decideFromVerdict(verdict: AuthorizerVerdict) {
+/**
+ * Map a link's decisive verdict to a decision; `defer` yields `null`.
+ *
+ * The deciding link is named on the decision, not merely counted among the
+ * consulted set the selection already records: a link ahead of it that
+ * deferred decided nothing and must not be credited (#726).
+ */
+function decideFromVerdict(
+  name: string,
+  verdict: AuthorizerVerdict,
+): PermissionPromptDecision | null {
   switch (verdict.kind) {
     case "allow":
       // A link grant is non-persistent (state `approved`, never
       // `approved_for_session`), per ADR 0007's off-by-default envelope.
-      return { approved: true, state: "approved" } as const;
+      return {
+        approved: true,
+        state: "approved",
+        decidedBy: decidedByLink(name, "allow", null),
+      };
     case "deny":
-      return createDeniedPermissionDecision(verdict.reason);
+      return {
+        ...createDeniedPermissionDecision(verdict.reason),
+        decidedBy: decidedByLink(name, "deny", verdict.reason ?? null),
+      };
     case "defer":
       return null;
   }
+}
+
+function decidedByLink(
+  name: string,
+  verdict: "allow" | "deny",
+  reason: string | null,
+): DecisionSource {
+  return { kind: "authorizer", name, verdict, reason };
 }
