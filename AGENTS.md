@@ -95,6 +95,9 @@ When an edit's `oldText` would span a decorative comment rule (a long run of `�
 When the rule line is itself the target (deleting a section header with its block), copy it from a fresh `Read` of that region — retyping the dash run is what fails the batch.
 If you delete such a block by line number with `sed`, re-read the region afterward to confirm you did not remove an enclosing brace.
 A multi-line `perl -0777`/`sed` regex substitution across many similar blocks is a trap — a non-greedy `.*?` group spans block boundaries and silently corrupts a neighbor; collapse repeated multi-line literals with per-block `Edit` calls and reserve scripted substitution for single-line per-symbol renames (Refs #525).
+A scripted bulk edit across test files cannot tell a mock **producer** from an **assertion**, whatever its regex safety, so its correctness rests on the suite rather than the script.
+That holds only where assertions are exact (`toEqual`/`toHaveBeenCalledWith`).
+A touched `toMatchObject`/`objectContaining` site absorbs a wrong insertion and still passes — re-read those by hand instead of counting the green run as verification (Refs #726).
 A replacement containing backslashes is a trap even as a single-line rename — shell, perl, and the regex engine each consume an escape level.
 Use `Edit` (Refs #653).
 When wrapping existing lines in a new enclosing block (a `describe`, function, or `try`), emit the opening and closing braces as two `edits[]` entries in one `Edit` call (or use `Write`) — a lone opening brace fails the whole file parse, and the close is too far from the open to anchor in the same `oldText`.
@@ -293,6 +296,7 @@ Do not start a bash word with `=` — zsh's `equals` expansion reads `=word` as 
 Use `echo ---`.
 A shell snippet quoted inside a `/* */` block comment must not contain `*/` — a `sed 's/,.*//'` closes the comment and breaks the file's parse.
 Use `cut -d, -f1`.
+Pass file tool paths repo-relative (`packages/<pkg>/src/x.ts`), not hand-built absolute ones — a mistyped absolute path trips the `external_directory` gate instead of failing fast (Refs #726).
 
 ## Markdown
 

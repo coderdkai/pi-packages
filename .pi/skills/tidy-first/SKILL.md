@@ -43,6 +43,7 @@ The report is advisory — you decide what lands.
 - **Optional** tidyings: take them only if they genuinely shrink the change; skip otherwise.
 - **Rejected** items: do not act on them.
   If one looks worth doing, it is separate-concern cleanup — note it for `/plan-improvements`, do not fold it into this change.
+  Read a rejection's reasoning, not just its verdict — one that contradicts the plan is a signal to re-examine the plan (Refs #726).
 
 Do not tidy code the change will not touch — that is scope creep, not Tidy First.
 An extraction is a copy, so it carries the source's rule violations into a file that is now shared — re-read moved code against the governing skill before committing it (Refs #727).
