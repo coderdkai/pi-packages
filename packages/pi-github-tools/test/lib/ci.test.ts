@@ -25,6 +25,95 @@ function mockGhJson(value: unknown) {
   });
 }
 
+/** Helper to make gh fail for a given call. */
+function mockGhFail(stderr: string) {
+  mockRunCommand.mockResolvedValueOnce({
+    stdout: "",
+    stderr,
+    exitCode: 1,
+  });
+}
+
+describe("transient failures", () => {
+  const sha = "abc1234567890abcdef1234567890abcdef123456";
+
+  function mockMatchingRun() {
+    mockGhJson([
+      {
+        databaseId: 100,
+        url: "https://github.com/o/r/actions/runs/100",
+        status: "in_progress",
+        conclusion: null,
+        headSha: sha,
+        displayTitle: "CI",
+        name: "CI",
+      },
+    ]);
+  }
+
+  it("findRun retries the run list and reports the wait", async () => {
+    mockGhFail("HTTP 503");
+    mockMatchingRun();
+    mockGhJson({
+      jobs: [{ name: "build", status: "in_progress", conclusion: null }],
+    });
+
+    const onProgress = vi.fn();
+    const result = await findRun({
+      workflow: "ci",
+      expectedSha: sha,
+      timeout: 120,
+      onProgress,
+    });
+
+    expect(result).toContain("run_id: 100");
+    expect(mockSleep).toHaveBeenCalledWith(1000, undefined);
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.stringContaining("transient gh failure, retry 1/3 in 1s"),
+    );
+  });
+
+  it("findRun charges the retry backoff against the timeout", async () => {
+    mockGhFail("HTTP 503");
+    mockGhJson([]);
+
+    const result = await findRun({
+      workflow: "ci",
+      expectedSha: sha,
+      timeout: 0,
+    });
+
+    expect(result).toContain("timeout: no run found");
+    expect(result).toContain("elapsed: 1s");
+  });
+
+  it("watchRun retries the run view", async () => {
+    mockGhFail("HTTP 503");
+    mockGhJson({
+      status: "completed",
+      conclusion: "success",
+      name: "CI",
+      headSha: sha,
+      jobs: [{ name: "build", status: "completed", conclusion: "success" }],
+    });
+
+    const result = await watchRun({ workflow: "ci", runId: 100 });
+
+    expect(result).toContain("success");
+    expect(mockSleep).toHaveBeenCalledWith(1000, undefined);
+  });
+
+  it("listRuns retries the run list", async () => {
+    mockGhFail("HTTP 503");
+    mockGhJson([]);
+
+    const result = await listRuns({ workflow: "ci" });
+
+    expect(result).toContain("No runs found");
+    expect(mockSleep).toHaveBeenCalledWith(1000, undefined);
+  });
+});
+
 describe("findRun", () => {
   const sha = "abc1234567890abcdef1234567890abcdef123456";
 

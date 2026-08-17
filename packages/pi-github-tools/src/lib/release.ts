@@ -9,10 +9,10 @@
 
 import { findRetryDelay, formatAborted, formatProgress } from "./ci-helpers";
 import type { MergeMethod } from "./config";
-import { gh, ghJson, ghJsonRetrying, git } from "./github";
+import { gh, ghJsonRetrying, git } from "./github";
 import { classifyMergeState, type MergeReadiness } from "./merge-state";
 import { sleep } from "./process";
-import { formatRetryNotice } from "./retry";
+import { formatRetryNotice, type RetryOptions } from "./retry";
 
 export type { MergeMethod };
 
@@ -58,6 +58,16 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
   let elapsed = 0;
   let attempt = 0;
 
+  const retryOptions: RetryOptions = {
+    signal,
+    onRetry: (info) => {
+      // The backoff is wall clock the caller asked us to bound, so it counts
+      // against `timeout` just like a poll interval does.
+      elapsed += Math.round(info.delayMs / 1000);
+      onProgress?.(formatRetryNotice(info));
+    },
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     attempt++;
@@ -84,7 +94,7 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
 
     let prs: ReleasePR[];
     try {
-      prs = await ghJson<ReleasePR[]>(
+      prs = await ghJsonRetrying<ReleasePR[]>(
         [
           "pr",
           "list",
@@ -95,7 +105,7 @@ export async function findReleasePR(args: FindReleasePRArgs): Promise<string> {
           "--limit",
           "5",
         ],
-        signal,
+        retryOptions,
       );
     } catch {
       return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
@@ -144,6 +154,16 @@ export async function mergeReleasePR(
   const pollInterval = 10;
   let elapsed = 0;
 
+  const retryOptions: RetryOptions = {
+    signal,
+    onRetry: (info) => {
+      // The backoff is wall clock the caller asked us to bound, so it counts
+      // against `timeout` just like a poll interval does.
+      elapsed += Math.round(info.delayMs / 1000);
+      onProgress?.(formatRetryNotice(info));
+    },
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     if (signal?.aborted) {
@@ -158,15 +178,7 @@ export async function mergeReleasePR(
         "--json",
         "number,title,mergeable,mergeStateStatus,statusCheckRollup",
       ],
-      {
-        signal,
-        onRetry: (info) => {
-          // The backoff is wall clock the caller asked us to bound, so it
-          // counts against `timeout` just like a poll interval does.
-          elapsed += Math.round(info.delayMs / 1000);
-          onProgress?.(formatRetryNotice(info));
-        },
-      },
+      retryOptions,
     );
 
     const decision = classifyMergeState(pr);

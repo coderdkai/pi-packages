@@ -87,6 +87,39 @@ describe("findReleasePR", () => {
     expect(result).toContain("aborted:");
     expect(result).toContain("cancelled by user");
   });
+
+  it("retries a transient failure and reports the wait", async () => {
+    mockCmdFail("HTTP 503");
+    mockGhJson([
+      {
+        number: 42,
+        title: "chore(main): release 1.2.0",
+        headRefName: "release-please--branches--main",
+        url: "https://github.com/o/r/pull/42",
+        mergeable: "MERGEABLE",
+        mergeStateStatus: "CLEAN",
+      },
+    ]);
+
+    const onProgress = vi.fn();
+    const result = await findReleasePR({ timeout: 120, onProgress });
+
+    expect(result).toContain("pr_number: 42");
+    expect(mockSleep).toHaveBeenCalledWith(1000, undefined);
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.stringContaining("transient gh failure, retry 1/3 in 1s"),
+    );
+  });
+
+  it("charges the retry backoff against the timeout", async () => {
+    mockCmdFail("HTTP 503");
+    mockGhJson([]);
+
+    const result = await findReleasePR({ timeout: 0 });
+
+    expect(result).toContain("timeout: no release-please PR found");
+    expect(result).toContain("elapsed: 1s");
+  });
 });
 
 describe("mergeReleasePR", () => {

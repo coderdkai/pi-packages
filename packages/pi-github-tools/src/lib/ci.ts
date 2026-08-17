@@ -12,8 +12,9 @@ import {
   formatAborted,
   formatProgress,
 } from "./ci-helpers";
-import { ghJson } from "./github";
+import { ghJsonRetrying } from "./github";
 import { sleep } from "./process";
+import { formatRetryNotice, type RetryOptions } from "./retry";
 
 interface RunSummary {
   status: string;
@@ -92,6 +93,16 @@ export async function findRun(args: FindRunArgs): Promise<string> {
   let attempt = 0;
   let lastSeenRun: RunSummary | null = null;
 
+  const retryOptions: RetryOptions = {
+    signal,
+    onRetry: (info) => {
+      // The backoff is wall clock the caller asked us to bound, so it counts
+      // against `timeout` just like a poll interval does.
+      elapsed += Math.round(info.delayMs / 1000);
+      onProgress?.(formatRetryNotice(info));
+    },
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     attempt++;
@@ -118,7 +129,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
 
     let runs: RunSummary[];
     try {
-      runs = await ghJson<RunSummary[]>(
+      runs = await ghJsonRetrying<RunSummary[]>(
         [
           "run",
           "list",
@@ -129,7 +140,7 @@ export async function findRun(args: FindRunArgs): Promise<string> {
           "--json",
           "databaseId,url,status,conclusion,headSha,displayTitle,name",
         ],
-        signal,
+        retryOptions,
       );
     } catch {
       return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
@@ -143,9 +154,9 @@ export async function findRun(args: FindRunArgs): Promise<string> {
     if (matchingRun) {
       let jobs: CIJob[];
       try {
-        ({ jobs } = await ghJson<RunJobs>(
+        ({ jobs } = await ghJsonRetrying<RunJobs>(
           ["run", "view", String(matchingRun.databaseId), "--json", "jobs"],
-          signal,
+          retryOptions,
         ));
       } catch {
         return formatAborted(`  retries: ${attempt}`, `  elapsed: ${elapsed}s`);
@@ -187,6 +198,14 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
   let elapsed = 0;
   const progressLog: string[] = [];
 
+  const retryOptions: RetryOptions = {
+    signal,
+    onRetry: (info) => {
+      elapsed += Math.round(info.delayMs / 1000);
+      onProgress?.(formatRetryNotice(info));
+    },
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with explicit return/break
   while (true) {
     if (signal?.aborted) {
@@ -195,7 +214,7 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
 
     let run: WatchPoll;
     try {
-      run = await ghJson<WatchPoll>(
+      run = await ghJsonRetrying<WatchPoll>(
         [
           "run",
           "view",
@@ -203,7 +222,7 @@ export async function watchRun(args: WatchRunArgs): Promise<string> {
           "--json",
           "status,conclusion,name,headSha,jobs",
         ],
-        signal,
+        retryOptions,
       );
     } catch {
       return formatAborted(`  elapsed: ${elapsed}s`, `  run_id: ${runId}`);
@@ -244,7 +263,7 @@ export async function listRuns(args: ListRunsArgs): Promise<string> {
   const workflowFile = `${args.workflow}.yml`;
   const limit = args.limit ?? 5;
 
-  const runs = await ghJson<RunSummary[]>([
+  const runs = await ghJsonRetrying<RunSummary[]>([
     "run",
     "list",
     "--limit",
