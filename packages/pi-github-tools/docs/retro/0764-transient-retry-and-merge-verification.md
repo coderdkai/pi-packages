@@ -28,3 +28,28 @@ Wrote `packages/pi-github-tools/docs/plans/0764-transient-retry-and-merge-verifi
   Folded that correction into this plan's doc step.
 - No follow-up issues filed.
   Git-side retry and a configurable pattern list are named in Open Questions as deliberately deferred, not as work to track.
+
+## Stage: Implementation — TDD (2026-08-17T20:59:00Z)
+
+### Session summary
+
+Landed all five planned TDD steps plus one tidy-first preparatory commit, in six commits.
+The package suite went from 112 to 162 tests; all four gates (`check`, root `lint`, `test`, `fallow dead-code`) were green at baseline and remain green.
+`release_pr_merge` now retries transient reads, verifies over REST whether a failed merge call landed, and the four polling loops stop reporting a `gh` failure as a user cancellation.
+
+### Observations
+
+- The `tidy-first-assessor` earned its keep: it counted 15 verbatim `"aborted: cancelled by user"` blocks across `release.ts` and `ci.ts` and recommended extracting `formatAborted` first.
+  That turned step 4's guard into a one-line-per-site diff instead of a 15-site multi-line rewrite.
+  It also correctly *declined* to pre-extract the `if (signal?.aborted) … throw` guard itself, on the grounds that the guard is the behavior change, not preparation for it.
+- Two shared helpers appeared that the plan's API sketch did not name: `formatAborted` (from the tidy) and `formatRetryNotice` (in `retry.ts`, so the retry progress line has one home across three loops).
+  The private merge-failure helpers also came out with shorter names than the plan sketched (`mergedResult`, `mergeFailureResult`, `unverifiedMergeFailureResult` rather than `verifyMergeState`/`mergedAfterFailureResult`).
+- The timeout-accounting test needed care to be non-vacuous.
+  A scenario where the retry backoff and the poll interval both push `elapsed` past the bound proves nothing, so the test uses `timeout: 3` with two retries (1 s + 4 s) and asserts the poll sleep of `10000` was never called — which fails if the backoff is not folded into `elapsed`.
+- The four pre-existing abort tests passed only because of the bug being fixed: they never aborted their controller and relied on the blanket `catch {}`.
+  They were rewritten to abort from inside the mocked `sleep` rejection (via a shared `mockSleepAborts` helper), and each gained a sibling test asserting a real failure now throws.
+- `withRetry` is written as a bounded loop of three retries followed by a final unguarded attempt, so the last error propagates unwrapped and there is no unreachable-return branch to satisfy the type checker.
+- Scope was trimmed once during implementation: a `promptGuidelines` block was added to the `release_pr_merge` registration and then removed — it was not in the plan, and it would spend system-prompt budget in every session of every consumer for guidance the ship prompts already carry.
+- A stray `}` in an `Edit` replacement broke `release-pr-merge.ts`'s parse; `pi-autoformat` reported it immediately with the exact parse error, and the fix was one edit.
+- Pre-completion reviewer: PASS, no warnings.
+  It independently confirmed the four gates, the doc touch points, the abort-test rewrite pattern, and judged both named deviations improvements over the plan's sketch.
