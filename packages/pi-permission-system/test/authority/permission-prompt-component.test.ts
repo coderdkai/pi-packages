@@ -113,6 +113,11 @@ const ARROW_DOWN = "\u001b[B";
 const ENTER = "\r";
 const ESCAPE = "\u001b";
 
+/** How the terminal delivers a paste: one chunk, markers included. */
+function paste(content: string): string {
+  return `\u001b[200~${content}\u001b[201~`;
+}
+
 /** A path ask; `path : /repo/secret.txt` is its decision-relevant line. */
 function makeAsk(value = "/repo/secret.txt"): PromptPayload {
   return makePromptPayload({
@@ -239,6 +244,23 @@ describe("presentInlinePermissionPrompt", () => {
         state: "denied",
       });
     });
+
+    it("never decides on a stray paste at the decision step", async () => {
+      const { view, captured } = makeFakeView(false);
+      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
+      let settled = false;
+      void promise.then(() => {
+        settled = true;
+      });
+
+      captured.component?.handleInput(paste("y"));
+      captured.component?.handleInput(paste("some copied text"));
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      captured.component?.handleInput("n");
+      expect(await promise).toEqual({ approved: false, state: "denied" });
+    });
   });
 
   describe("deny with reason", () => {
@@ -280,6 +302,64 @@ describe("presentInlinePermissionPrompt", () => {
         state: "denied_with_reason",
         denialReason: "a",
       });
+    });
+
+    it("accepts pasted text into the reason", async () => {
+      expect(
+        await runPrompt(false, ["r", paste("pasted text"), ENTER]),
+      ).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "pasted text",
+      });
+    });
+
+    it("flattens a multi-line paste into one readable line", async () => {
+      expect(
+        await runPrompt(false, [
+          "r",
+          paste("denied because it touches\n~/.ssh"),
+          ENTER,
+        ]),
+      ).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "denied because it touches ~/.ssh",
+      });
+    });
+
+    it("keeps a pasted reason on one row, however long it is", () => {
+      const { view, captured } = makeFakeView(false);
+      void presentInlinePermissionPrompt(view, "Title", ASK);
+      captured.component?.handleInput("r");
+      const before = captured.component?.render(40) ?? [];
+
+      // "q" appears nowhere else in this render; "x" would match `secret.txt`.
+      captured.component?.handleInput(paste("q".repeat(500)));
+      const after = captured.component?.render(40) ?? [];
+
+      expect(after).toHaveLength(before.length);
+      expect(after.join("\n")).toContain("qqq");
+      for (const line of after) {
+        expect(visibleWidth(line)).toBeLessThanOrEqual(40);
+      }
+    });
+
+    it("drops the expand key instead of typing it into the reason", async () => {
+      const { view, captured, setToolsExpanded } = makeFakeView(false);
+      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
+
+      captured.component?.handleInput("r");
+      captured.component?.handleInput("a");
+      captured.component?.handleInput(CTRL_O);
+      captured.component?.handleInput(ENTER);
+
+      expect(await promise).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "a",
+      });
+      expect(setToolsExpanded).not.toHaveBeenCalled();
     });
 
     it("navigates back to the decision step on escape from the reason step", async () => {
