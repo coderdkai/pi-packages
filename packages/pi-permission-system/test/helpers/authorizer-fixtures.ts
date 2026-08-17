@@ -14,6 +14,7 @@ import type {
   AuthorizerSelectionDeps as SelectionCtorDeps,
 } from "#src/authority/authorizer";
 import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
+import { ForwardingLivenessJudge } from "#src/authority/forwarding-liveness";
 import type { PermissionPrompterApi } from "#src/authority/permission-prompter";
 import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
@@ -97,7 +98,12 @@ export function makeAuthorizerSelectionDeps(
       }),
     forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
     registry: overrides.registry,
-    servingRegistry: overrides.servingRegistry ?? new ServingSessionRegistry(),
+    serving:
+      overrides.serving ??
+      new ForwardingLivenessJudge({
+        registry: new ServingSessionRegistry(),
+        heartbeats: { read: () => "absent", servingIds: () => [] },
+      }),
     getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
     logger: overrides.logger ?? makeAuthorizerLog(),
     prompter: overrides.prompter ?? makePrompterApi(),

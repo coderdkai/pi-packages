@@ -19,6 +19,7 @@ import {
   sleep,
   writeJsonFileAtomic,
 } from "#src/authority/forwarding-io";
+import type { TargetServingLookup } from "#src/authority/forwarding-liveness";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
   type ForwardedAccessFacts,
@@ -33,7 +34,6 @@ import {
   resolvePermissionForwardingTarget,
   SUBAGENT_PARENT_SESSION_ENV_CANDIDATES,
 } from "#src/authority/permission-forwarding";
-import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { createPermissionRequestId } from "#src/permission-request-id";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
@@ -97,8 +97,8 @@ export interface ParentAuthorizerDeps {
   forwardingDir: string;
   /** In-process subagent session registry for forwarding target resolution. */
   registry?: SubagentSessionRegistry;
-  /** Whether the resolved target is draining its inbox (in-process targets only). */
-  serving: ServingLookup;
+  /** Whether the resolved target is draining its inbox, on whichever channel can say. */
+  serving: TargetServingLookup;
   /** How long to wait for the target's answer, read live so config edits apply. */
   getTimeoutMs: () => number;
   logger: DebugReviewLogger;
@@ -181,7 +181,7 @@ function forwardableRequestId(requesterRequestId: string): string {
 export class ParentAuthorizer implements TerminalAuthorizer {
   private readonly forwardingDir: string;
   private readonly registry: SubagentSessionRegistry | undefined;
-  private readonly serving: ServingLookup;
+  private readonly serving: TargetServingLookup;
   private readonly getTimeoutMs: () => number;
   private readonly logger: DebugReviewLogger;
 
@@ -387,11 +387,17 @@ export class ParentAuthorizer implements TerminalAuthorizer {
         unservedSince !== null &&
         Date.now() - unservedSince >= PERMISSION_FORWARDING_SERVING_GRACE_MS
       ) {
+        const observation = this.serving.describe(target);
         this.logger.review("forwarded_permission.no_serving_session", {
           requestId,
           requesterSessionId: request.requesterSessionId,
           targetSessionId,
-          servingSessionIds: this.serving.servingIds(),
+          // Which channel answered, and what it saw: the difference between a
+          // parent that exited, one that was killed, and one polling under a
+          // different session id is the whole diagnosis of a stalled forward.
+          servingChannel: observation.channel,
+          servingState: observation.state,
+          servingSessionIds: observation.servingIds,
         });
         this.discardRequest(location, requestPath);
         return abandon(
@@ -421,21 +427,17 @@ export class ParentAuthorizer implements TerminalAuthorizer {
   /**
    * Track how long the target has looked unserved, or `null` while it looks fine.
    *
-   * Only an in-process target (`source: "registry"`) can be judged: a target in
-   * another process shares no serving registry with this one, so its absence
-   * from the registry says nothing (#719, follow-up in #721).
+   * Which channel can answer for this target is the judge's decision, not this
+   * one's: a target it cannot judge answers `null`, which resets the window
+   * exactly as "serving" does, so an unjudgeable target waits out the timeout.
    */
   private checkServingLiveness(
     target: PermissionForwardingTarget,
     unservedSince: number | null,
   ): number | null {
-    if (target.source !== "registry") {
-      return null;
-    }
-    if (this.serving.isServing(target.sessionId)) {
-      return null;
-    }
-    return unservedSince ?? Date.now();
+    return this.serving.isServing(target) === false
+      ? (unservedSince ?? Date.now())
+      : null;
   }
 
   /**

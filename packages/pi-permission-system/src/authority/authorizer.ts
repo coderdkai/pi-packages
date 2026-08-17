@@ -1,10 +1,10 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { TargetServingLookup } from "#src/authority/forwarding-liveness";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type {
   PromptPreferences,
   requestPermissionDecision,
 } from "#src/authority/permission-prompt-component";
-import type { ServingLookup } from "#src/authority/serving-registry";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import type { PermissionEventBus } from "#src/permission-events";
 import type { AuthorizerLog, PermissionQuery } from "#src/service";
@@ -108,8 +108,8 @@ export interface AuthorizerSelectionDeps {
   forwardingDir: string;
   /** In-process subagent session registry for forwarding target resolution. */
   registry?: SubagentSessionRegistry;
-  /** Which sessions are draining a forwarded-permission inbox. */
-  servingRegistry: ServingLookup;
+  /** Whether a forwarding target is draining its inbox, on whichever channel can say. */
+  serving: TargetServingLookup;
   /** The forwarding timeout, read live so a config edit applies to the next ask. */
   getForwardingTimeoutMs: () => number;
   logger: DebugReviewLogger;
@@ -145,7 +145,7 @@ export function selectAuthorizer(
       terminal: new ParentAuthorizer(ctx, {
         forwardingDir: deps.forwardingDir,
         registry: deps.registry,
-        serving: deps.servingRegistry,
+        serving: deps.serving,
         getTimeoutMs: deps.getForwardingTimeoutMs,
         logger: deps.logger,
       }),

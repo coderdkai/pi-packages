@@ -8,7 +8,10 @@ import {
   ForwardedRequestServer,
   type ServingPolicy,
 } from "./authority/forwarded-request-server";
-import { ServingHeartbeatStore } from "./authority/forwarding-liveness";
+import {
+  ForwardingLivenessJudge,
+  ServingHeartbeatStore,
+} from "./authority/forwarding-liveness";
 import { ForwardingManager } from "./authority/forwarding-manager";
 import { PERMISSION_FORWARDING_TIMEOUT_MS } from "./authority/permission-forwarding";
 import { requestPermissionDecision } from "./authority/permission-prompt-component";
@@ -123,6 +126,11 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     forwardingDir: paths.forwardingDir,
     logger,
   });
+  // The read side of both channels, routed by how the target was resolved.
+  const servingLiveness = new ForwardingLivenessJudge({
+    registry: servingRegistry,
+    heartbeats: servingHeartbeats,
+  });
 
   const authorizerSelection = new AuthorizerSelection({
     detection: subagentDetection,
@@ -134,7 +142,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     requestPermissionDecision,
     forwardingDir: paths.forwardingDir,
     registry: subagentRegistry,
-    servingRegistry,
+    serving: servingLiveness,
     getForwardingTimeoutMs: () =>
       configStore.current().forwardingTimeoutMs ??
       PERMISSION_FORWARDING_TIMEOUT_MS,

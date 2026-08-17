@@ -19,8 +19,10 @@ import { ServingSessionRegistry } from "#src/authority/serving-registry";
 import {
   createForwardingTempDir,
   makeForwarderContext,
+  makeLivenessJudge,
   makeParentAuthorizerDeps,
   makeSubagentRegistry,
+  publishServingHeartbeat,
 } from "#test/helpers/forwarding-fixtures";
 import {
   makePromptDetails,
@@ -737,7 +739,7 @@ describe("ParentAuthorizer abandonment", () => {
             parentSessionId: "parent-session",
           }),
           // Nobody has marked themselves as serving.
-          serving: new ServingSessionRegistry(),
+          serving: makeLivenessJudge({ forwardingDir: temp.forwardingDir }),
           getTimeoutMs: () => 60_000,
         }),
       );
@@ -757,8 +759,8 @@ describe("ParentAuthorizer abandonment", () => {
   test("keeps waiting while the in-process target is serving", async () => {
     const temp = createForwardingTempDir("parent-session");
     try {
-      const serving = new ServingSessionRegistry();
-      serving.markServing("parent-session");
+      const registry = new ServingSessionRegistry();
+      registry.markServing("parent-session");
       const authorizer = new ParentAuthorizer(
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
         makeParentAuthorizerDeps({
@@ -766,7 +768,10 @@ describe("ParentAuthorizer abandonment", () => {
           registry: makeSubagentRegistry("child-session", {
             parentSessionId: "parent-session",
           }),
-          serving,
+          serving: makeLivenessJudge({
+            forwardingDir: temp.forwardingDir,
+            registry,
+          }),
           getTimeoutMs: () => 60_000,
         }),
       );
@@ -797,7 +802,7 @@ describe("ParentAuthorizer abandonment", () => {
     }
   });
 
-  test("never fast-fails a target resolved from the environment", async () => {
+  test("abandons quickly when an out-of-process target published no heartbeat", async () => {
     const temp = createForwardingTempDir("parent-session");
     try {
       vi.stubEnv("PI_SUBAGENT_PARENT_SESSION", "parent-session");
@@ -805,16 +810,126 @@ describe("ParentAuthorizer abandonment", () => {
         makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
         makeParentAuthorizerDeps({
           forwardingDir: temp.forwardingDir,
-          // No registry entry, so the target resolves from the environment:
-          // the parent is in another process and shares no serving registry.
+          // No registry entry, so the target resolves from the environment: a
+          // parent in another process, reachable only through the filesystem.
           registry: makeSubagentRegistry("child-session"),
-          serving: new ServingSessionRegistry(),
-          getTimeoutMs: () => PERMISSION_FORWARDING_SERVING_GRACE_MS + 400,
+          serving: makeLivenessJudge({ forwardingDir: temp.forwardingDir }),
+          getTimeoutMs: () => 60_000,
+        }),
+      );
+
+      const started = Date.now();
+      await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
+        unavailableDecision(
+          "Session 'parent-session' is not serving forwarded permission requests",
+        ),
+      );
+      expect(Date.now() - started).toBeLessThan(60_000);
+    } finally {
+      vi.unstubAllEnvs();
+      temp.cleanup();
+    }
+  });
+
+  test("abandons quickly when an out-of-process target's process is gone", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      vi.stubEnv("PI_SUBAGENT_PARENT_SESSION", "parent-session");
+      publishServingHeartbeat(temp.forwardingDir, "parent-session", 4242);
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session"),
+          serving: makeLivenessJudge({
+            forwardingDir: temp.forwardingDir,
+            isProcessAlive: () => false,
+          }),
+          getTimeoutMs: () => 60_000,
         }),
       );
 
       await expect(authorizer.authorize({ ...forwardedAsk })).resolves.toEqual(
-        unavailableDecision(expect.stringContaining("did not answer within")),
+        unavailableDecision(
+          "Session 'parent-session' is not serving forwarded permission requests",
+        ),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      temp.cleanup();
+    }
+  });
+
+  test("keeps waiting while an out-of-process target's heartbeat is fresh", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      vi.stubEnv("PI_SUBAGENT_PARENT_SESSION", "parent-session");
+      publishServingHeartbeat(temp.forwardingDir, "parent-session");
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session"),
+          serving: makeLivenessJudge({ forwardingDir: temp.forwardingDir }),
+          getTimeoutMs: () => 60_000,
+        }),
+      );
+
+      const decisionPromise = authorizer.authorize({ ...forwardedAsk });
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      // Well past the grace window: a live parent must not be abandoned no
+      // matter how long the human deliberates.
+      await new Promise((resolve) =>
+        setTimeout(resolve, PERMISSION_FORWARDING_SERVING_GRACE_MS + 250),
+      );
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({
+          approved: true,
+          state: "approved",
+          responderSessionId: "parent-session",
+        }),
+        "utf-8",
+      );
+
+      await expect(decisionPromise).resolves.toMatchObject({
+        approved: true,
+        state: "approved",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      temp.cleanup();
+    }
+  });
+
+  test("records which channel answered and what it saw when it gives up", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      vi.stubEnv("PI_SUBAGENT_PARENT_SESSION", "parent-session");
+      publishServingHeartbeat(temp.forwardingDir, "other-parent");
+      const logger = { review: vi.fn(), debug: vi.fn() };
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        makeParentAuthorizerDeps({
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session"),
+          serving: makeLivenessJudge({ forwardingDir: temp.forwardingDir }),
+          getTimeoutMs: () => 60_000,
+          logger,
+        }),
+      );
+
+      await authorizer.authorize({ ...forwardedAsk });
+
+      expect(logger.review).toHaveBeenCalledWith(
+        "forwarded_permission.no_serving_session",
+        expect.objectContaining({
+          requesterSessionId: "child-session",
+          targetSessionId: "parent-session",
+          servingChannel: "heartbeat",
+          servingState: "absent",
+          servingSessionIds: ["other-parent"],
+        }),
       );
     } finally {
       vi.unstubAllEnvs();
