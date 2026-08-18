@@ -35,3 +35,38 @@ Plan committed as `docs/plans/0775-package-scope-and-non-goals.md` in `01b76dd3`
 - Explicitly built in a `## Gaps` section for each brief, because a package with no ADR and no external PR pressure may genuinely have no recorded non-goals.
   Accepting a manufactured one is exactly the failure mode #777 warns about.
 - Nothing filed as a follow-up: the plan's deferrals all land on the existing #776 and #777, and the one speculative item (a companion ADR for a Tier A boundary) is deliberately deferred until the evidence briefs exist.
+
+## Stage: Implementation — Build (2026-08-18T21:51:45Z)
+
+### Session summary
+
+Executed all seven Build Order steps: nine read-only mining subagents produced committed evidence briefs, then the nine `## Scope and non-goals` sections were drafted from those briefs and landed as per-package `docs(<pkg>):` commits across four operator review gates.
+Thirteen commits total.
+The cross-check pass found and fixed one real cross-package contradiction, and `pnpm pack` verification confirmed the per-package citation link-form rule was necessary and correct.
+
+### Observations
+
+- The evidence-mining phase was the right call and changed the output substantially.
+  Total yield was 149 cited candidate non-goals across nine packages — far more than could ship — so drafting became selection rather than invention.
+  `pi-permission-system` alone produced 31 candidates with 28 backed by an ADR or numbered design principle; `pi-nocd` produced 3.
+- The briefs' most valuable output was **negative**, and it constrained the charter rather than feeding it.
+  Three things had to be kept out: durable persistence of an approval in `pi-permission-system` (design principle 8 and the authority model anticipate it, so writing it as a non-goal would have contradicted the architecture), the whole policy-source channel question (undecided across several parked requests, tracked in #639), and Pi's client-server split in `pi-subagents` (a deferral pending an upstream capability, not a boundary).
+  A drafting pass without the mining phase would plausibly have asserted at least the first as a non-goal.
+- The `## Gaps`-versus-`## Candidate non-goals` split did the work it was designed for.
+  Agents consistently refused to promote absence to boundary — `pi-github-tools`'s brief called the tool-surface question "the largest gap… the strongest signal is silence in `git log`, which is absence", and `pi-colgrep`'s flagged one plan Non-Goal as issue-scoped sequencing that a later commit had already violated, warning it must not be promoted to a charter line.
+- Thirteen shipped boundaries came from `ask_user` gates rather than artifacts, because the evidence recorded only absence: `pi-nocd` instruction-not-enforcement; `pi-session-tools` transcript entries read-only; `pi-github-tools` surface closed to the ship/release flow, and release-please-only; `pi-autoformat` non-blocking is permanent; `pi-colgrep` wrapper with a single backend; `pi-permission-model-judge` typo paths only; `pi-subagents-worktrees` child sessions only, and ends at the branch; `pi-permission-system` no permissive defaults or presets, and no outbound event bridges; `pi-subagents` `tools:` as the sole widening mechanism, and no global run-mode default.
+  Four further gate decisions resolved to omission: `pi-autoformat` lint-versus-format left unstated, `pi-permission-system` agent steering dropped for want of a durable basis, `pi-subagents` reimplement-don't-merge routed to `CONTRIBUTING.md` (#776), and `pi-permission-system` #639 named as an open decision rather than asserted as a boundary.
+  Recording the list here answers the pre-completion reviewer's one caveat, which was that no artifact enumerated them.
+- The cross-check step earned its place.
+  `pi-session-tools` routed peer-worktree teardown to `@gotgenes/pi-subagents-worktrees`, whose charter — written two commits later — explicitly disclaims human-driven peer sessions.
+  Neither package's brief could have caught it; only reading the nine finished charters together did.
+  A charter set is a system, and the last step has to treat it as one.
+- The distribution rule the plan derived held up under measurement.
+  `pnpm pack` confirmed `pi-permission-system` ships `docs/*.md` but not `docs/architecture` or `docs/decisions`, so its ADR citations had to be absolute GitHub URLs, while `pi-subagents` ships both and keeps relative links.
+  Had the plan not checked the `files` allowlists at planning time, roughly a dozen README links would have resolved to nothing in the npm tarball.
+- One deviation from the plan's step sequence: the two Tier A mining agents were dispatched during step 1 rather than step 2, so they could claim concurrency slots (the runner caps at 4) as the Tier B agents finished.
+  The commits stayed split as planned, using explicit pathspecs.
+- Two boundaries were asserted knowingly without a durable citation, both operator calls: `pi-permission-system`'s conservative-defaults position (a closed-issue comment only) and its no-outbound-bridges rule (supported by analogy, since the architecture doc states the rule for the opposite direction).
+  Both answer live requests, which is why they shipped.
+- Pre-completion reviewer: PASS.
+  No warnings requiring action; its single caveat about the unenumerated operator-decision list is addressed above.
