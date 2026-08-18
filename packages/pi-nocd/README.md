@@ -8,7 +8,7 @@ Pi extension that appends an instruction to the system prompt forbidding the age
 
 Pi already tells the agent the resolved CWD: its system prompt ends with a `Current working directory: <path>` footer, and that line survives downstream shaping (for example [pi-anthropic-auth](https://github.com/gotgenes/pi-anthropic-auth), which only rewrites the preamble span and preserves the footer).
 
-What Pi ships **nowhere** — default or shaped — is any *instruction* against `cd`-prefixing the CWD.
+What Pi ships **nowhere** — default or shaped — is any _instruction_ against `cd`-prefixing the CWD.
 The footer is a bare statement of fact, not a rule, so the habit of prefixing commands with `cd $(pwd) &&` survives.
 
 This extension hooks `before_agent_start` and appends a block that adds the missing prohibition — forbidding both the literal `cd <path> &&` form and the generic `cd $(pwd) &&` form.
@@ -17,6 +17,35 @@ It repeats the literal resolved path (from `ctx.cwd`) only to make the forbidden
 Because the block names a literal path, it has to be rebuilt for each session that carries it.
 A subagent inherits its parent's system prompt verbatim, so a child sees a block naming the parent's directory — and a child given an isolated workspace (for example a git worktree from [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees)) would be told that shell commands already execute somewhere they do not.
 An inherited block is therefore rewritten to name the current session's directory rather than deferred to.
+
+## Scope and non-goals
+
+**Purpose.**
+Pi tells the agent its working directory but never forbids `cd`-prefixing it.
+This extension supplies the missing prohibition — and nothing else.
+
+**In scope.**
+The wording of the injected block, correct path resolution when a child session inherits a parent's prompt or runs in an isolated workspace, and the single `before_agent_start` hook that carries it.
+
+**Non-goals.**
+
+- _Enforcing the rule._
+  This extension instructs; it does not gate.
+  The injected block is a prompt-level prohibition, and a `cd`-prefixed command that reaches the shell anyway is not intercepted here.
+  Blocking or auditing a command at execution time is a separate concern from telling the agent not to write one.
+- _Owning the `# Working Directory` heading._
+  A section under that heading written by another handler is left alone.
+  A block is recognized by its heading _and_ its `Shell commands already execute in` sentence, so this extension only ever rewrites prompt content it wrote itself.
+- _Telling the agent what its working directory is._
+  Pi's own `Current working directory:` footer already does that.
+  The literal path appears here only to make the forbidden `cd <path> &&` example concrete.
+- _Registering tools or commands._
+  The entire surface is one `before_agent_start` hook — no tool, no slash command, and no configuration.
+
+**Where adjacent requests belong.**
+Reshaping the system-prompt preamble → [pi-anthropic-auth](https://github.com/gotgenes/pi-anthropic-auth).
+How a child session inherits its parent's prompt → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
+Giving a child session its own working directory → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
 
 ## Install
 
@@ -45,8 +74,8 @@ Just run the command directly.
 ```
 
 The result is idempotent: a prompt that already carries the block for this directory is returned unchanged, so chained `before_agent_start` handlers do not stack duplicates.
-A block naming a *different* directory — one inherited from a parent session — is rewritten in place, keeping its position stable across turns.
-A section under the same heading that this extension did not write (e.g. another handler's) is left alone: a block is recognized by its heading *and* its `Shell commands already execute in` sentence, not the heading alone.
+A block naming a _different_ directory — one inherited from a parent session — is rewritten in place, keeping its position stable across turns.
+A section under the same heading that this extension did not write (e.g. another handler's) is left alone: a block is recognized by its heading _and_ its `Shell commands already execute in` sentence, not the heading alone.
 
 ## How it works
 
