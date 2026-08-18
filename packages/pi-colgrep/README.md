@@ -8,6 +8,47 @@ ColGrep is a fully local semantic code search CLI built on multi-vector ColBERT 
 It combines regex filtering with semantic ranking, supports 25 languages, and runs entirely on the user's machine.
 This package exposes ColGrep as a Pi tool that complements (not replaces) the built-in `grep`.
 
+## Scope and non-goals
+
+**Purpose.**
+The built-in `grep` finds text matching a pattern, but it cannot find code by intent when you do not know the exact wording.
+This extension exposes the external ColGrep CLI as an agent tool and keeps its index warm across a session, so semantic search is useful without the agent having to manage it.
+
+**In scope.**
+The tool surface (argument building, result formatting, availability probing), the index lifecycle (debounce, coalescing, shutdown), and agent guidance about when semantic search is the right instrument.
+
+**Non-goals.**
+
+- _Replacing `grep`._
+  Exact string, regex, and symbol matching stay with the built-in tools.
+  The shipped skill exists specifically to stop the agent defaulting to semantic search for everything.
+- _Owning the ColGrep binary._
+  ColGrep is a user-supplied prerequisite on `PATH`.
+  This extension does not bundle, install, patch, or vendor it, and a bug in the CLI is reported upstream rather than worked around here.
+  It is also not an abstraction layer over interchangeable search engines — ColGrep is the backend.
+- _Blocking startup on indexing._
+  Startup indexing is fire-and-forget, so a session is usable immediately whatever the index is doing.
+- _Indexing a directory nobody searched._
+  The write/edit auto-reindex is gated on an index already existing, so editing files in an opted-out directory never creates one.
+- _Trigger-policy heuristics._
+  No git-repo detection, well-known-directory lists, or allow/deny path policy.
+  One `indexOnStartup` boolean plus the index-existence gate covers the need without a policy enum.
+- _Tunable debounce and timeout knobs._
+  The reindex timings are fixed and the config surface stays deliberately small.
+- _Reindexing from `bash`._
+  Mutation triggers are scoped to the `write` and `edit` tools; inferring file mutation from an arbitrary shell command is unreliable.
+- _Full CLI parity._
+  The tool exposes a curated parameter subset.
+  Flags it does not carry remain reachable by running `colgrep` through `bash`.
+- _Failing hard when ColGrep is missing._
+  The binary is an optional external dependency, so a missing, broken, or slow CLI degrades to a safe result and never blocks the agent.
+
+**Where adjacent requests belong.**
+Exact pattern or symbol matching → the built-in `grep`.
+Finding files by name or glob → the built-in `find`.
+Index freshness at search time → the ColGrep CLI's own lazy indexing, deliberately left intact.
+Advanced filtering such as `--exclude` and `--exclude-dir`, or multi-directory search → `colgrep` invoked through `bash`.
+
 ## Prerequisites
 
 - [ColGrep](https://github.com/lightonai/next-plaid#colgrep) installed and available on `PATH`
