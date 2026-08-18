@@ -26,6 +26,7 @@ import {
   ServingHeartbeatStore,
   type TargetServingLookup,
 } from "#src/authority/forwarding-liveness";
+import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
   createPermissionForwardingLocation,
   type ForwardedAccessIntent,
@@ -118,10 +119,13 @@ export function makeServerDeps(
     logger: { review: vi.fn(), debug: vi.fn() },
     policy: { resolve: vi.fn(() => makeCheckResult({ state: "ask" })) },
     escalator: {
-      escalate: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
+      escalate: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        decidedBy: { kind: "user", via: "dialog" },
+      } satisfies PermissionPromptDecision),
     },
+    broadcaster: { emitDecision: vi.fn() },
     recorder: { recordSessionApproval: vi.fn() },
     ...overrides,
   };

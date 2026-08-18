@@ -14,6 +14,11 @@ import {
   type PermissionForwardingLocation,
 } from "#src/authority/permission-forwarding";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
+import type { DecisionBroadcaster } from "#src/decision-reporter";
+import type {
+  PermissionDecisionEvent,
+  PermissionDecisionResolution,
+} from "#src/permission-events";
 import { buildForwardedAskPayload } from "#src/presentation/forwarded-ask-payload";
 import { SessionApproval } from "#src/session-approval";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
@@ -70,6 +75,14 @@ export interface ForwardedRequestServerDeps {
   policy: ServingPolicy;
   /** Escalation seam to the serving session's selected `Authorizer` on `ask`. */
   escalator: AskEscalator;
+  /**
+   * Terminal-decision broadcast for an ask this session served.
+   *
+   * A forwarded ask is prompted here but gated in the requesting session — on
+   * another event bus for an out-of-process child — so without this the
+   * parent's own consumers observe a prompt that never ends (#610).
+   */
+  broadcaster: DecisionBroadcaster;
   /**
    * The serving session's `SessionRules`. Records a whole-session grant when a
    * human approves a forwarded request for the entire serving session.
@@ -143,6 +156,68 @@ function toAccessFacts(intent: ForwardedAccessIntent): ForwardedAccessFacts {
   };
 }
 
+/**
+ * Build the terminal `permissions:decision` for an ask this session served.
+ *
+ * Rendered from the same {@link PromptPermissionDetails} the `ui_prompt`
+ * broadcast was built from, so prompt and decision carry one projection by
+ * construction rather than by convention — which is what makes them joinable
+ * beyond the shared request id.
+ *
+ * `origin` and `matchedPattern` are `null` by construction: an escalated
+ * request is one recorded authority did *not* decide, so no rule won. The
+ * decider stays off the bus, which discloses request facts and verdicts only
+ * (ADR 0011 §6, #726).
+ */
+function buildServedDecisionEvent(
+  details: PromptPermissionDetails,
+  decision: PermissionPromptDecision,
+): PermissionDecisionEvent {
+  const facts = details.payload.request;
+  return {
+    requestId: details.requestId,
+    // The child's display projection, falling back to the payload's own facts
+    // for a version-skewed request that carried none. Both are non-nullable
+    // there, so the event's non-null contract holds without a sentinel.
+    surface: details.surface ?? facts.surface,
+    value: details.value ?? facts.value,
+    agentName: details.agentName,
+    result: decision.approved ? "allow" : "deny",
+    resolution: servedResolution(decision),
+    origin: null,
+    matchedPattern: null,
+    forwarding: details.forwarding ?? null,
+  };
+}
+
+/**
+ * Name how a served ask resolved, reading the decision's own stamp rather than
+ * re-deriving it from the outcome: the site that decided already recorded what
+ * it was (#726).
+ *
+ * The grant scope is reported as the human chose it. {@link applyGrantScope}
+ * rewrites a whole-serving-session grant to a plain approval on the wire, but
+ * that translation is about what the *child* records, not about what was
+ * allowed here.
+ */
+function servedResolution(
+  decision: PermissionPromptDecision,
+): PermissionDecisionResolution {
+  if (decision.decidedBy.kind === "gate_error") {
+    return "gate_error";
+  }
+  if (decision.confirmationUnavailable) {
+    return "confirmation_unavailable";
+  }
+  if (!decision.approved) {
+    return "user_denied";
+  }
+  return decision.state === "approved_for_session" ||
+    decision.state === "approved_for_serving_session"
+    ? "user_approved_for_session"
+    : "user_approved";
+}
+
 // ── ForwardedRequestServer ────────────────────────────────────────────────
 
 /**
@@ -158,6 +233,7 @@ export class ForwardedRequestServer implements InboxProcessor {
   private readonly logger: DebugReviewLogger;
   private readonly policy: ServingPolicy;
   private readonly escalator: AskEscalator;
+  private readonly broadcaster: DecisionBroadcaster;
   private readonly recorder: SessionApprovalRecorder;
   private readonly registry: SubagentSessionRegistry | undefined;
 
@@ -166,6 +242,7 @@ export class ForwardedRequestServer implements InboxProcessor {
     this.logger = deps.logger;
     this.policy = deps.policy;
     this.escalator = deps.escalator;
+    this.broadcaster = deps.broadcaster;
     this.recorder = deps.recorder;
     this.registry = deps.registry;
   }
@@ -407,7 +484,12 @@ export class ForwardedRequestServer implements InboxProcessor {
 
     this.logger.review("forwarded_permission.prompted", logDetails);
     const details = buildForwardedAskDetails(request);
-    return await this.escalateAsk(details);
+    const decision = await this.escalateAsk(details);
+    // Announced before the grant-scope translation and before the response is
+    // written: the ask this session broadcast is over once someone here has
+    // answered it, whatever becomes of the file the child polls for (#610).
+    this.broadcaster.emitDecision(buildServedDecisionEvent(details, decision));
+    return decision;
   }
 
   /**

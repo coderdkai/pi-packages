@@ -6,7 +6,10 @@ import type { Authorizer } from "#src/authority/authorizer";
 import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { AuthorizerSelection } from "#src/authority/authorizer-selection";
 import { encloseInDelegationEnvelope } from "#src/authority/delegation-envelope";
-import { ForwardedRequestServer } from "#src/authority/forwarded-request-server";
+import {
+  ForwardedRequestServer,
+  type ForwardedRequestServerDeps,
+} from "#src/authority/forwarded-request-server";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type {
   ForwardedPermissionRequest,
@@ -16,6 +19,7 @@ import {
   PermissionPrompter,
   type PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
+import type { PermissionDecisionEvent } from "#src/permission-events";
 import type { PermissionQuery } from "#src/service";
 import {
   makeAuthorizerSelectionDeps,
@@ -1018,5 +1022,214 @@ describe("processInbox — inbox mechanics", () => {
     );
 
     expect(resolve).not.toHaveBeenCalled();
+  });
+});
+
+describe("processInbox — terminal decision broadcast", () => {
+  /**
+   * Serve one forwarded request and return the decisions the server broadcast
+   * on the serving session's bus.
+   *
+   * The escalation outcome is the subject of most cases below, so it is the
+   * one dependency each test supplies; everything else defaults.
+   */
+  async function serveAndCaptureDecisions(
+    request: Partial<ForwardedPermissionRequest>,
+    overrides: Partial<ForwardedRequestServerDeps> = {},
+  ): Promise<PermissionDecisionEvent[]> {
+    temp = createForwardingTempDir("parent-session");
+    temp.writeRequest(request);
+    const emitDecision = vi.fn<(event: PermissionDecisionEvent) => void>();
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        broadcaster: { emitDecision },
+        ...overrides,
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    return emitDecision.mock.calls.map(([event]) => event);
+  }
+
+  /** An escalator answering with one fixed decision. */
+  function escalatorAnswering(decision: PermissionPromptDecision) {
+    return { escalate: vi.fn().mockResolvedValue(decision) };
+  }
+
+  test("broadcasts an approval carrying the ask's id, projection, and provenance", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      {
+        id: "req-ask",
+        source: "tool_call",
+        surface: "bash",
+        value: "git push",
+      },
+      {
+        escalator: escalatorAnswering({
+          approved: true,
+          state: "approved",
+          decidedBy: DECIDED_BY_HUMAN,
+        }),
+      },
+    );
+
+    // Asserted whole: the bus is the narrowest renderer, so a field added here
+    // later — `decidedBy` above all (#726) — must be a deliberate contract
+    // change rather than something that leaks in with a spread.
+    expect(emitted).toEqual([
+      {
+        requestId: "req-ask",
+        surface: "bash",
+        value: "git push",
+        agentName: "Explore",
+        result: "allow",
+        resolution: "user_approved",
+        origin: null,
+        matchedPattern: null,
+        forwarding: {
+          requesterAgentName: "Explore",
+          requesterSessionId: "child-session",
+        },
+      },
+    ]);
+  });
+
+  test("broadcasts a denial as user_denied", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      { id: "req-deny", surface: "bash", value: "rm -rf /" },
+      {
+        escalator: escalatorAnswering({
+          approved: false,
+          state: "denied",
+          decidedBy: DECIDED_BY_HUMAN,
+        }),
+      },
+    );
+
+    expect(emitted).toMatchObject([
+      { requestId: "req-deny", result: "deny", resolution: "user_denied" },
+    ]);
+  });
+
+  test("broadcasts the human's grant scope, not the scope written to the wire", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      {
+        id: "req-serving-grant",
+        surface: "bash",
+        value: "git push",
+        sessionApproval: { surface: "bash", patterns: ["git *"] },
+      },
+      {
+        escalator: escalatorAnswering({
+          approved: true,
+          state: "approved_for_serving_session",
+          decidedBy: DECIDED_BY_HUMAN,
+        }),
+      },
+    );
+
+    // The grant-scope translation rewrites the response to a plain `approved`
+    // so the child records nothing; the broadcast still reports what the human
+    // actually chose.
+    expect(emitted).toMatchObject([
+      { result: "allow", resolution: "user_approved_for_session" },
+    ]);
+    expect(readResponse(temp!, "req-serving-grant")).toMatchObject({
+      state: "approved",
+    });
+  });
+
+  test("broadcasts a subagent-scoped grant as user_approved_for_session", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      { id: "req-child-grant", surface: "bash", value: "git push" },
+      {
+        escalator: escalatorAnswering({
+          approved: true,
+          state: "approved_for_session",
+          decidedBy: DECIDED_BY_HUMAN,
+        }),
+      },
+    );
+
+    expect(emitted).toMatchObject([
+      { result: "allow", resolution: "user_approved_for_session" },
+    ]);
+  });
+
+  test("broadcasts an unreachable authority as confirmation_unavailable", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      { id: "req-unavailable", surface: "bash", value: "git push" },
+      {
+        escalator: escalatorAnswering({
+          approved: false,
+          state: "denied",
+          confirmationUnavailable: true,
+          denialReason: "no serving session",
+          decidedBy: { kind: "unavailable", reason: "no serving session" },
+        }),
+      },
+    );
+
+    expect(emitted).toMatchObject([
+      { result: "deny", resolution: "confirmation_unavailable" },
+    ]);
+  });
+
+  test("broadcasts a failed escalation as gate_error", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      { id: "req-broken", surface: "bash", value: "git push" },
+      {
+        escalator: {
+          escalate: vi.fn().mockRejectedValue(new Error("dialog exploded")),
+        },
+      },
+    );
+
+    // The prompt broadcast is already out by the time the dialog can fail, so
+    // this is the terminal event a consumer waiting on that prompt needs.
+    expect(emitted).toMatchObject([
+      { requestId: "req-broken", result: "deny", resolution: "gate_error" },
+    ]);
+  });
+
+  test("broadcasts nothing when recorded authority resolves the request", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      {
+        id: "req-silent",
+        surface: "bash",
+        value: "git status",
+        accessIntent: makeForwardedAccessIntent({
+          matchValues: ["git status"],
+        }),
+      },
+      {
+        policy: {
+          resolve: vi.fn(() => makeCheckResult({ state: "allow" })),
+        },
+      },
+    );
+
+    expect(emitted).toEqual([]);
+  });
+
+  test("falls back to the payload's facts when the request carries no projection", async () => {
+    const emitted = await serveAndCaptureDecisions(
+      { id: "req-skew" },
+      {
+        escalator: escalatorAnswering({
+          approved: true,
+          state: "approved",
+          decidedBy: DECIDED_BY_HUMAN,
+        }),
+      },
+    );
+
+    // A version-skewed child sends no display projection; the payload's own
+    // request facts are non-nullable, so they answer instead of a sentinel.
+    expect(emitted).toMatchObject([{ surface: "read", value: "read" }]);
   });
 });

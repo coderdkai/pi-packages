@@ -136,6 +136,16 @@ export interface PermissionDecisionEvent {
   agentName: string | null;
   /** Matched pattern from the winning rule (when available). */
   matchedPattern: string | null;
+  /**
+   * Forwarding context for a decision this session made while serving another
+   * session's forwarded request; absent on an ordinary local decision.
+   *
+   * The same `ForwardedPromptContext` the request's `permissions:ui_prompt`
+   * carried, so a consumer that never saw the prompt can still tell a served
+   * ask from a local one. Requester identity beyond it — the requester's cwd
+   * and principal — stays off the bus.
+   */
+  forwarding?: ForwardedPromptContext | null;
 }
 
 // ── Emit helpers ───────────────────────────────────────────────────────────
