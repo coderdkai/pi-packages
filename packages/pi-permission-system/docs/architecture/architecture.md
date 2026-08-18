@@ -941,7 +941,7 @@ No decline, so the regular rotation continues.
 | `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1 ✅          |
 | Request-id mint sites in `src/`                                         | 2                     | 1 ✅            |
 | `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2 ✅            |
-| Model-judge resolves `agentDir` via `getAgentDir` (`config-loader.ts`)  | 0                     | ≥ 1             |
+| Model-judge resolves `agentDir` via `getAgentDir` (`extension.ts`)      | 0                     | ≥ 1 ✅          |
 | Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0               |
 | fallow health score                                                     | 88 (A)                | ≥ 88            |
 | Production duplication                                                  | 0.2%                  | ≤ 0.2%          |
@@ -958,7 +958,7 @@ Recompute commands (run from the repo root):
 - Provenance sites: `grep -rn "decidedBy" packages/pi-permission-system/src | wc -l`
 - Id mint sites: `grep -rnE "Math\.random\(\)\.toString\(36\)|randomUUID\(\)" packages/pi-permission-system/src --include="*.ts" | wc -l`
 - Event request ids: `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts`
-- Model-judge agentDir: `grep -c "getAgentDir" packages/pi-permission-model-judge/src/config-loader.ts`
+- Model-judge agentDir: `grep -c "getAgentDir" packages/pi-permission-model-judge/src/extension.ts`
 - Ambient path import: `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts`
 - Health/duplication/dead exports: `pnpm fallow health --score --workspace @gotgenes/pi-permission-system` / `pnpm fallow dupes --workspace @gotgenes/pi-permission-system` / `pnpm fallow dead-code --workspace @gotgenes/pi-permission-system`
 
@@ -1069,7 +1069,7 @@ Release: independent
 
 Release: independent
 
-#### Step 7: Model-judge honors `PI_CODING_AGENT_DIR` ([#732])
+#### ✅ Step 7: Model-judge honors `PI_CODING_AGENT_DIR` ([#732])
 
 **Cause:** `pi-permission-model-judge` recomputes the global config scope from a hardcoded `~/.pi/agent` instead of the SDK's `getAgentDir()`, so the two packages disagree about where the global scope lives whenever `PI_CODING_AGENT_DIR` is set — and the configured judge silently never registers, indistinguishable in the review log from "not installed".
 
@@ -1077,6 +1077,11 @@ Release: independent
 - **Target:** `packages/pi-permission-model-judge/src/config-loader.ts` resolves `agentDir` via `getAgentDir()` from `@earendil-works/pi-coding-agent`, as pi-permission-system does.
 - **Outcome:** both packages read the global scope from the same directory; `grep -c "getAgentDir" packages/pi-permission-model-judge/src/config-loader.ts` goes 0 → ≥ 1; ships as a `fix:` in the model-judge component.
 - **Impact 3 / Risk 1 / Priority 15.**
+- **Landed:** `agentDir` resolves at the extension boundary — `src/extension.ts` passes `getAgentDir()` into a now-required parameter — rather than inside `config-loader.ts` as the Target line proposed.
+  That was an operator decision at planning time: it matches how this package's own `src/index.ts` and pi-colgrep resolve the same scope, and it keeps the loader free of SDK imports and process-global reads.
+  The metric moved with it, and the original `config-loader.ts` grep is not evidence — it returns 1 for a doc-comment mention with no resolution site in that file.
+  `cwd` became required in the same change, so the loader now reads neither `homedir()` nor `process.cwd()`.
+  Shipped as a `fix:` in `@gotgenes/pi-permission-model-judge` v1.1.3.
 
 Release: independent
 
@@ -1138,7 +1143,7 @@ flowchart TD
     S3 --> S10
     S4 --> S10
     S5["✅ Step 5: forwarding liveness (#721)"]
-    S7["Step 7: model-judge agentDir (#732)"]
+    S7["✅ Step 7: model-judge agentDir (#732)"]
     S8["Step 8: deriveApprovalPattern flavor (#655)"]
 ```
 
