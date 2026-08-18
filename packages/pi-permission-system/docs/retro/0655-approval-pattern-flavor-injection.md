@@ -65,6 +65,72 @@ Test count went 3136 → 3162 (+26) with all 145 pi-permission-system files gree
 - **`buildLabel`'s `path` / `external_directory` arms remain unreachable**, as planned.
   They predate this change; folding their removal into [#604] stays the cheaper path.
 
+## Stage: Final Retrospective (2026-08-18T05:03:58Z)
+
+### Session summary
+
+One continuous session carried #655 from plan through TDD to ship: `deriveApprovalPattern` moved off its ambient `node:path` read onto `PathNormalizer.approvalPatternFor` over a new flavor-parameterized leaf, and `pi-permission-system` v26.2.2 published.
+Planning's measurement turned what the issue framed as cosmetic into a real win32 defect — a session approval on a Git Bash directory token silently widened to the parent directory — which retyped the commit `refactor:` → `fix:`.
+Shipping surfaced an unrelated one-line `release-please-config.json` gap that would have published no-op `pi-github-tools` versions indefinitely.
+
+### Observations
+
+#### What went well
+
+- **Measurement changed the decision twice, at two layers.**
+  Planning ran both derivation algorithms through `node -e` against `path.win32`/`path.posix` rather than reasoning about them, which is what exposed the widening and drove the commit-type change.
+  Implementation then re-verified it one layer down, against the *real* matcher: a throwaway test approved the pre-fix pattern `/tmp\*` on `SessionRules` and evaluated `/tmp/other/secrets.env` under `win32PathFlavor`, returning `allow`.
+  Neither step would have been convincing as prose — and the second could have contradicted the first, since the `windowsSeparators` fold sits between the algorithm and the observable outcome.
+- **The `testing` skill's broken-probe rule fired exactly as designed, on a new mechanism.**
+  The rule ("a new test that passes during Red is either an invariant pin or a broken probe — decide which") was written for a probe *string* that matched elsewhere ([#760]).
+  Here the probe string was fine and the input was wrong, for a reason specific to the defect being fixed.
+  The rule still caught it.
+- **The `pre-completion-reviewer` did genuine verification, not pattern-matching.**
+  It independently re-derived the false-red finding by *running* the old ambient algorithm against the real `forBashToken` values, confirmed five probes were genuine, and caught a sixth I had missed — the `/tmp/logs/` case, which passes either way on POSIX.
+  A reviewer that had only read the diff would have accepted my claim wholesale.
+- **`/ship-issue`'s "note an unrelated bump" gate paid for itself.**
+  Diagnosing rather than merely reporting the `pi-github-tools: 4.3.1` entry found that `packages/pi-github-tools/docs/retro` was missing from `exclude-paths` — the only such gap across all packages, and one that had already published at least one no-op version.
+
+#### What caused friction (agent side)
+
+- `missing-context` — the first four win32 gate probes passed **before** the fix.
+  The plan's own Problem Statement says an ambient `sep` "resolves against the host, so a `win32PathFlavor` unit test running on POSIX CI exercises POSIX separators" — I wrote that sentence and then designed probes that violated it, choosing POSIX-shaped inputs (`/tmp/logs/`) whose ambient and injected derivations coincide on a POSIX host.
+  Impact: ~6 tool calls to diagnose (two throwaway probe files) and a rewrite of five gate tests around a native Windows path.
+  No production rework; the diagnosis itself became the strongest evidence in the close comment.
+- `missing-context` — the plan's call-site grep for the two bash gates stopped at `test/handlers/gates/`, missing `test/handlers/external-directory-symlink-acceptance.test.ts` one directory up.
+  Impact: none beyond one extra edit inside the same commit; `tsc` flagged it immediately.
+- `instruction-violation` (self-identified) — emitted an `Edit` call carrying a stray `oldText2` key, which `AGENTS.md` documents as silently ignored while still reporting success.
+  Impact: none — the four real array entries applied and the count matched — but it cost a verification read to confirm.
+- `other` — wrote an incoherent doc comment ("the separator spellings this platform recognizes, newest-first is irrelevant") into `path-flavor.ts` and had to correct it before committing.
+  Impact: one extra edit, no commit churn.
+
+#### What caused friction (user side)
+
+- The `ask_user` scope option labelled "Fold in, keep `refactor:`" described the *action* but not its *consequence*, prompting the note "What issue follows up with the win32 fix?"
+  The clarification gate worked — re-asking changed the answer from `fold-refactor` to `fold-fix` — but the round trip was avoidable had the option said "no follow-up issue" outright.
+  Opportunity: an option whose differentiator is *what happens next* should name that outcome in its own label or description.
+
+### Diagnostic details
+
+- **Model-performance correlation** — all main-session turns ran on `anthropic/claude-opus-5`; both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) on `anthropic/claude-sonnet-5` per their frontmatter.
+  No mismatch: both subagent tasks are judgment-heavy read-only review, and the reviewer's empirical re-derivation of the false-red finding shows the tier was adequate.
+- **Escalation-delay tracking** — no sequence exceeded the 5-call threshold.
+  The false-red episode resolved in four tool calls (write probe → run → write second probe carrying the old algorithm inline → run), because the first probe printed both algorithms' outputs side by side rather than only the failing one.
+- **Unused-tool detection** — nothing missed.
+  The two `missing-context` points were both cheap greps, not codebase-understanding gaps an `Explore` dispatch would have closed.
+- **Feedback-loop gap analysis** — verification ran incrementally throughout: per-file `vitest run` at every Red and Green, `pnpm run check` after each interface-touching step (1, 3, 5, 6), full `pnpm run test` after step 4 and at the end, and root `pnpm run lint` plus `pnpm fallow dead-code` at the baseline and before push.
+  The step-5 `check` caught the two stale `AccessPath` arguments in `tool.test.ts` immediately; the step-6 `lint` caught an orphaned `import type` that `tsc` accepts.
+
+### Changes made
+
+1. `.pi/skills/testing/SKILL.md` — added the ambient-vs-injected red-probe rule beside the existing broken-probe entry: when a fix replaces an ambient global read with an injected value, pick a probe input where the two differ on the CI host.
+2. `.pi/prompts/ship-issue.md` — step 6.3 now says to *diagnose* an unrelated package bump rather than only note it, naming the missing `exclude-paths` entry as the usual cause.
+3. `release-please-config.json` — added `packages/pi-github-tools/docs/retro` to `exclude-paths` (landed during the ship stage as `fe3ce3b2`, not in the retro commit).
+
+Declined: an automated `exclude-paths` completeness check.
+The gap is closed and the sharpened ship-time diagnosis covers a recurrence; a CI gate would be structural work needing its own plan.
+
 [#533]: https://github.com/gotgenes/pi-packages/issues/533
 [#604]: https://github.com/gotgenes/pi-packages/issues/604
 [#653]: https://github.com/gotgenes/pi-packages/issues/653
+[#760]: https://github.com/gotgenes/pi-packages/issues/760

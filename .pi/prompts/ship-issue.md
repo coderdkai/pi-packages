@@ -117,7 +117,7 @@ Skip this step entirely if step 4b recorded a defer/batch decision — the relea
 2. If none is found (timeout), skip to step 7.
 3. If one exists, check which packages/versions the PR bumps.
    Read the **full** PR body — release-please collapses each package in a separate `<details>` block, so a truncated view hides sibling bumps.
-   If it bumps a package unrelated to the issue being shipped, note it to the user before merging.
+   If it bumps a package unrelated to the issue being shipped, diagnose before noting it — a bump from a `docs:`-only commit means that package is missing a `docs/<subdir>` entry in `exclude-paths` (Refs #655).
 4. Use `release_pr_merge` with the PR number.
    The tool waits out an in-progress check or an undecided (`UNKNOWN`) mergeability state on its own, streaming progress — do not add a manual wait loop.
    It also retries a transient 5xx, so a single failure is already several attempts — do not retry it blindly.
