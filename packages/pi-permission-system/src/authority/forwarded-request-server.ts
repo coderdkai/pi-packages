@@ -406,16 +406,30 @@ export class ForwardedRequestServer implements InboxProcessor {
     }
 
     this.logger.review("forwarded_permission.prompted", logDetails);
+    const details = buildForwardedAskDetails(request);
+    return await this.escalateAsk(details);
+  }
+
+  /**
+   * Escalate a forwarded ask to the serving session's selected `Authorizer`,
+   * failing closed instead of throwing: an escalation that breaks is nobody's
+   * denial, so the node records itself as the decider.
+   *
+   * Separate from {@link resolveDecision} so the ask's details outlive the
+   * call — every record of the served ask is a render over that one object.
+   */
+  private async escalateAsk(
+    details: PromptPermissionDetails,
+  ): Promise<PermissionPromptDecision> {
     try {
-      return await this.escalator.escalate(buildForwardedAskDetails(request));
+      return await this.escalator.escalate(details);
     } catch (error) {
       const reason = formatUnknownErrorMessage(error);
       logPermissionForwardingError(
         this.logger,
-        `Failed to escalate forwarded permission request '${request.id}'`,
+        `Failed to escalate forwarded permission request '${details.requestId}'`,
         error,
       );
-      // Nobody denied this; the escalation broke and the node failed closed.
       return {
         approved: false,
         state: "denied",
