@@ -37,6 +37,31 @@ Filed [#772] for a pre-existing mis-attribution the design ran into.
 - **Scope check on the labels.**
   The issue carries both `pkg:pi-permission-system` and `pkg:pi-subagents`, but nothing in pi-subagents changes — the label reflects the reported scenario, not the diff — so this is a single-package plan.
 
+## Stage: Implementation — TDD (2026-08-18T18:41:27Z)
+
+### Session summary
+
+Landed the plan's four steps plus one tidy-first prep commit: `escalateAsk` extracted, `DecisionBroadcaster` split out of `DecisionReporter`, the fail-closed boundary's `gate_error` broadcast ([#753]), and the serving session's terminal decision for a forwarded ask (this issue).
+Test count went 3162 → 3173 (+11: eight served-decision cases, three boundary cases).
+Pre-completion reviewer: **PASS**, no warnings.
+
+### Observations
+
+- **The tidy-first assessor's one recommendation was the right one and was accepted verbatim.**
+  Hoisting `buildForwardedAskDetails` out of the escalation `try` and naming the fail-closed catch `escalateAsk` was a precondition for the design, not optional restructuring — the feature commit then added only the dep, the emit, and the two builders.
+  It also declined to re-propose the `DecisionBroadcaster` split because the plan already scheduled it as its own commit, which is the correct read of the protocol.
+- **A shared test fixture was producing a value its declared type forbids.**
+  `makeServerDeps`'s default escalator resolved `{ approved: true, state: "approved" }` with no `decidedBy`, which `PermissionPromptDecision` requires; `vi.fn().mockResolvedValue(…)` is typed loosely enough that `tsc` never saw it.
+  `servedResolution` reads `decision.decidedBy.kind`, so every test using the default would have thrown once the emit was wired.
+  Fixed the fixture (with `satisfies PermissionPromptDecision`, so it cannot drift again) rather than making the production read defensive.
+- **One new test passed during Red in each step, and both are pins rather than broken probes.**
+  "still blocks when the broadcast itself throws" and "broadcasts nothing when recorded authority resolves the request" both assert an absence that was already true; each became load-bearing the moment the emit existed.
+- **The exact-equality assertion is doing contract work, not style work.**
+  The approval case asserts the whole emitted event with `toEqual` specifically so a later `decidedBy` (or any other field) leaking onto the bus fails a test — ADR 0011 §6 makes that the narrowest renderer, and a `toMatchObject` there would absorb the leak silently.
+- **Three tests deviate upward from the plan.**
+  The boundary gained a third case pinning the `value: command ?? toolName` fallback the plan specified but did not test; the server's nine planned cases landed as eight, with the "same projection as the prompt" assertion folded into the full-shape approval case rather than repeated.
+- **`index.ts` needed the reporter hoisted ~90 lines**, exactly as planning predicted, and it rode the `refactor:` commit so the feature commit carried no unrelated motion.
+
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
 [#772]: https://github.com/gotgenes/pi-packages/issues/772
