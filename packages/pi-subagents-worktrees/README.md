@@ -5,7 +5,45 @@
 Git worktree isolation for [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents).
 
 This extension registers a `WorkspaceProvider` with the subagents core: opted-in agents run in a temporary git worktree (an isolated copy of the repo), and any changes they make are saved to a branch when they finish.
-Worktrees are one *workspace strategy*, not core behavior — so the git plumbing lives here, outside the minimal subagents core (see [ADR-0002] in the pi-subagents package).
+Worktrees are one _workspace strategy_, not core behavior — so the git plumbing lives here, outside the minimal subagents core (see [ADR-0002] in the pi-subagents package).
+
+## Scope and non-goals
+
+**Purpose.**
+The subagents core asks a `WorkspaceProvider` where each child session should run.
+This package is one answer: opted-in agents get a temporary git worktree, and whatever they produce is rescued to a branch when they finish.
+
+**In scope.**
+The git plumbing bracketing a child run, not losing the child's work when cleanup fails, making a preserved worktree discoverable and removable, and the `worktreeAgents` opt-in config.
+
+**Non-goals.**
+
+- _Workspaces for anything but subagent child sessions._
+  This provider answers the core's question about a child run.
+  Worktrees for parallel human-driven Pi sessions are a different mechanism with different lifetimes, naming, and teardown, and they are not served from here.
+- _Anything after the rescue branch._
+  The job ends once the branch is written.
+  Merging it, opening a PR from it, naming it by a project convention, or cleaning up old `pi-agent-*` branches is the user's workflow, not this extension's.
+- _Worktree knowledge in the subagents core._
+  `git` does not appear in the core, and the earlier `isolation` spawn flag and frontmatter key were deleted rather than deprecated.
+  Uninstalling this package leaves children running in the parent's directory.
+- _Doing anything without the core._
+  If `@gotgenes/pi-subagents` is absent, or loads after this package, this extension registers nothing at all.
+- _Deleting a preserved worktree automatically._
+  A failed cleanup is exactly the case where the content is not safe to discard on the extension's judgment, so nothing is ever removed without an explicit human confirmation.
+- _Handing removal to the agent._
+  Recovery is a slash command rather than a tool, which keeps a destructive `git worktree remove --force` out of the model's reach.
+- _Automated recovery._
+  Re-running a failed rescue is deliberately left as manual git work.
+- _Retry beyond the single `--no-verify` rescue attempt._
+  A hook-rejected rescue commit is retried once; any other failure preserves the worktree rather than retrying.
+- _A public API._
+  The package exports only its default extension function, and its internals are not a supported surface.
+
+**Where adjacent requests belong.**
+Whether a child gets an isolated workspace at all, and the seam that asks → [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents).
+A child's system prompt and its working-directory claim → `@gotgenes/pi-subagents` and `@gotgenes/pi-nocd`.
+Layered global and project settings loading → the core's shared `loadLayeredSettings` helper.
 
 ## Install
 
