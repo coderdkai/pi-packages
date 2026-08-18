@@ -35,7 +35,7 @@ A new capability arrives as a new tool rather than as another parameter on an ex
 Unrendered session bytes → `Read` or `Bash` on the `.jsonl`.
 Session file naming, directory layout, and entry schema → Pi itself.
 Browsing a subagent's session in the UI → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-Creating and tearing down peer worktrees → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
+Creating and tearing down the worktrees a peer session runs in → whatever tooling created them; these tools only read the transcript a session leaves behind, which outlives the worktree.
 
 ## Tools
 
