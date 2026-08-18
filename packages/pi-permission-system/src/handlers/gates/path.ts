@@ -3,7 +3,6 @@ import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import { buildPathAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
-import { deriveApprovalPattern } from "#src/session-rules";
 import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-registry";
 import type { GateDescriptor, GateResult } from "./descriptor";
 import { accessFactsFromPath } from "./helpers";
@@ -46,7 +45,7 @@ export function describePathGate(
 
   // Derive the approval pattern from the lexical absolute form so it matches
   // the policy values a later call produces.
-  const pattern = deriveApprovalPattern(accessPath.value());
+  const pattern = normalizer.approvalPatternFor(accessPath);
 
   const payload = buildPathAskPayload({
     toolName: tcc.toolName,

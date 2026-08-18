@@ -1,9 +1,9 @@
 import type { AccessPath } from "#src/access-intent/access-path";
 import type { BashProgram } from "#src/access-intent/bash/program";
+import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import { buildPathAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
-import { deriveApprovalPattern } from "#src/session-rules";
 import type { PermissionCheckResult } from "#src/types";
 import { pickMostRestrictive } from "./candidate-check";
 import type { GateResult } from "./descriptor";
@@ -33,6 +33,7 @@ export function describeBashPathGate(
   tcc: ToolCallContext,
   bashProgram: BashProgram | null,
   resolver: ScopedPermissionResolver,
+  normalizer: PathNormalizer,
 ): GateResult {
   if (!bashProgram) return null;
   const command = bashProgram.commandText();
@@ -120,7 +121,7 @@ export function describeBashPathGate(
   // Derive the pattern from the lexical absolute form (the cd-aware resolved
   // path), so it matches the values a later call produces. For an unknown base
   // (`forLiteral`) `value()` is the raw token.
-  const pattern = deriveApprovalPattern(worstEntry.path.value());
+  const pattern = normalizer.approvalPatternFor(worstEntry.path);
   const payload = buildPathAskPayload({
     toolName: tcc.toolName,
     pathValue: worstToken,

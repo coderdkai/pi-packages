@@ -3,7 +3,6 @@ import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import { buildExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
-import { deriveApprovalPattern } from "#src/session-rules";
 import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-registry";
 import type { GateResult } from "./descriptor";
 import { resolveExternalDirectoryPolicy } from "./external-directory-policy";
@@ -78,7 +77,7 @@ export function describeExternalDirectoryGate(
     resolver,
     tcc.agentName ?? undefined,
   );
-  const pattern = deriveApprovalPattern(accessPath.value());
+  const pattern = normalizer.approvalPatternFor(accessPath);
 
   const payload = buildExternalDirectoryAskPayload({
     toolName: tcc.toolName,

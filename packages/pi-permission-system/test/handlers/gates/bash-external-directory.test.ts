@@ -83,15 +83,21 @@ async function describeGateOnPlatform(
   tcc: ToolCallContext,
   resolver: ScopedPermissionResolver,
 ): Promise<GateResult> {
+  const normalizer = new PathNormalizer(
+    pathFlavorForPlatform(platform),
+    tcc.cwd,
+  );
   const command = getNonEmptyString(toRecord(tcc.input).command);
   const bashProgram =
     tcc.toolName === "bash" && command
-      ? await BashProgram.parse(
-          command,
-          new PathNormalizer(pathFlavorForPlatform(platform), tcc.cwd),
-        )
+      ? await BashProgram.parse(command, normalizer)
       : null;
-  return describeBashExternalDirectoryGate(tcc, bashProgram, resolver);
+  return describeBashExternalDirectoryGate(
+    tcc,
+    bashProgram,
+    resolver,
+    normalizer,
+  );
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -391,5 +397,35 @@ describe("describeBashExternalDirectoryGate — Git Bash semantics (win32)", () 
     );
     expect(isGateDescriptor(result)).toBe(true);
     expect(externalPaths((result as GateDescriptor).payload)).toEqual(["/tmp"]);
+  });
+
+  it("derives the session approval through the injected flavor, not the host", async () => {
+    // A native Windows path carries backslash separators the *host* POSIX
+    // `node:path` cannot see, so an ambient derivation collapses it to `./*`
+    // and the recorded grant matches nothing (#655).
+    const result = await describeGateOnPlatform(
+      "win32",
+      makeTcc({
+        cwd: "C:\\Projects\\App",
+        input: { command: "cat C:\\Other\\data\\x.txt" },
+      }),
+      makeResolver(makeCheckResult("ask")),
+    );
+    expect(isGateDescriptor(result)).toBe(true);
+    expect((result as GateDescriptor).sessionApproval?.patterns).toEqual([
+      "c:\\other\\data\\*",
+    ]);
+  });
+
+  it("keeps a POSIX-shaped Git Bash directory token scoped to itself", async () => {
+    const result = await describeGateOnPlatform(
+      "win32",
+      winTcc("ls /tmp/logs/"),
+      makeResolver(makeCheckResult("ask")),
+    );
+    expect(isGateDescriptor(result)).toBe(true);
+    expect((result as GateDescriptor).sessionApproval?.patterns).toEqual([
+      "/tmp/logs/*",
+    ]);
   });
 });

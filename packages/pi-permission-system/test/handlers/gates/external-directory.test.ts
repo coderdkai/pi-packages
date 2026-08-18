@@ -7,7 +7,7 @@ import type {
 import { isGateBypass, isGateDescriptor } from "#src/handlers/gates/descriptor";
 import { describeExternalDirectoryGate } from "#src/handlers/gates/external-directory";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { pathFlavorForPlatform } from "#src/path/path-flavor";
+import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-registry";
@@ -300,5 +300,26 @@ describe("describeExternalDirectoryGate — extension and MCP tools (#352)", () 
       ["/test/agent"],
     );
     expect(result).toBeNull();
+  });
+
+  it("derives the session approval through the injected flavor, not the host", () => {
+    // A native Windows path carries backslash separators the *host* POSIX
+    // `node:path` cannot see, so an ambient derivation collapses it to `./*`
+    // and the recorded grant matches nothing (#655).
+    const result = describeExternalDirectoryGate(
+      makeTcc({
+        input: { path: "C:\\Other\\data\\x.txt" },
+        cwd: "C:\\Projects\\App",
+      }),
+      [],
+      makeResolver(
+        makeCheckResult({ state: "ask", toolName: "external_directory" }),
+      ),
+      new PathNormalizer(win32PathFlavor, "C:\\Projects\\App"),
+    );
+    expect(isGateDescriptor(result)).toBe(true);
+    expect((result as GateDescriptor).sessionApproval?.patterns).toEqual([
+      "c:\\other\\data\\*",
+    ]);
   });
 });

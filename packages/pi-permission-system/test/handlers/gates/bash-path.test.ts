@@ -57,15 +57,16 @@ async function describeGateOnPlatform(
   tcc: ToolCallContext,
   resolver: ScopedPermissionResolver,
 ): Promise<GateResult> {
+  const normalizer = new PathNormalizer(
+    pathFlavorForPlatform(platform),
+    tcc.cwd,
+  );
   const command = getNonEmptyString(toRecord(tcc.input).command);
   const bashProgram =
     tcc.toolName === "bash" && command
-      ? await BashProgram.parse(
-          command,
-          new PathNormalizer(pathFlavorForPlatform(platform), tcc.cwd),
-        )
+      ? await BashProgram.parse(command, normalizer)
       : null;
-  return describeBashPathGate(tcc, bashProgram, resolver);
+  return describeBashPathGate(tcc, bashProgram, resolver, normalizer);
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -412,6 +413,34 @@ describe("describeBashPathGate — win32 backslash-relative paths", () => {
     expect(isGateDescriptor(result)).toBe(true);
     expect(result.preCheck?.state).toBe("deny");
     expect(result.payload.request.value).toBe("dir\\file");
+  });
+
+  it("derives the session approval through the injected flavor, not the host", async () => {
+    // A native Windows path carries backslash separators the *host* POSIX
+    // `node:path` cannot see, so an ambient derivation collapses it to `./*`
+    // and the recorded grant matches nothing (#655).
+    const resolver = makePathDispatchResolver(
+      {
+        "c:\\projects\\app\\dir\\file": makeCheckResult({
+          state: "ask",
+          matchedPattern: "dir/file",
+        }),
+      },
+      makeCheckResult({ state: "allow" }),
+    );
+    const result = (await describeGateOnPlatform(
+      "win32",
+      makeTcc({
+        input: { command: "cat dir\\file" },
+        cwd: "C:\\Projects\\App",
+      }),
+      resolver,
+    )) as GateDescriptor;
+
+    expect(isGateDescriptor(result)).toBe(true);
+    expect(result.sessionApproval?.patterns).toEqual([
+      "c:\\projects\\app\\dir\\*",
+    ]);
   });
 
   it("does not gate a backslash-relative token on posix (stays bare)", async () => {

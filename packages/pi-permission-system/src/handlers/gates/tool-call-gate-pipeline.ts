@@ -115,8 +115,14 @@ export class ToolCallGatePipeline {
           normalizer,
           this.customExtractors,
         ),
-      () => describeBashExternalDirectoryGate(tcc, bashProgram, this.resolver),
-      () => describeBashPathGate(tcc, bashProgram, this.resolver),
+      () =>
+        describeBashExternalDirectoryGate(
+          tcc,
+          bashProgram,
+          this.resolver,
+          normalizer,
+        ),
+      () => describeBashPathGate(tcc, bashProgram, this.resolver, normalizer),
       () => {
         const { toolCheck, accessPath } = this.resolvePerToolCheck(
           tcc,

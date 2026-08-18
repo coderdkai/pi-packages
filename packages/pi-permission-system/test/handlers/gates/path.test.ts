@@ -15,7 +15,11 @@ import type { GateDescriptor } from "#src/handlers/gates/descriptor";
 import { isGateDescriptor } from "#src/handlers/gates/descriptor";
 import { describePathGate } from "#src/handlers/gates/path";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { pathFlavorForPlatform, posixPathFlavor } from "#src/path/path-flavor";
+import {
+  pathFlavorForPlatform,
+  posixPathFlavor,
+  win32PathFlavor,
+} from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 
 import {
@@ -398,5 +402,23 @@ describe("describePathGate — extension and MCP tools (#352)", () => {
     );
     expect(result).toBeNull();
     expect(resolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it("derives the session approval through the injected flavor, not the host", () => {
+    // A native Windows path carries backslash separators the *host* POSIX
+    // `node:path` cannot see, so an ambient derivation collapses it to `./*`
+    // and the recorded grant matches nothing (#655).
+    const result = describePathGate(
+      makeTcc({
+        input: { path: "src\\foo.ts" },
+        cwd: "C:\\Projects\\App",
+      }),
+      makeResolver(makeCheckResult({ state: "ask", matchedPattern: "*.ts" })),
+      new PathNormalizer(win32PathFlavor, "C:\\Projects\\App"),
+    );
+    expect(isGateDescriptor(result)).toBe(true);
+    expect((result as GateDescriptor).sessionApproval?.patterns).toEqual([
+      "c:\\projects\\app\\src\\*",
+    ]);
   });
 });

@@ -1,8 +1,8 @@
 import type { BashProgram } from "#src/access-intent/bash/program";
+import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import { buildBashExternalDirectoryAskPayload } from "#src/presentation/path-ask-payload";
 import { SessionApproval } from "#src/session-approval";
-import { deriveApprovalPattern } from "#src/session-rules";
 import type { GateResult } from "./descriptor";
 import { selectUncoveredExternalPaths } from "./external-directory-policy";
 import { accessFactsFromPath } from "./helpers";
@@ -25,6 +25,7 @@ export function describeBashExternalDirectoryGate(
   tcc: ToolCallContext,
   bashProgram: BashProgram | null,
   resolver: ScopedPermissionResolver,
+  normalizer: PathNormalizer,
 ): GateResult {
   if (!bashProgram) return null;
   const command = bashProgram.commandText();
@@ -94,7 +95,9 @@ export function describeBashExternalDirectoryGate(
     matchedPattern: preCheck.matchedPattern,
   });
 
-  const patterns = uncoveredPaths.map((p) => deriveApprovalPattern(p));
+  const patterns = uncoveredEntries.map(({ path }) =>
+    normalizer.approvalPatternFor(path),
+  );
 
   return {
     surface: "external_directory",
