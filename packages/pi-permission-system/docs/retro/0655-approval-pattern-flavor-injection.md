@@ -126,9 +126,34 @@ Shipping surfaced an unrelated one-line `release-please-config.json` gap that wo
 1. `.pi/skills/testing/SKILL.md` — added the ambient-vs-injected red-probe rule beside the existing broken-probe entry: when a fix replaces an ambient global read with an injected value, pick a probe input where the two differ on the CI host.
 2. `.pi/prompts/ship-issue.md` — step 6.3 now says to *diagnose* an unrelated package bump rather than only note it, naming the missing `exclude-paths` entry as the usual cause.
 3. `release-please-config.json` — added `packages/pi-github-tools/docs/retro` to `exclude-paths` (landed during the ship stage as `fe3ce3b2`, not in the retro commit).
+4. `docs/architecture/architecture.md` — added disposition entries for [#751] and [#753], the two issues born inside Phase 13 that never reached the sweep list.
+5. `docs/architecture/architecture.md` — folded [#753] into Step 10's scope (heading, `Target:`, and `Outcome:`), since it is the same defect class at a second site and consumes the request id Step 9 mints.
+6. `docs/architecture/architecture.md` — narrowed Step 2's `Outcome:` to name the inline dialog, with the `select`/`input` fallback's missing escape hatch tracked as [#751].
+7. Filed [#767] — evaluate spun-off issues for roadmap fit at filing time.
 
 Declined: an automated `exclude-paths` completeness check.
 The gap is closed and the sharpened ship-time diagnosis covers a recurrence; a CI gate would be structural work needing its own plan.
+
+### Follow-up: mid-phase issues escaped roadmap disposition
+
+Four issues were born inside Phase 13.
+[#752] and [#610] surfaced during *planning* sessions and got numbered steps plus disposition entries; [#751] and [#753] surfaced during *implementation* and got neither.
+The split tracks when each was noticed, not how it relates to the phase — filing without scope-creeping was the correct local move in both cases, but nothing carried them back up to the roadmap.
+
+Nothing downstream closes that gap.
+The `pre-completion-reviewer` verifies a named follow-up was **filed**, not **dispositioned**.
+`/finish-phase`'s hard gate enumerates only issues with a numbered step, and its archive step records only the abandoned/parked issues the roadmap already names — so a phase-born issue with no disposition entry disappears from the phase history entirely.
+
+The cost is not only bookkeeping: [#753] would have folded into Step 10 at filing time (same defect class, and it consumes Step 9's request id), and [#751]'s absence left Step 2's `Outcome:` overclaiming a capability the `select`/`input` fallback never received.
+Both were backfilled by hand here.
+The operator's framing for the fix: an issue should be evaluated for roadmap fit **at spin-off time** — in retro or in planning — not at phase close, when it is too late to fold anything in.
+Filed as [#767]; the open design question is whether that evaluation lives in a shared skill the three filing templates load, a step duplicated across them, or the `improvement-discovery` skill that already owns the phase model.
+
+[#610]: https://github.com/gotgenes/pi-packages/issues/610
+[#751]: https://github.com/gotgenes/pi-packages/issues/751
+[#752]: https://github.com/gotgenes/pi-packages/issues/752
+[#753]: https://github.com/gotgenes/pi-packages/issues/753
+[#767]: https://github.com/gotgenes/pi-packages/issues/767
 
 [#533]: https://github.com/gotgenes/pi-packages/issues/533
 [#604]: https://github.com/gotgenes/pi-packages/issues/604

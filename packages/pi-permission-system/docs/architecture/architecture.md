@@ -924,6 +924,11 @@ Open-issue sweep dispositions (user-decided):
   It was originally swept out as a feature issue; the sweep read the symptom (a parent-side consumer with no terminal signal) without reading the cause.
   Tracing it found three id conventions and no id at all on any non-prompting path, so the local foundation split out as Step 9 ([#752]) and this issue narrowed to the cross-session half it actually reported.
 - [#752] — filed mid-phase as Step 9, the foundation Step 10 needs.
+- [#751] — filed by Step 3's implementation; deferred to a later phase, not folded back into Step 2.
+  It is the residual of Step 2's own contract (ADR 0011 §4's reachable complete view), twice parked: [#710]'s plan parked the `select`/`input` fallback here for Step 3, and Step 3 did not resolve it either.
+  Step 2 shipped and released, so its `Outcome:` is narrowed to name the dialog rather than reopened.
+- [#753] — filed by Step 9's planning; folded into Step 10's scope rather than deferred.
+  It is the same defect class at a second site — a blocking path that emits no terminal `permissions:decision` — and it consumes the request id Step 9 mints, so the two close together.
 - Feature issues [#736], [#720], [#691], [#688], [#687], [#686], [#680], [#658], [#609], [#604], [#603], [#699] — out of scope for a structural phase; [#654] and [#648] become downstream packages over the annotator and evidence-formatter seams per ADR 0011 §8, which are themselves deferred until the payload exists.
 
 Trajectory: Phase 12's maximum step priority was 20; this phase's is 20 (Step 1).
@@ -991,7 +996,8 @@ Release: batch "presentation-payload"
 
 - **Smell:** Category C, with the user-visible symptom filed as the [#710] bug.
 - **Target:** new `src/presentation/dialog-renderer.ts` rendering the payload for the inline TUI dialog and the `select`/`input` fallback under a row budget plus a per-field width cap (ADR 0011 §5), with marked elision and a reachable complete view (§4); [#716]'s aligned one-fact-per-line rendering intent adopted here; the invariant core (§3) — including `executedUnit` — always visible, which closes [#713]; the row-budget config field follows the established `config-schema.ts` → `extension-config.ts` → `mergeUnifiedConfigs()` path (the #332/#347 drop class) with `pnpm run gen:schema`.
-- **Outcome:** a forwarded ask with pathological input renders within the budget with the complete view reachable; [#710] and [#713] close; the local prompt path no longer reads `details.message`.
+- **Outcome:** a forwarded ask with pathological input renders within the budget with the complete view reachable **in the inline dialog**; [#710] and [#713] close; the local prompt path no longer reads `details.message`.
+  The `select`/`input` fallback gets the budget but not the escape hatch — tracked as [#751], deferred.
 - **Landed:** the reported ask — a 200-line here-string, measured at 202 rows locally and 205 forwarded, identically at widths 80/120/160 — renders inside the 24-row default with its request facts intact.
   Planning settled the reading that makes that possible: §3's "never elided" means never *omitted*, so the field cap applies to the core and §5's own here-string rationale is coherent with it.
   The row budget therefore bounds evidence and the field cap bounds the core, with an entry admitted whole or dropped.
@@ -1127,7 +1133,7 @@ The tool-call gates borrow the SDK's `toolCallId`, the skill-input gate mints it
 
 Release: independent
 
-#### Step 10: Cross-session prompt/decision correlation ([#610])
+#### Step 10: Cross-session prompt/decision correlation ([#610], with [#753])
 
 **Cause:** a forwarded ask's prompt is emitted by the parent and its terminal decision by the child, on a different event bus for an out-of-process child — so a parent-side consumer that marks an agent blocked on `permissions:ui_prompt` has no public signal to clear it and can stay blocked forever.
 Measured on the review log: 53 of 57 `forwarded_permission.request_created` entries carry an id appearing on no `permission_request.*` entry, the child's ask and the request the parent serves joined by nothing but a one-millisecond timestamp gap.
@@ -1135,7 +1141,9 @@ Measured on the review log: 53 of 57 `forwarded_permission.request_created` entr
 - **Smell:** Category C (boundary flaw — a lifecycle observable on one side of the forwarding edge and not the other).
 - **Target:** `src/authority/forwarded-request-server.ts` emits a parent-side `permissions:decision` after the serving session's human decision, reusing the request id its own `permissions:ui_prompt` carried; `ForwardedPermissionRequest.id` **is** the child's originating `requestId` (Step 9), so it already joins the two sides' log entries.
   Silent policy resolutions stay silent — no prompt, no terminal event, unchanged.
-- **Outcome:** a direct prompt and its decision share one id; a forwarded prompt and its parent-side decision share one id on one bus; concurrent equivalent prompts stay independently correlatable.
+  The step also closes [#753], the same defect at a second site: `createFailClosedToolCall` (`src/handlers/tool-call-boundary.ts`) is the only path that blocks a tool call without a terminal broadcast.
+  It adds `gate_error` to `PermissionDecisionResolution` and emits from the boundary's `catch` using the `DecisionReporter` it already holds, carrying Step 9's `requestId`.
+- **Outcome:** a direct prompt and its decision share one id; a forwarded prompt and its parent-side decision share one id on one bus; concurrent equivalent prompts stay independently correlatable; **every** blocking path emits a terminal `permissions:decision`.
 - **Impact 3 / Risk 2 / Priority 12.**
 
 Release: independent
@@ -1252,5 +1260,6 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#610]: https://github.com/gotgenes/pi-packages/issues/610
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
+[#751]: https://github.com/gotgenes/pi-packages/issues/751
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
