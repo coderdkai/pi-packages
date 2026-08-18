@@ -24,7 +24,7 @@ import { describeExternalDirectoryGate } from "./external-directory";
 import { describePathGate } from "./path";
 import type { GateRunner } from "./runner";
 import { describeSkillReadGate } from "./skill-read";
-import { describeToolGate } from "./tool";
+import { describeToolGate, type ToolPathAccess } from "./tool";
 import type { GateOutcome, ToolCallContext } from "./types";
 
 /**
@@ -124,7 +124,7 @@ export class ToolCallGatePipeline {
         ),
       () => describeBashPathGate(tcc, bashProgram, this.resolver, normalizer),
       () => {
-        const { toolCheck, accessPath } = this.resolvePerToolCheck(
+        const { toolCheck, pathAccess } = this.resolvePerToolCheck(
           tcc,
           shell,
           bashProgram,
@@ -134,7 +134,7 @@ export class ToolCallGatePipeline {
           tcc,
           toolCheck,
           formatter,
-          accessPath,
+          pathAccess,
           shell,
         );
         toolDescriptor.preCheck = toolCheck;
@@ -159,15 +159,16 @@ export class ToolCallGatePipeline {
    * #502); every other tool (and a path-bearing tool with no path) keeps the
    * raw `tool` intent the manager normalizes.
    *
-   * Returns the `AccessPath` alongside the check so `describeToolGate` derives
-   * the session-approval value from `accessPath.value()`.
+   * Returns the resolved path alongside the check, already paired with the
+   * session scope approving it grants — derived here, where the normalizer
+   * lives, rather than inside the gate (#655).
    */
   private resolvePerToolCheck(
     tcc: ToolCallContext,
     shell: ShellInvocation | null,
     bashProgram: BashProgram | null,
     normalizer: PathNormalizer,
-  ): { toolCheck: PermissionCheckResult; accessPath?: AccessPath } {
+  ): { toolCheck: PermissionCheckResult; pathAccess?: ToolPathAccess } {
     if (shell) {
       if (bashProgram) {
         return {
@@ -196,7 +197,10 @@ export class ToolCallGatePipeline {
     if (filePath !== null) {
       const accessPath = normalizer.forPath(filePath);
       return {
-        accessPath,
+        pathAccess: {
+          path: accessPath,
+          approvalPattern: normalizer.approvalPatternFor(accessPath),
+        },
         toolCheck: this.resolver.resolve({
           kind: "access-path",
           surface: tcc.toolName,
