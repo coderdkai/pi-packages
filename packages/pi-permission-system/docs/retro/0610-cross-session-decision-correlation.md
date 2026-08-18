@@ -106,6 +106,11 @@ The pre-completion reviewer returned PASS with no warnings, and Phase 13's last 
 - `other` — the test helper added in the TDD stage, `serveAndCaptureDecisions`, wrapped arrange *and* act, hiding the `processInbox` call the `testing` skill says to keep explicit.
   It passed the pre-completion review and mirrored the file's pre-existing `escalateForwardedAsk`, so local precedent masked it.
   Impact: no rework at ship time; refactored during this retro at the operator's direction (see Changes made).
+- `instruction-violation` (self-identified, after pushing) — committed this retro's two test-file fixes inside the `docs(retro):` commit.
+  `docs:` is an unhidden changelog type and those files sit under `packages/pi-permission-system/` outside `exclude-paths`, so release-please opened PR #774 proposing a 26.3.1 whose tarball is byte-identical to 26.3.0 (`test/` is not in the `files` allowlist).
+  A `test(pi-permission-system):` commit for the code plus the `docs(retro):` commit for the rest would have released nothing.
+  Impact: an unmergeable-by-choice release PR left open to batch into the next real release; unfixable in place, since amending a pushed commit needs a force-push.
+  Root cause is not purely recall: `.pi/prompts/retro.md` Step 9 instructs committing "any other touched files" as one `docs(retro):`, with no rule for a retro that touches package code.
 
 #### What caused friction (user side)
 
@@ -154,6 +159,8 @@ The defect was an unchecked default, not the factory; and it survived precisely 
    Verified non-vacuous: deleting `decidedBy` now fails `tsc` (TS2345) where it previously passed.
 4. `packages/pi-permission-system/test/authority/forwarded-request-server.test.ts` — replaced `serveAndCaptureDecisions` with a describe-scoped `beforeEach` arrange plus an explicit `await server.processInbox(servingContext())` act in each of the eight tests.
    All 32 tests in the file still pass; the full package suite stays at 3173.
+5. `.pi/prompts/retro.md` (Step 9) — added the rule to split `src/`/`test/` changes into their own `test:`/`refactor:` commit before the `docs(retro):` one, after this session's single bundled commit cut a needless patch release.
+   Release-please PR #774 (26.3.1) is deliberately left unmerged to batch into the next real release.
 
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
 [#753]: https://github.com/gotgenes/pi-packages/issues/753

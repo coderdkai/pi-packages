@@ -200,6 +200,7 @@ Do not split this into multiple sections; one coherent list per retro.
 
 1. `git add` the retro file (`packages/<PKG>/docs/retro/` or `docs/retro/`), `AGENTS.md`, `.pi/prompts/`, and any other touched files.
 2. Commit as `docs(retro): add retro notes for issue #N`.
+   Split any `packages/<PKG>/src/` or `test/` change into its own `test:`/`refactor:` commit first — `docs:` is an unhidden changelog type, so bundling code under it cuts a pointless patch release (Refs #610).
 3. `git push`.
 
 If the user suggests further refinements after the commit, implement them, append to the same `### Changes made` section, and commit again.
