@@ -11,7 +11,7 @@ import type {
 } from "#src/handlers/gates/descriptor";
 import { isGateBypass, isGateDescriptor } from "#src/handlers/gates/descriptor";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
+import { pathFlavorForPlatform } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import {
@@ -70,12 +70,25 @@ async function describeGate(
   tcc: ToolCallContext,
   resolver: ScopedPermissionResolver,
 ): Promise<GateResult> {
+  return describeGateOnPlatform(process.platform, tcc, resolver);
+}
+
+/**
+ * Variant of {@link describeGate} that injects an explicit host platform, so a
+ * win32-specific decision can be exercised on a POSIX CI host (and vice versa)
+ * without mocking `node:path` (#533).
+ */
+async function describeGateOnPlatform(
+  platform: NodeJS.Platform,
+  tcc: ToolCallContext,
+  resolver: ScopedPermissionResolver,
+): Promise<GateResult> {
   const command = getNonEmptyString(toRecord(tcc.input).command);
   const bashProgram =
     tcc.toolName === "bash" && command
       ? await BashProgram.parse(
           command,
-          new PathNormalizer(pathFlavorForPlatform(process.platform), tcc.cwd),
+          new PathNormalizer(pathFlavorForPlatform(platform), tcc.cwd),
         )
       : null;
   return describeBashExternalDirectoryGate(tcc, bashProgram, resolver);
@@ -358,26 +371,12 @@ describe("describeBashExternalDirectoryGate", () => {
 });
 
 describe("describeBashExternalDirectoryGate — Git Bash semantics (win32)", () => {
-  async function describeGateWin32(
-    tcc: ToolCallContext,
-    resolver: ScopedPermissionResolver,
-  ): Promise<GateResult> {
-    const command = getNonEmptyString(toRecord(tcc.input).command);
-    const bashProgram =
-      tcc.toolName === "bash" && command
-        ? await BashProgram.parse(
-            command,
-            new PathNormalizer(win32PathFlavor, tcc.cwd),
-          )
-        : null;
-    return describeBashExternalDirectoryGate(tcc, bashProgram, resolver);
-  }
-
   const winTcc = (command: string): ToolCallContext =>
     makeTcc({ cwd: "C:/projects/app", input: { command } });
 
   it("does not prompt for a /dev/null redirect target", async () => {
-    const result = await describeGateWin32(
+    const result = await describeGateOnPlatform(
+      "win32",
       winTcc("echo hi > /dev/null"),
       makeResolver(makeCheckResult("ask")),
     );
@@ -385,7 +384,8 @@ describe("describeBashExternalDirectoryGate — Git Bash semantics (win32)", () 
   });
 
   it("prompts for a /tmp path displayed as typed, not as C:\\tmp", async () => {
-    const result = await describeGateWin32(
+    const result = await describeGateOnPlatform(
+      "win32",
       winTcc("ls /tmp"),
       makeResolver(makeCheckResult("ask")),
     );
