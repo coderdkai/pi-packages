@@ -181,6 +181,11 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       ),
   };
 
+  // Constructed here rather than beside the gate runner below: the serving
+  // side broadcasts its own decisions, so both readers share one reporter over
+  // this session's event bus.
+  const reporter = new GateDecisionReporter(logger, pi.events);
+
   const requestServer = new ForwardedRequestServer({
     forwardingDir: paths.forwardingDir,
     logger,
@@ -275,7 +280,6 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     },
   );
 
-  const reporter = new GateDecisionReporter(logger, pi.events);
   const gateRunner = new GateRunner(
     resolver,
     sessionRules,
