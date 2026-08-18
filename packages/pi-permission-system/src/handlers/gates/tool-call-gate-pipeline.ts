@@ -1,4 +1,3 @@
-import type { AccessPath } from "#src/access-intent/access-path";
 import { BashProgram } from "#src/access-intent/bash/program";
 import { getPathBearingToolPath } from "#src/access-intent/tool-input-path";
 import {
