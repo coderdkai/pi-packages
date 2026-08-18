@@ -31,6 +31,55 @@ Run them in foreground or background, steer them mid-run, resume completed sessi
   Expandable to show full output
 - **Event bus** — lifecycle events (`subagents:created`, `started`, `completed`, `failed`, `resumed`, `steered`, `compacted`) emitted via `pi.events`, enabling other extensions to react to sub-agent activity
 
+## Scope and non-goals
+
+**Purpose.**
+A minimal, in-process sub-agent core.
+It spawns a child session derived from the parent, runs the turn loop, streams and collects the result, gates concurrency, supports resume, and publishes its lifecycle.
+Everything else is a consumer.
+
+**In scope.**
+Defects in the surfaces the core already owns, completeness of the public lifecycle-event contract, and internal work toward the minimal-core target.
+Anything attaching to the core does so one of two ways: subscribe to a lifecycle event if it only needs to _know_ what happened, or register a provider if it must _return a value the core consumes_ — see [ADR-0002](./docs/decisions/0002-extensions-on-a-minimal-core.md).
+
+**Non-goals.**
+
+- _Capability the fork deliberately left behind._
+  Scheduling, cross-extension RPC, group-join notifications, model-scope enforcement, and a built-in tool denylist belong to upstream, not to this core — see [Relationship to upstream](#relationship-to-upstream).
+  Timed dispatch is any extension calling `spawn()` on the published service.
+- _Policy about what a child may do._
+  Tool restriction is allow/ask/deny in a permission layer, not a binary hide in a spawner — see [Migrating from `disallowed_tools`](#migrating-from-disallowed_tools).
+- _Widening a child's tool allowlist on the agent's behalf._
+  An agent's `tools:` frontmatter is the complete allowlist and the only mechanism that widens it.
+  Capability belongs to whoever writes the agent file, expressed per agent — a settings-level list that adds tools to every agent of a type would hand a read-only `Explore` agent whatever write-capable tools happen to be installed, from a file its author never saw.
+- _A global run-mode default._
+  Whether an agent runs in the foreground or the background is a per-invocation argument and a per-agent frontmatter key, both of which already exist.
+  A global flip changes the behavior of every existing agent file at once, which is not a default this core sets on your behalf.
+- _Choosing where a child runs._
+  The core needs only a working directory and a disposal hook, and the default — the parent's cwd — is always correct.
+  Git worktrees are one strategy behind the workspace-provider seam, not core behavior — see [Worktree Isolation](#worktree-isolation).
+- _Agent identity beyond the agent file._
+  Persistent memory and skill preloading were removed, and children inherit the parent's skills — see [Removed: agent memory and skill preloading](#removed-agent-memory-and-skill-preloading).
+- _Provider seams with no consumer._
+  A seam nobody supplies is not extensibility; it is a speculative abstraction that taxes every reader and registers as dead code.
+  The architecture may _admit_ a seam without shipping it until a real consumer exists — a rule held to even when a genuine reproducer arrived, because the only policy source turned out to be operator configuration.
+- _A second steering surface._
+  The session viewer is strictly read-only.
+  Steering already has a home in `steer_subagent` and the widget, and a session takeover does not survive the root's in-flight turn — see [ADR-0004](./docs/decisions/0004-reconsider-ui-direction.md).
+- _Bespoke transcript rendering._
+  The viewer composes Pi's own public entry components rather than hand-rolling formatting inside this core.
+- _Agent-authoring UI._
+  There is no creation wizard and no in-app config editor.
+  An agent `.md` is written in an editor, or by asking a Pi agent to write it.
+- _Duplicating foreground progress._
+  The above-editor widget exists as the background-agent status surface only; a foreground agent already streams inline.
+
+**Where adjacent requests belong.**
+Tool restriction and per-agent permission policy → [@gotgenes/pi-permission-system](https://www.npmjs.com/package/@gotgenes/pi-permission-system).
+Worktree isolation and save-to-branch → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
+Timed dispatch, telemetry, cost tracking, and alternate UIs → a consumer built on the lifecycle events and the typed service.
+A batteries-included alternative → upstream [`tintinweb/pi-subagents`](https://github.com/tintinweb/pi-subagents).
+
 ## Install
 
 ```bash
@@ -167,7 +216,7 @@ Creating and editing agent definitions is not a command — write an agent `.md`
 
 Instead of hard-aborting at the turn limit, agents get a graceful shutdown:
 
-1. At `max_turns` — steering message: *"Wrap up immediately — provide your final answer now."*
+1. At `max_turns` — steering message: _"Wrap up immediately — provide your final answer now."_
 2. Up to 5 grace turns to finish cleanly
 3. Hard abort only after the grace period
 
