@@ -9,6 +9,7 @@
  */
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
+import type { DecisionReporter } from "#src/decision-reporter";
 import type { GateOutcome } from "#src/handlers/gates/types";
 import { createFailClosedToolCall } from "#src/handlers/tool-call-boundary";
 
@@ -32,6 +33,12 @@ function gateReturning(outcome: GateOutcome) {
   return vi
     .fn<(event: unknown, ctx: ExtensionContext) => Promise<GateOutcome>>()
     .mockResolvedValue(outcome);
+}
+
+function gateThrowing(message: string) {
+  return vi
+    .fn<(event: unknown, ctx: ExtensionContext) => Promise<GateOutcome>>()
+    .mockRejectedValue(new Error(message));
 }
 
 describe("createFailClosedToolCall", () => {
@@ -185,5 +192,83 @@ describe("createFailClosedToolCall", () => {
         error: "non-error rejection",
       }),
     );
+  });
+
+  describe("terminal decision broadcast", () => {
+    /** Captures the request id the review entry recorded for the same block. */
+    function makeIdCapturingReporter(): {
+      reporter: DecisionReporter;
+      loggedRequestId: () => string;
+    } {
+      let logged = "";
+      const reporter = makeReporter({
+        writeReviewLog: vi.fn(
+          (_event: string, details: Record<string, unknown>) => {
+            logged = String(details.requestId);
+          },
+        ),
+      });
+      return { reporter, loggedRequestId: () => logged };
+    }
+
+    it("broadcasts a deny decision joined to the gate_error review entry", async () => {
+      const { reporter, loggedRequestId } = makeIdCapturingReporter();
+      const boundary = createFailClosedToolCall(
+        gateThrowing("parser init failed"),
+        reporter,
+        makeAudit(),
+        makeTracer(),
+      );
+
+      await boundary(
+        makeToolCallEvent("bash", { input: { command: "git push" } }),
+        makeCtx(),
+      );
+
+      expect(reporter.emitDecision).toHaveBeenCalledWith({
+        requestId: loggedRequestId(),
+        surface: "bash",
+        value: "git push",
+        result: "deny",
+        resolution: "gate_error",
+        origin: null,
+        agentName: null,
+        matchedPattern: null,
+      });
+    });
+
+    it("names the tool as the value when the errored call carries no command", async () => {
+      const reporter = makeReporter();
+      const boundary = createFailClosedToolCall(
+        gateThrowing("parser init failed"),
+        reporter,
+        makeAudit(),
+        makeTracer(),
+      );
+
+      await boundary(makeToolCallEvent("read"), makeCtx());
+
+      expect(reporter.emitDecision).toHaveBeenCalledWith(
+        expect.objectContaining({ surface: "read", value: "read" }),
+      );
+    });
+
+    it("still blocks when the broadcast itself throws", async () => {
+      const reporter = makeReporter({
+        emitDecision: () => {
+          throw new Error("listener exploded");
+        },
+      });
+      const boundary = createFailClosedToolCall(
+        gateThrowing("parser init failed"),
+        reporter,
+        makeAudit(),
+        makeTracer(),
+      );
+
+      const result = await boundary(makeToolCallEvent("bash"), makeCtx());
+
+      expect((result as { block?: true }).block).toBe(true);
+    });
   });
 });
