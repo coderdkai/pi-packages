@@ -127,6 +127,21 @@ The ship phase coincided with a live GitHub incident that broke the release auto
 1. `AGENTS.md` — extended the state-mutating-command bullet in § Workflow with the verify-before-retry rule: a transient 5xx on `gh pr merge` may follow a merge that landed, so probe `gh api repos/OWNER/REPO/pulls/N --jq .merged` (REST stays up when GraphQL is degraded) before retrying.
 2. `AGENTS.md` — noted on the manual-publish command that it needs an interactive terminal under registry 2FA (`ERR_PNPM_OTP_NON_INTERACTIVE`), so the operator runs it rather than the agent.
 3. Filed #764 against `pi-github-tools` — `release_pr_merge` needs transient-error retry and, more importantly, must re-read merge state before reporting a failure of the merge call itself, so a caller never has to guess whether a retry is safe.
+   A parallel session picked it up and shipped it during this retro; #764 closed the same day.
+4. `packages/pi-permission-system/docs/architecture/architecture.md` — marked Phase 13 Step 7 complete (heading plus Mermaid node `S7`), added a `**Landed:**` note for the divergence from the stated Target, and repointed the health metric and its recompute command from `config-loader.ts` to `extension.ts`.
+   Caught by the operator after the retro commit, not by the workflow.
+
+#### Missed roadmap step (found post-retro)
+
+- `missing-context` (user-caught) — #732 was Step 7 of `pi-permission-system`'s Phase 13 roadmap, and nothing in planning, TDD, or ship noticed.
+  The planning step that greps `packages/<PKG>/docs/architecture/architecture.md` for the issue number ran against `PKG = pi-permission-model-judge`, whose `docs/` has no `architecture/` directory, so it correctly found nothing and stopped.
+  The issue carried **both** `pkg:pi-permission-system` and `pkg:pi-permission-model-judge` labels, and the roadmap lives in the package whose code the fix does *not* touch — the one place the single-package `PKG` never pointed.
+  Impact: the step went unmarked through the whole lifecycle and was fixed only when the operator asked; one follow-up `docs:` commit.
+- The same miss hid a second, worse problem.
+  Step 7's stated Outcome was `grep -c "getAgentDir" …/src/config-loader.ts` going 0 → ≥ 1, but the operator's planning decision put the resolution in `extension.ts` instead.
+  That grep now returns 1 anyway — matching a doc comment, with no resolution site in the file — so the metric would have read as satisfied for entirely the wrong reason.
+  The roadmap even anticipates this: it states that the step creating each grepped name "must either use the roadmap's name or update the metric row in the same commit."
+  Had the roadmap been read at planning time, the divergence between its Target and the chosen design would have surfaced in the `ask_user` gate rather than after the release.
 
 Considered and deliberately not changed: the repo-relative path rule (already in `AGENTS.md`, Refs #726, and self-identified here), a `githubstatus.com` staleness note (too narrow; its actionable half is covered by change 1), the `/plan-issue` spike guidance (already prescribes planning-time measurement and worked as written), and `/ship-issue` steps 4 and 6b (both performed correctly under the failure).
 
