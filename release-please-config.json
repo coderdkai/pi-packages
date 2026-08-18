@@ -42,6 +42,7 @@
     "packages/pi-colgrep/docs/plans",
     "packages/pi-colgrep/docs/retro",
     "packages/pi-github-tools/docs/plans",
+    "packages/pi-github-tools/docs/retro",
     "packages/pi-nocd/docs/plans",
     "packages/pi-nocd/docs/retro",
     "packages/pi-permission-model-judge/docs/plans",
