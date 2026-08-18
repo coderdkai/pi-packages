@@ -739,7 +739,7 @@ src/
 ├── normalize.ts              Config → Ruleset normalization (flat format)
 ├── synthesize.ts             Universal default + MCP baseline → Ruleset
 ├── wildcard-matcher.ts       Compiled glob matching. `CompiledWildcardPattern.matches(value)` is the only match surface (no exposed `RegExp`). Constraint: the win32 `windowsSeparators` fold applies to the pattern and the matched value alike, and lives on the compiled pattern so it cannot be half-applied — folding only the pattern makes every forward-slash value unmatchable (#653)
-├── pattern-suggest.ts        Per-surface approval pattern suggestions
+├── pattern-suggest.ts        Per-surface approval pattern suggestions: `suggestSessionPattern` for a surface's own value vocabulary (bash command, MCP target, skill name), `suggestPathSessionPattern` for a pattern the caller's `PathNormalizer` already derived. Constraint: holds no path-language semantics — a path pattern arrives derived and is labelled verbatim
 ├── bash-arity.ts             Command arity table for bash pattern suggestions
 ├── expand-home.ts            `expandHomePath`: `~` / `$HOME` / `${HOME}` expansion for patterns and path values, over one prefix table so the three spellings cannot drift; a prefix is recognized only standalone or before a separator, so `~username` / `$HOMEDIR` / `${HOME:-/tmp}` are left alone
 ├── session-approval.ts        SessionApproval value object - owns the single/multi-pattern union; exposes representativePattern and toGateApproval()
@@ -754,7 +754,7 @@ src/
 ├── session-approval-recorder.ts `SessionApprovalRecorder` interface - records a granted session-scoped approval into the session ruleset; implemented by `SessionRules`
 │
 ├── permission-session.ts     `PermissionSession` class - state/lifecycle owner: owns context lifecycle, session-rule lifecycle (`reset`/`shutdown`/`reload`), skill entries, agent-name resolution, the config gateway, the Tell-Don't-Ask gate inputs, and `notify(message)` (UI warn over the owned context, no-op before activation); `implements ToolCallGateInputs`. The resolve role lives in `PermissionResolver`, the recorder role in `SessionRules`; handlers depend on the concrete class + `PermissionResolver`
-├── path-normalizer.ts        `PathNormalizer` class - the path-interpretation collaborator constructed once at the session edge with the injected `PathFlavor` (exposed as `readonly flavor`) and session `cwd` baked in; hands raw tokens, returns prepared values: `forPath`/`forLiteral` (build `AccessPath`s), `isAbsolute`/`resolveBase`/`joinBase` (flavor-aware `cd`-fold routing), `isWithinDirectory`/`isOutsideWorkingDirectory` (containment), `comparableValue` (lexical comparison for skill-prompt matching), `isInfrastructureRead`, and `forBashToken`/`interpretBashCdTarget`/`isBoundaryOutsideWorkingDirectory` (Git Bash/MSYS bash-token interpretation — safe devices preserved, `/c/…` drive mounts translated, other POSIX absolutes literal-only). Also owns `entryExists` (lstat), the existence probe deciding whether a bare bash token names a real filesystem entry, kept here so path interpretation has a single filesystem edge alongside canonicalization (ADR 0009). A facade over the `path/` and `access-intent/path-normalization` primitives; holds no platform discriminator — every platform question delegates to `flavor`, so no consumer reads `process.platform` or threads `cwd`
+├── path-normalizer.ts        `PathNormalizer` class - the path-interpretation collaborator constructed once at the session edge with the injected `PathFlavor` (exposed as `readonly flavor`) and session `cwd` baked in; hands raw tokens, returns prepared values: `forPath`/`forLiteral` (build `AccessPath`s), `isAbsolute`/`resolveBase`/`joinBase` (flavor-aware `cd`-fold routing), `isWithinDirectory`/`isOutsideWorkingDirectory` (containment), `comparableValue` (lexical comparison for skill-prompt matching), `isInfrastructureRead`, `approvalPatternFor` (the session-approval glob for a built `AccessPath`, the sole home of that derivation), and `forBashToken`/`interpretBashCdTarget`/`isBoundaryOutsideWorkingDirectory` (Git Bash/MSYS bash-token interpretation — safe devices preserved, `/c/…` drive mounts translated, other POSIX absolutes literal-only). Also owns `entryExists` (lstat), the existence probe deciding whether a bare bash token names a real filesystem entry, kept here so path interpretation has a single filesystem edge alongside canonicalization (ADR 0009). A facade over the `path/` and `access-intent/path-normalization` primitives; holds no platform discriminator — every platform question delegates to `flavor`, so no consumer reads `process.platform` or threads `cwd`
 ├── access-intent/           Access-intent domain: turns `(toolName, input)` into what is being accessed (bash decomposition, MCP targets, path extraction, the `AccessPath` value object and `AccessIntent` union)
 │   ├── path-normalization.ts `AccessPath`'s representation backing: `normalizePathForComparison` (lexical absolute, via `flavor.comparable`), `canonicalNormalizePathForComparison` (symlink-resolved + win32-lowercased via `flavor.fold`), `normalizePathPolicyLiteral` (literal cleanup), `getPathPolicyValues` (lexical ∪ relative match set) + `PathPolicyValueOptions`; pure derivation over an injected `PathFlavor`
 │   ├── access-intent.ts     `AccessIntent` discriminated union each gate emits: `tool` (raw input the manager normalizes) and `access-path` (an `AccessPath` for every path gate — `path`, `external_directory`, and the per-tool path-bearing surfaces `read`/`write`/`edit`/`grep`/`find`/`ls`). Constraint: `ResolvedAccessIntent` (`tool | path-values`) is what the manager consumes after the resolver unwraps `access-path` via `matchValues()` — `path-values` is still not gate-emitted, keeping the manager string-based (the ADR 0002 boundary), but since #597 it has a second legitimate producer: the forwarded-serving wire builds a `path-values` intent directly from a `ForwardedAccessIntent`'s child-fixed `matchValues`, via `buildResolvedIntentFromMatchValues` (`input-normalizer.ts`)
@@ -824,9 +824,10 @@ src/
 ├── async-cache.ts             `memoizeAsyncWithRetry` - memoizes an async factory but drops a rejected result so the next call retries; used by `access-intent/bash/parser.ts` for resilient tree-sitter parser init
 ├── safe-system-paths.ts       `SAFE_SYSTEM_PATHS` (OS device files: `/dev/null`, `/dev/std{in,out,err}`) + `isSafeSystemPath`
 ├── path/                     Path-language domain: the win32-vs-POSIX decision resolved once, plus the co-rewritten path leaves
-│   ├── path-flavor.ts        `PathFlavor` interface + `pathFlavorForPlatform` factory + `win32PathFlavor`/`posixPathFlavor` singletons — the platform's path *language* as one immutable collaborator (`impl`, `matchOptions`, `fold`, `comparable`, `isWithin`, `hasPathSeparator`, `bashTokenShape`). Constraint: holds the package's only `=== "win32"` comparison; injected once from `index.ts` into `PermissionManager` / `PermissionSession` (→ `PathNormalizer`) / `SubagentDetection`
+│   ├── path-flavor.ts        `PathFlavor` interface + `pathFlavorForPlatform` factory + `win32PathFlavor`/`posixPathFlavor` singletons — the platform's path *language* as one immutable collaborator (`impl`, `matchOptions`, `fold`, `comparable`, `isWithin`, `hasPathSeparator`, `lastSeparatorIndex`, `bashTokenShape`). Constraint: holds the package's only `=== "win32"` comparison, and the one separator alphabet both separator answers read; injected once from `index.ts` into `PermissionManager` / `PermissionSession` (→ `PathNormalizer`) / `SubagentDetection`
 │   ├── canonicalize-path.ts  Best-effort symlink resolution via `realpathSync` — walks up to longest existing ancestor and re-appends non-existent tail; ENOENT/ENOTDIR safe, EACCES/ELOOP fall back to lexical form; takes an injected `PathFlavor`
 │   ├── path-containment.ts   Pure path geometry over already-canonical operands: `isPathOutsideWorkingDirectory` (excludes safe system paths, then defers containment to `PathFlavor.isWithin`; no derivation, no filesystem)
+│   ├── approval-pattern.ts   `deriveApprovalPattern` - the session-approval glob for an accessed path, scoped at the value's own last separator. Constraint: scopes on `PathFlavor.lastSeparatorIndex`, never the platform's default `sep` — the two differ for a Git Bash token on a win32 host, where `sep` widened a directory grant to its parent (#655)
 │   └── pi-infrastructure-read.ts `isPiInfrastructureRead` - read-only-tool auto-allow within infra dirs / project-local `.pi/{npm,git}`; takes an already-canonical path + injected `PathFlavor`
 ├── node-modules-discovery.ts  Global node_modules resolution (walk-up + npm root -g fallback)
 ├── system-prompt-sanitizer.ts Narrow Available tools section + filter guidelines to the active set
@@ -942,7 +943,7 @@ No decline, so the regular rotation continues.
 | Request-id mint sites in `src/`                                         | 2                     | 1 ✅            |
 | `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2 ✅            |
 | Model-judge resolves `agentDir` via `getAgentDir` (`extension.ts`)      | 0                     | ≥ 1 ✅          |
-| Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0               |
+| Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0 ✅            |
 | fallow health score                                                     | 88 (A)                | ≥ 88            |
 | Production duplication                                                  | 0.2%                  | ≤ 0.2%          |
 | Dead exports                                                            | 0                     | 0               |
@@ -1085,14 +1086,23 @@ Release: independent
 
 Release: independent
 
-#### Step 8: `deriveApprovalPattern` takes the injected `PathFlavor` ([#655])
+#### ✅ Step 8: `deriveApprovalPattern` takes the injected `PathFlavor` ([#655])
 
 **Cause:** `deriveApprovalPattern` (`session-rules.ts`) reads `node:path`'s ambient `dirname`/`sep`, bypassing the injected `PathFlavor` that owns every other platform decision — the one surviving violation of the #562/#510 invariant, producing mixed-separator patterns on a real Windows host and untestable win32 behavior on POSIX CI.
 
 - **Smell:** Category C (ambient platform read; decide-once violation).
 - **Target:** `src/session-rules.ts` — derive the pattern through the flavor's `impl`/separator, threading the flavor from the call sites that already hold a `PathNormalizer`.
-- **Outcome:** `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts` goes 1 → 0; a win32 unit test can pin the derived pattern; `refactor:` (hidden type — cuts no release on its own).
+- **Outcome:** `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts` goes 1 → 0; a win32 unit test can pin the derived pattern; ships as a `fix:`, not the `refactor:` this line first assumed — see Landed.
 - **Impact 2 / Risk 1 / Priority 10.**
+- **Landed:** the metric hit 0, and the step carried a behavior fix the issue reported as cosmetic.
+  Threading the flavor alone does not fix the win32 output: `win32.dirname("/dev/null")` is `/dev` while `win32.sep` is `\`, so the derivation had to scope on the separator the *value* carries, not the platform's default.
+  Measured at planning time, that single rule replaces all four of the old branches and is byte-identical on POSIX across every value the suite pins, while correcting four win32 rows.
+  One of them is a widening: a Git Bash directory token (`/tmp/logs/`, reachable through `forBashToken`'s literal-only branch, [#533]) derived `/tmp\*`, which the symmetric `windowsSeparators` fold ([#653]) then matched against every sibling of the approved directory — verified against the real matcher, so it ships as a `fix:`.
+  The home is `PathNormalizer.approvalPatternFor` over a new `path/approval-pattern.ts` leaf (operator decision over the issue's `AccessPath.approvalPattern()` option, which stays open since all `AccessPath` construction already flows through the normalizer).
+  `PathFlavor` gained `lastSeparatorIndex`, with `hasPathSeparator` re-expressed over it so the separator alphabet has one home.
+  The per-tool gate takes the derived *product* rather than the collaborator — `ToolPathAccess` replaces its `accessPath?` parameter — which keeps `pattern-suggest.ts` free of path-language semantics; its three path-deriving switch arms proved unreachable and were removed.
+  Planning found that none of this was testable before: the ambient read resolves against the *host*, so a win32-flavored gate test on POSIX CI exercised POSIX separators and passed either way.
+  Each gate now pins the injection with a native Windows path, which the pre-fix code collapsed to `./*`.
 
 Release: independent
 
@@ -1144,7 +1154,7 @@ flowchart TD
     S4 --> S10
     S5["✅ Step 5: forwarding liveness (#721)"]
     S7["✅ Step 7: model-judge agentDir (#732)"]
-    S8["Step 8: deriveApprovalPattern flavor (#655)"]
+    S8["✅ Step 8 (#655): deriveApprovalPattern flavor"]
 ```
 
 ### Parallel tracks
@@ -1164,7 +1174,7 @@ The diagram above is the authority on sequencing.
 
 - **Batch "presentation-payload":** Steps 1, 2 (ship together; tail = Step 2; release vehicle = Step 2's `fix:` for [#710] — Step 1 is a hidden `refactor:`).
 - **Batch "presentation-contract":** Steps 3, 4 (ship together; tail = Step 4; release vehicle = Step 3's `feat!:` breaking release with the `message`-replacement migration note).
-- Independently releasable: Step 5 (`fix:`), Step 6 (`feat:`), Step 7 (`fix:`, model-judge component), Step 8 (`refactor:` — hidden type, batches into the next release), Step 9 (`feat:`), Step 10 (`feat:`).
+- Independently releasable: Step 5 (`fix:`), Step 6 (`feat:`), Step 7 (`fix:`, model-judge component), Step 8 (`fix:` — retyped from `refactor:` once planning measured the win32 widening it corrects), Step 9 (`feat:`), Step 10 (`feat:`).
 
 ## Refactoring history
 
@@ -1221,6 +1231,8 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#645]: https://github.com/gotgenes/pi-packages/issues/645
 [#642]: https://github.com/gotgenes/pi-packages/issues/642
 [#655]: https://github.com/gotgenes/pi-packages/issues/655
+[#533]: https://github.com/gotgenes/pi-packages/issues/533
+[#653]: https://github.com/gotgenes/pi-packages/issues/653
 [#658]: https://github.com/gotgenes/pi-packages/issues/658
 [#680]: https://github.com/gotgenes/pi-packages/issues/680
 [#686]: https://github.com/gotgenes/pi-packages/issues/686
