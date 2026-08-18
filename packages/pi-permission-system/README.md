@@ -24,6 +24,74 @@ Permission enforcement extension for the [Pi](https://pi.mariozechner.at/) codin
 - **Broadcasts UI prompt events** — `permissions:ui_prompt` fires only when the permission system is about to invoke the active user-facing permission UI, and every prompt it announces — including one forwarded up from a subagent — is answered by a `permissions:decision` on the same bus
 - **Native [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-subagents) integration** — in-process child sessions register with the permission system automatically, enabling per-agent policy enforcement and `ask`-state forwarding to the parent UI without configuration
 
+## Scope and non-goals
+
+**Purpose.**
+An agent takes many actions and only some of them matter.
+This package routes a human's attention to the consequential ones, and turns each ruling into deterministic, reusable policy.
+It enforces at the host level rather than asking the model to police itself.
+
+**In scope.**
+Hardening the gates against bypass, fail-closed corrections (breaking ones included), named opt-in extension seams for downstream packages, and structural work backed by a written [decision record](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system/docs/decisions).
+
+**Non-goals.**
+
+- _Sandboxing or containment._
+  This is a permission **decision** layer, not a sandbox — it decides and records, but it does not isolate.
+  If a dangerous action is reachable through an allowed tool, policy has to restrict it explicitly.
+  See [Threat Model](docs/troubleshooting.md).
+- _Deciding project trust._
+  The extension is a policy enforcer, not a trust oracle.
+  Whether a project is trusted is Pi's decision and yours; this package observes it rather than making it.
+- _Shipping permissive defaults, trust profiles, or workflow presets._
+  Downstream risk profiles are not knowable from here, so the defaults are conservative and least-privilege (`"*": "ask"`).
+  Unconfigured, that will create prompt fatigue — the answer is to configure it.
+  Common policies ship as documented recipes rather than as preset keywords, so config stays the single source of truth.
+- _Guessing what is sensitive._
+  No built-in `.env` or secret-path denylist ships, because the codebase has no formal secrets model.
+  Log redaction is key-name-structural and never predictive: value-shape and entropy heuristics were declined because a redactor that silently misses a key is worse than a documented warning — it invites treating the log as safe to share.
+- _Redacting the permission prompt._
+  The approver has to see the real input.
+  Masking the prompt, or the forwarded request a subagent escalates, would be a permission regression dressed as a security fix.
+- _Reading ambient host state to interpret a path._
+  No `cygpath` shell-outs and no MSYS environment detection.
+  They are non-deterministic, and they break the invariant that the same policy plus the same input always produces the same decision.
+- _Per-command argument knowledge in the deterministic bash layer._
+  Which positional argument of `git` or `kubectl` happens to be a file is not this layer's problem.
+  That is an unbounded maintenance surface, and it duplicates in brittle static data what a model-judge link does with the command in context.
+- _Making an LLM call._
+  This package declares and enforces policy.
+  It holds no model provider, prompt, or threshold config, and makes no model call itself.
+- _Unbounded delegation._
+  A registered authorizer link decides nothing until you name it in `authorizerChain`, and its `allow` on an excluded surface is downgraded to `defer`.
+  The safety envelope lives where it is enforced, so a buggy or over-eager external judge can never exceed your policy.
+- _Rendering decisions in the assembler._
+  A gate emits a complete structured payload; it never pre-renders a sentence, truncates, or decides what a human will see.
+  Bounds belong in a renderer over a complete payload, not in the gate that produced it.
+- _Growing a display for every operator's ideal._
+  Edit diffs and natural-language risk explanations belong in downstream packages built on the annotator and evidence-formatter seams.
+  A model-generated advisory is never returned to the agent — it would arrive as an instruction, with one model reading another's opinion of its own request as policy.
+- _Outbound bridges into another extension's event contract._
+  This core does not emit another named extension's lifecycle events.
+  An integration that needs both ends belongs in a dedicated glue extension that knows both, which keeps this package's dependencies pointing inward.
+- _A yolo mode that overrides explicit denies._
+  Yolo rewrites `ask` to `allow` and preserves hard denies.
+  A "disable everything" mode would be a different, deliberately named operation — requested by name, never conflated with yolo.
+- _A hard dependency on any one multi-agent extension._
+  The active agent is learned from a generic `<active_agent>` signal, so the per-agent bridge works with any tool that emits it.
+
+**One decision is still open.**
+How policy may _enter_ the system — which channels are admissible, and with what precedence — is being worked out in [issue #639](https://github.com/gotgenes/pi-packages/issues/639), along with whether a capability model (read / write / exec / net) should replace the current actor-keyed surface list.
+Several requested widenings are parked on it rather than declined: loading policy from Pi's shared settings, persisting an approved rule to disk, a launcher-level override, relaxing the delegation envelope by config, and widening the derived session-approval pattern.
+Durable persistence in particular is anticipated by the design rather than excluded by it — [the authority model](https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/architecture/architecture.md) already reserves a place for a ruling that outlives the session.
+Until #639 lands, nothing here should be read as settling those questions.
+
+**Where adjacent requests belong.**
+True isolation of a permitted action → an agent sandbox.
+Model-assisted, case-by-case judging of an `ask` → [@gotgenes/pi-permission-model-judge](https://www.npmjs.com/package/@gotgenes/pi-permission-model-judge).
+Approve-and-steer, or any other post-decision instruction to the agent → a standalone extension over the `permissions:decision` event ([cross-extension API](docs/cross-extension-api.md)).
+Edit-diff display and natural-language risk explanations → a downstream package over the presentation seams.
+
 ## Install
 
 ```bash
