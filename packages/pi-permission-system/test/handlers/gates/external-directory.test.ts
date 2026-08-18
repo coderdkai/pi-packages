@@ -199,14 +199,13 @@ describe("describeExternalDirectoryGate", () => {
     }
   });
 
-  it("sessionApproval uses deriveApprovalPattern", () => {
+  it("records a directory-scoped session approval on the external_directory surface", () => {
     const result = gateUnderTest(
       makeTcc({ input: { path: "/outside/project/file.ts" } }),
       ["/test/agent"],
     ) as GateDescriptor;
-    expect(result.sessionApproval).toBeDefined();
     expect(result.sessionApproval?.surface).toBe("external_directory");
-    expect(result.sessionApproval?.representativePattern).toBeDefined();
+    expect(result.sessionApproval?.patterns).toEqual(["/outside/project/*"]);
   });
 
   it("payload contains the external path and the boundary it escaped", () => {

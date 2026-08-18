@@ -417,6 +417,10 @@ describe("describeBashExternalDirectoryGate — Git Bash semantics (win32)", () 
     ]);
   });
 
+  // Invariant pin, not a probe: the pre-#655 ambient derivation also produced
+  // `/tmp/logs/*` on a POSIX CI host, since it read the *host* separator. It
+  // goes red only against a flavor-aware derivation that scopes on
+  // `flavor.impl.sep` — the tempting rewrite that reintroduces the widening.
   it("keeps a POSIX-shaped Git Bash directory token scoped to itself", async () => {
     const result = await describeGateOnPlatform(
       "win32",
