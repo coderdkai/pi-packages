@@ -23,14 +23,14 @@ The reviewer runs a short, cheap decision on each ask and defers at the first mi
 The candidate path comes from a file tool's path argument (`read`/`edit`/`write`) or from an external path referenced inside a `bash` command — a typo path in `cat …/pi-permission-system/packages/pi-permission-system/README.md` is reviewed the same way as one passed to `read`.
 
 It is fail-safe by construction: a missing model, invalid config, model timeout, unparseable reply, or an unsure verdict all resolve to `defer`.
-Deferring means the ask falls through to the normal permission prompt — this extension only ever *removes* a hand-denial, never grants access (it emits no `allow`).
+Deferring means the ask falls through to the normal permission prompt — this extension only ever _removes_ a hand-denial, never grants access (it emits no `allow`).
 
 ## What it records
 
 Every review the link performs leaves a trail in pi-permission-system's shared review log (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`), so you can answer "did the judge run, did it reach the model, and why did it defer?"
 without guesswork.
 
-Once an ask matches a `typoPattern` — the case that *should* reach the model — the link writes one `model_judge.decision` entry recording the outcome:
+Once an ask matches a `typoPattern` — the case that _should_ reach the model — the link writes one `model_judge.decision` entry recording the outcome:
 
 | Field            | Meaning                                                                                                                             |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -47,6 +47,39 @@ Cheaper events go to pi-permission-system's **debug** log, and only when its `de
 A non-`external_directory` ask is not logged — it is not this link's concern.
 
 Because every pattern-matched ask leaves a positive record, a misconfiguration that silently defers every path (an auth failure, an unresolved model) shows up as a run of `deferReason` entries rather than an empty log.
+
+## Scope and non-goals
+
+**Purpose.**
+A mistyped path — a doubled directory segment, a dropped prefix — lands as an `external_directory` ask you hand-deny, one at a time, with no way to say "this one is obviously a typo".
+This extension is an authorizer chain link that reviews those asks with a light model and auto-denies a mistyped path with a teaching reason.
+
+**In scope.**
+The model mechanism: the operator-declared typo-pattern pre-filter, the model call and its structured verdict, fail-safe handling of every error path, and the decision trail it records.
+
+**Non-goals.**
+
+- _Granting access._
+  The verdict range is `deny` or `defer`, never `allow`.
+  Every failure path — a missing model, invalid config, a timeout, an unparseable reply, an unsure verdict — resolves to `defer`, so this link can only ever remove a hand-denial, never widen access.
+- _Deciding permission on its own authority._
+  The judge advises and `@gotgenes/pi-permission-system` decides.
+  The link does nothing until it is named in `authorizerChain`, and the permission system caps any link's authority on this surface regardless.
+- _Judgment purposes other than mistyped paths._ `authorizerChain` is a chain of links, so a different kind of judgment — secret shapes, general path safety, opaque bash decomposition — belongs in a different link rather than as another mode of this one.
+- _Shipping built-in typo knowledge._
+  Patterns are operator-declared.
+  An installed instance that is named in the chain but left unconfigured defers everything and auto-denies nothing — a safe no-op by design.
+- _Keeping its own audit log._
+  Decisions are recorded to pi-permission-system's shared review log, keyed by request ID, rather than to a private JSONL.
+- _A cross-extension API._
+  This package is a leaf consumer; it exports nothing for other extensions to build on.
+- _Changing `@gotgenes/pi-permission-system`._
+  The authorizer seam, the delegation envelope, and the path-raising gates are consumed as they ship, not modified from here.
+
+**Where adjacent requests belong.**
+Whether this link runs, and in what order → pi-permission-system's `authorizerChain`.
+Allow-capable adjudication → pi-permission-system.
+Which path a multi-path bash command escalates → pi-permission-system's `bash-external-directory` gate, whose worst-path selection is relied on here rather than reimplemented.
 
 ## Install
 
