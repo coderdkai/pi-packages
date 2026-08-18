@@ -749,7 +749,7 @@ src/
 ├── permission-manager.ts     Scope loading + rule composition + `check(intent)` (single resolution entry point); delegates I/O to PolicyLoader; floors the composed ruleset `allow`→`ask` (origin `fail-closed`) when a non-global scope is `invalid`, and appends a fail-closed notice to `getConfigIssues`. Constraint: stays string-based — must not import `AccessPath` (the ADR 0002 string boundary, lint-guarded by `no-restricted-imports`)
 ├── permission-gate.ts        Pure deny/ask/allow gate (injected IO)
 ├── permission-resolver.ts    `ScopedPermissionResolver` interface - the single `{ resolve(intent) }` role the gate factories / runner / pipeline depend on; `PermissionResolver` concrete class holds `ScopedPermissionManager` + `SessionRules`, owns `resolve(intent)` (unwraps an `access-path` `AccessIntent` via `matchValues()` before calling `manager.check`; the concrete class also accepts a pre-fixed `path-values` intent as a passthrough — the forwarded-serving wire's producer, #597 — while the gate-facing interface stays narrow to `AccessIntent`), raw `checkPermission` (`implements SkillPermissionChecker`, no session rules), `getToolPermission`, and `getConfigIssues`
-├── decision-reporter.ts      `DecisionReporter` interface + `GateDecisionReporter` class - owns `SessionLogger` and event bus; writes review-log entries and emits decision events
+├── decision-reporter.ts      `DecisionBroadcaster` (emit only) + `DecisionReporter` (extends it with the review-log write) + `GateDecisionReporter` class - owns `SessionLogger` and event bus; a collaborator that only announces an outcome depends on the narrow half
 ├── decision-audit.ts         `DecisionRecorder` / `DecisionSummaryWriter` / `AuditLogger` interfaces + `DecisionAudit` class - per-session decision counters; `writeSummary` emits a `permission.session_summary` debug line on shutdown and warns on a `toolCalls != allowed + blocked + errors` invariant violation
 ├── session-approval-recorder.ts `SessionApprovalRecorder` interface - records a granted session-scoped approval into the session ruleset; implemented by `SessionRules`
 │
@@ -782,7 +782,7 @@ src/
 │   ├── lifecycle.ts          SessionLifecycleHandler (session: `PermissionSession` + resolver + serviceLifecycle + audit); writes the decision-audit summary on `session_shutdown`
 │   ├── before-agent-start.ts AgentPrepHandler (session + resolver + toolRegistry + `warmParser: () => void`); shouldExposeTool pure helper; recomputes the active set + system-prompt override every fire; fire-and-forget `warmParser()` triggers the tree-sitter warm-up
 │   ├── permission-gate-handler.ts PermissionGateHandler (session + toolRegistry + pipeline + skillInputPipeline + runner); `handleToolCall` returns the internal total `GateOutcome`; validateRequestedTool + getEventInput + extractSkillNameFromInput pure helpers
-│   ├── tool-call-boundary.ts `createFailClosedToolCall(gate, reporter, audit, tracer)` - the only `pi.on("tool_call")` target and sole `GateOutcome` → SDK-shape translator; owns the `try/catch → block` (the SDK's `emitToolCall` does not catch a throwing handler), writes a `gate_error` review entry on throw with its own minted request id (the throw may come from anywhere in the pipeline, so no gate's id is available) via a helper that swallows so the block stays unconditional, and emits a `debugLog`-gated `permission.decision` trace per call
+│   ├── tool-call-boundary.ts `createFailClosedToolCall(gate, reporter, audit, tracer)` - the only `pi.on("tool_call")` target and sole `GateOutcome` → SDK-shape translator; owns the `try/catch → block` (the SDK's `emitToolCall` does not catch a throwing handler), writes a `gate_error` review entry on throw with its own minted request id (the throw may come from anywhere in the pipeline, so no gate's id is available) and broadcasts the matching terminal `permissions:decision` under that same id, via a helper that swallows so the block stays unconditional, and emits a `debugLog`-gated `permission.decision` trace per call
 │   └── gates/               Pure descriptor factories + runner
 │       ├── types.ts          GateOutcome, ToolCallContext
 │       ├── descriptor.ts     GateDescriptor (carrying the `PromptPayload` as its single presentation fact), GateBypass, GateResult types, plus `DecisionEventFacts` (a decision event minus the `requestId` only the runner can supply — the type that routes every emit through the runner's stamping site). Constraint: `promptDetails` omits both `requestId` and `payload`, which the runner stamps, so a gate cannot supply either twice
@@ -875,7 +875,7 @@ src/
 │   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId`/`getCwd` - shared by the escalation and serving roles
 │   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, which carries the child's `PromptPayload` rather than a sentence assembled under the child's config; `ForwardedPermissionResponse`, whose optional `decidedBy` names what decided inside the responding session, distinct from the `responderSessionId` that names where; the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + `resolvePermissionForwardingTarget`, which returns the resolved session id together with its `self`/`registry`/`env` provenance (the routing key for which liveness channel may judge the target) + `encodeSessionIdForPath`, shared by both session-keyed layouts under the forwarding root
 │   ├── approval-escalator.ts  `ParentAuthorizer` class - `TerminalAuthorizer` for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction; adopts the requester's `requestId` as the forwarded request's `id` (falling back to a fresh mint when it could not safely name a file — at a relay hop that id came off disk); every abandonment path (unresolvable target, unusable directories, unwritable request, unserved target, unreadable response, timeout) denies with `confirmationUnavailable` plus a path-naming `denialReason` — reused verbatim as the `unavailable` decider's reason so the two cannot drift — and discards the request so a late answer cannot arrive; an answered request's decision is nested under a `forwarded` decider carrying the responder's own
-│   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy.resolve(intent: ForwardedAccessIntent)` is intent-shaped (agent-scoped to `principal.agentName`, child-fixed `matchValues` used as-is, never re-derived through this session's `PathNormalizer`/cwd), floors to `ask` when `accessIntent` is absent (version skew); projects the request's access facts onto the escalated ask (`surface`/`matchValues`/`boundaryValue` only — `requesterCwd`/`principal` stay off the ask details, and the bounded-delegation checkpoint's exclusion reads the projected gate surface, #635); writes its decider onto the response (its own matched rule in full, the escalated decision's source, or a `gate_error` when the escalation itself threw), and the grant-scope translation rewrites the scope but never the decider; one-hop canary
+│   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy.resolve(intent: ForwardedAccessIntent)` is intent-shaped (agent-scoped to `principal.agentName`, child-fixed `matchValues` used as-is, never re-derived through this session's `PathNormalizer`/cwd), floors to `ask` when `accessIntent` is absent (version skew); projects the request's access facts onto the escalated ask (`surface`/`matchValues`/`boundaryValue` only — `requesterCwd`/`principal` stay off the ask details, and the bounded-delegation checkpoint's exclusion reads the projected gate surface, #635); writes its decider onto the response (its own matched rule in full, the escalated decision's source, or a `gate_error` when the escalation itself threw), and the grant-scope translation rewrites the scope but never the decider; broadcasts the terminal `permissions:decision` for every ask it escalates, rendered from the same `PromptPermissionDetails` its `permissions:ui_prompt` was built from, so a prompt the requesting session's gate would answer on another bus is clearable on this one — a recorded-authority resolution stays silent on both channels; one-hop canary
 │   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` and `decidedBy` fields; an unusable decider is dropped without rejecting the decision it accompanies), location derivation, atomic JSON writes (owner-only; `rename` preserves the temp file's mode). Constraint: the readers rebuild an allowlist of known fields, so a wire field added without being listed here is silently dropped
 │   └── forwarding-manager.ts  `ForwardingController` interface + `ForwardingManager` class - drives the forwarded-permission inbox polling lifecycle; tells `ForwardedRequestServer.processInbox`, and publishes the polled session id to the `ServingAnnouncer` plus a `forwarded_permission.serving_started`/`serving_stopped` review entry. Constraint: the per-tick re-announcement runs ahead of the processing guard, so a session whose human is deliberating at a forwarded dialog keeps announcing while `processInbox` is held open
 ├── session-logger.ts          `SessionLogger` interface + `PermissionSessionLogger` class; owns JSONL-writer composition, IO-failure warning dedup, and notify sink
@@ -936,22 +936,24 @@ No decline, so the regular rotation continues.
 
 ### Health metrics
 
-| Metric                                                                  | Baseline (2026-08-15) | Phase 13 target |
-| ----------------------------------------------------------------------- | --------------------- | --------------- |
-| Flat-assembler sites (`formatAskPrompt` references in `src/`)           | 4                     | 0 ✅            |
-| Forwarded-wire `message: string` field (`permission-forwarding.ts`)     | 1                     | 0 ✅            |
-| Broadcast `message: string` field (`permission-ui-prompt.ts`)           | 1                     | 0 ✅            |
-| `src/presentation/` domain directory present                            | 0                     | 1 ✅            |
-| Legacy `message` render sites (`renderLegacyMessage` in `src/`)         | 17                    | 0 ✅            |
-| Forwarding-liveness module present (`authority/forwarding-liveness.ts`) | 0                     | 1 ✅            |
-| `decidedBy` provenance sites in `src/`                                  | 0                     | ≥ 1 ✅          |
-| Request-id mint sites in `src/`                                         | 2                     | 1 ✅            |
-| `requestId` fields in `permission-events.ts` (ui\_prompt + decision)    | 1                     | 2 ✅            |
-| Model-judge resolves `agentDir` via `getAgentDir` (`extension.ts`)      | 0                     | ≥ 1 ✅          |
-| Ambient `node:path` import in `session-rules.ts`                        | 1                     | 0 ✅            |
-| fallow health score                                                     | 88 (A)                | ≥ 88            |
-| Production duplication                                                  | 0.2%                  | ≤ 0.2%          |
-| Dead exports                                                            | 0                     | 0               |
+| Metric                                                                                                  | Baseline (2026-08-15) | Phase 13 target |
+| ------------------------------------------------------------------------------------------------------- | --------------------- | --------------- |
+| Flat-assembler sites (`formatAskPrompt` references in `src/`)                                           | 4                     | 0 ✅            |
+| Forwarded-wire `message: string` field (`permission-forwarding.ts`)                                     | 1                     | 0 ✅            |
+| Broadcast `message: string` field (`permission-ui-prompt.ts`)                                           | 1                     | 0 ✅            |
+| `src/presentation/` domain directory present                                                            | 0                     | 1 ✅            |
+| Legacy `message` render sites (`renderLegacyMessage` in `src/`)                                         | 17                    | 0 ✅            |
+| Forwarding-liveness module present (`authority/forwarding-liveness.ts`)                                 | 0                     | 1 ✅            |
+| `decidedBy` provenance sites in `src/`                                                                  | 0                     | ≥ 1 ✅          |
+| Request-id mint sites in `src/`                                                                         | 2                     | 1 ✅            |
+| `requestId` fields in `permission-events.ts` (ui\_prompt + decision)                                    | 1                     | 2 ✅            |
+| Terminal decision emit in the fail-closed boundary (`emitDecision` in `handlers/tool-call-boundary.ts`) | 0                     | ≥ 1 ✅          |
+| Parent-side served decision emit (`emitDecision` in `authority/forwarded-request-server.ts`)            | 0                     | ≥ 1 ✅          |
+| Model-judge resolves `agentDir` via `getAgentDir` (`extension.ts`)                                      | 0                     | ≥ 1 ✅          |
+| Ambient `node:path` import in `session-rules.ts`                                                        | 1                     | 0 ✅            |
+| fallow health score                                                                                     | 88 (A)                | ≥ 88            |
+| Production duplication                                                                                  | 0.2%                  | ≤ 0.2%          |
+| Dead exports                                                                                            | 0                     | 0               |
 
 Recompute commands (run from the repo root):
 
@@ -964,12 +966,15 @@ Recompute commands (run from the repo root):
 - Provenance sites: `grep -rn "decidedBy" packages/pi-permission-system/src | wc -l`
 - Id mint sites: `grep -rnE "Math\.random\(\)\.toString\(36\)|randomUUID\(\)" packages/pi-permission-system/src --include="*.ts" | wc -l`
 - Event request ids: `grep -c "requestId" packages/pi-permission-system/src/permission-events.ts`
+- Boundary decision emit: `grep -c "emitDecision" packages/pi-permission-system/src/handlers/tool-call-boundary.ts`
+- Served decision emit: `grep -c "emitDecision" packages/pi-permission-system/src/authority/forwarded-request-server.ts`
 - Model-judge agentDir: `grep -c "getAgentDir" packages/pi-permission-model-judge/src/extension.ts`
 - Ambient path import: `grep -c "node:path" packages/pi-permission-system/src/session-rules.ts`
 - Health/duplication/dead exports: `pnpm fallow health --score --workspace @gotgenes/pi-permission-system` / `pnpm fallow dupes --workspace @gotgenes/pi-permission-system` / `pnpm fallow dead-code --workspace @gotgenes/pi-permission-system`
 
 The presentation-directory, liveness-module, `decidedBy`, and `getAgentDir` rows grep for names the phase has not created yet; the step that creates each (Steps 1, 5, 6, 7 respectively) must either use the roadmap's name or update the metric row in the same commit.
 The two request-id rows were added mid-phase with Steps 9 and 10, and the legacy-message row with Step 4, so their baselines are measured at that point rather than at the phase-open snapshot.
+The two decision-emit rows were added with Step 10; both files predate the phase, and neither emitted a decision at the phase-open snapshot, so their `0` baselines hold as written.
 
 ### Steps
 
@@ -1133,7 +1138,7 @@ The tool-call gates borrow the SDK's `toolCallId`, the skill-input gate mints it
 
 Release: independent
 
-#### Step 10: Cross-session prompt/decision correlation ([#610], with [#753])
+#### ✅ Step 10: Cross-session prompt/decision correlation ([#610], with [#753])
 
 **Cause:** a forwarded ask's prompt is emitted by the parent and its terminal decision by the child, on a different event bus for an out-of-process child — so a parent-side consumer that marks an agent blocked on `permissions:ui_prompt` has no public signal to clear it and can stay blocked forever.
 Measured on the review log: 53 of 57 `forwarded_permission.request_created` entries carry an id appearing on no `permission_request.*` entry, the child's ask and the request the parent serves joined by nothing but a one-millisecond timestamp gap.
@@ -1144,6 +1149,12 @@ Measured on the review log: 53 of 57 `forwarded_permission.request_created` entr
   The step also closes [#753], the same defect at a second site: `createFailClosedToolCall` (`src/handlers/tool-call-boundary.ts`) is the only path that blocks a tool call without a terminal broadcast.
   It adds `gate_error` to `PermissionDecisionResolution` and emits from the boundary's `catch` using the `DecisionReporter` it already holds, carrying Step 9's `requestId`.
 - **Outcome:** a direct prompt and its decision share one id; a forwarded prompt and its parent-side decision share one id on one bus; concurrent equivalent prompts stay independently correlatable; **every** blocking path emits a terminal `permissions:decision`.
+- **Landed:** the emit covers every forwarded ask the serving node *escalates*, not only the ones a human answered.
+  Planning found the narrower reading leaves the reported bug intact at a rarer site: a dialog that throws does so *after* the `permissions:ui_prompt` broadcast is already out, and `ForwardedRequestServer`'s existing `catch` is the only place that sees it.
+  The escalation branch is therefore the emit site, which also makes "silent stays silent" structural — recorded authority returns before it — rather than a predicate over the decision.
+  The event renders from the same `PromptPermissionDetails` the prompt did, so the shared projection is a property of the code rather than a convention; a version-skewed request with no display fields falls back to the payload's own non-nullable request facts instead of a sentinel.
+  Two additions beyond the issue: an optional `forwarding` context on `PermissionDecisionEvent` (operator decision — already disclosed on the same bus by `ui_prompt`, and it tells a served decision from a local one), and `gate_error` doing double duty as [#753]'s boundary resolution and the failed-escalation resolution here.
+  The step also found that an `authorizerChain` link's verdict is reported as `user_approved`/`user_denied` on the local path too, since `GateRunner` never reads the decision's `decidedBy`; filed as [#772] rather than folded in, because correcting it changes an existing resolution value.
 - **Impact 3 / Risk 2 / Priority 12.**
 
 Release: independent
@@ -1157,7 +1168,7 @@ flowchart TD
     S2 --> S4["✅ Step 4 (#746): agent + review-log renderers"]
     S4 --> S6["✅ Step 6: decidedBy provenance (#726)"]
     S9["✅ Step 9 (#752): minted request id"] --> S3
-    S9 --> S10["Step 10 (#610): cross-session correlation"]
+    S9 --> S10["✅ Step 10 (#610): cross-session correlation"]
     S3 --> S10
     S4 --> S10
     S5["✅ Step 5: forwarding liveness (#721)"]
@@ -1262,4 +1273,5 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#752]: https://github.com/gotgenes/pi-packages/issues/752
 [#751]: https://github.com/gotgenes/pi-packages/issues/751
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
+[#772]: https://github.com/gotgenes/pi-packages/issues/772
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md

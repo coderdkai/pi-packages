@@ -315,6 +315,7 @@ It is not a generic "permission request entered waiting state" event, and it doe
 Policy decisions that resolve without an active UI prompt, such as `policy_allow`, `policy_deny`, `session_approved`, `infrastructure_auto_allowed`, or `auto_approved`, do not emit this event.
 Non-UI child sessions also do not emit this event when they create a forwarded permission request; the parent UI session emits it immediately before showing the forwarded permission dialog.
 A forwarded request the parent's own recorded policy decides (a matching `allow` or `deny`) is answered without a prompt and emits no event; the event fires only when the parent is actually about to ask the human.
+The matching terminal `permissions:decision` is emitted in the parent session too, so a consumer that reacts to this event has a signal on the same bus telling it the prompt is over.
 Forwarded prompts that do reach the human are not degraded: the parent emits the child's original `source` and the same `surface`/`value` display projection, plus a populated `forwarding` context identifying the requesting subagent.
 
 The payload is lean by design — `surface`/`value` are the normalized display projection a notification consumer reads, not a mirror of the internal review log.
@@ -393,7 +394,13 @@ The stability guarantee is additive, so any can be reintroduced in a later minor
 Every permission gate resolution emits a `permissions:decision` event, regardless of outcome.
 This is useful for dashboards, telemetry, or audit overlays.
 
+A session serving another session's forwarded request emits one too, on its own bus, for every forwarded ask it escalates.
+That is what makes a forwarded prompt clearable: the ask is gated in the requesting session — a different process for an out-of-process subagent — so without it the serving session broadcasts a `permissions:ui_prompt` whose outcome never appears.
+A forwarded request the serving session's own policy allows or denies is answered without a prompt and broadcasts nothing, matching the UI-prompt channel.
+A served decision carries a non-null `forwarding` context; the requesting session still emits its own decision when the answer comes back.
+
 The `requestId` is the same id the request's review-log entries carry, and the same one `permissions:ui_prompt` carried if the request reached a prompt — so a prompt and its outcome are joinable, as are two concurrent prompts for the same command.
+A request that reaches a prompt is answered by exactly one terminal event on that prompt's own bus, including when the dialog itself fails.
 It identifies a permission *request*, not a tool call: one tool call runs several gates and so raises several requests, each with its own id.
 Use the review log's `toolCallId` to join back to the Pi transcript.
 
@@ -407,16 +414,17 @@ pi.events.on("permissions:decision", (raw) => {
 
 ### Payload Fields
 
-| Field            | Type                | Description                                                                               |
-| ---------------- | ------------------- | ----------------------------------------------------------------------------------------- |
-| `requestId`      | `string`            | Id of the permission request this decision resolves                                       |
-| `surface`        | `string`            | Permission surface (`"bash"`, `"read"`, `"mcp"`, `"skill"`, `"external_directory"`, etc.) |
-| `value`          | `string`            | Value evaluated (command, tool name, skill name, path)                                    |
-| `result`         | `"allow" \| "deny"` | Final outcome                                                                             |
-| `resolution`     | `string`            | How the outcome was reached (see table below)                                             |
-| `origin`         | `string \| null`    | Config scope that contributed the winning rule                                            |
-| `agentName`      | `string \| null`    | Active agent name when known                                                              |
-| `matchedPattern` | `string \| null`    | Pattern from the winning rule                                                             |
+| Field            | Type                                        | Description                                                                                           |
+| ---------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `requestId`      | `string`                                    | Id of the permission request this decision resolves                                                   |
+| `surface`        | `string`                                    | Permission surface (`"bash"`, `"read"`, `"mcp"`, `"skill"`, `"external_directory"`, etc.)             |
+| `value`          | `string`                                    | Value evaluated (command, tool name, skill name, path)                                                |
+| `result`         | `"allow" \| "deny"`                         | Final outcome                                                                                         |
+| `resolution`     | `string`                                    | How the outcome was reached (see table below)                                                         |
+| `origin`         | `string \| null`                            | Config scope that contributed the winning rule                                                        |
+| `agentName`      | `string \| null`                            | Active agent name when known                                                                          |
+| `matchedPattern` | `string \| null`                            | Pattern from the winning rule                                                                         |
+| `forwarding`     | `ForwardedPromptContext \| null` (optional) | Requesting subagent, on a decision made while serving a forwarded request; absent on a local decision |
 
 ### Resolution Values
 
@@ -431,6 +439,7 @@ pi.events.on("permissions:decision", (raw) => {
 | `user_denied`                 | User denied via dialog                                               |
 | `auto_approved`               | Yolo mode — approved automatically without dialog                    |
 | `confirmation_unavailable`    | State was `ask` but no UI was available — blocked                    |
+| `gate_error`                  | The gate threw, or an escalation failed — blocked, fail-closed       |
 
 ---
 
