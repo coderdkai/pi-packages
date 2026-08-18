@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { vi } from "vitest";
 
 import type { ParentAuthorizerDeps } from "#src/authority/approval-escalator";
+import type { AskEscalator } from "#src/authority/authorizer-selection";
 import type { ForwardedRequestServerDeps } from "#src/authority/forwarded-request-server";
 import type { ForwarderContext } from "#src/authority/forwarder-context";
 import {
@@ -26,7 +27,6 @@ import {
   ServingHeartbeatStore,
   type TargetServingLookup,
 } from "#src/authority/forwarding-liveness";
-import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
   createPermissionForwardingLocation,
   type ForwardedAccessIntent,
@@ -119,11 +119,13 @@ export function makeServerDeps(
     logger: { review: vi.fn(), debug: vi.fn() },
     policy: { resolve: vi.fn(() => makeCheckResult({ state: "ask" })) },
     escalator: {
-      escalate: vi.fn().mockResolvedValue({
-        approved: true,
-        state: "approved",
-        decidedBy: { kind: "user", via: "dialog" },
-      } satisfies PermissionPromptDecision),
+      escalate: vi.fn<AskEscalator["escalate"]>(() =>
+        Promise.resolve({
+          approved: true,
+          state: "approved",
+          decidedBy: { kind: "user", via: "dialog" },
+        }),
+      ),
     },
     broadcaster: { emitDecision: vi.fn() },
     recorder: { recordSessionApproval: vi.fn() },

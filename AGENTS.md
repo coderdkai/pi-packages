@@ -337,6 +337,7 @@ When a shell loop or script needs a status variable, do not name it `status` —
 Do not edit `CHANGELOG.md` — release-please owns it.
 Do not name an unreleased version in docs — release-please assigns it at merge, so a number written during implementation is a guess.
 Describe the condition instead: "a version that predates the heartbeat", not "older than 25.2.0" (Refs #721).
+The same applies to an unfiled issue number: file the follow-up first, then write back the number the API returned — a guessed `#N` is off by however many issues landed since (Refs #610).
 Before naming a remediation in a breaking-change migration note (CLI flag, config key, API call), verify it exists in the real surface (SDK types, `--help`, schema) — do not infer a config key by analogy.
 The note ships to the `BREAKING CHANGE:` footer, the release-please CHANGELOG (uneditable), and the issue close comment.
 Do not put `Closes #N` / `Fixes #N` / `Resolves #N` in commit messages.

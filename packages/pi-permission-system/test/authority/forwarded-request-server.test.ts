@@ -1,7 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type Mock,
+  test,
+  vi,
+} from "vitest";
 import type { Authorizer } from "#src/authority/authorizer";
 import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { AuthorizerSelection } from "#src/authority/authorizer-selection";
@@ -10,6 +18,7 @@ import {
   ForwardedRequestServer,
   type ForwardedRequestServerDeps,
 } from "#src/authority/forwarded-request-server";
+import type { ForwarderContext } from "#src/authority/forwarder-context";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type {
   ForwardedPermissionRequest,
@@ -1026,33 +1035,27 @@ describe("processInbox — inbox mechanics", () => {
 });
 
 describe("processInbox — terminal decision broadcast", () => {
-  /**
-   * Serve one forwarded request and return the decisions the server broadcast
-   * on the serving session's bus.
-   *
-   * The escalation outcome is the subject of most cases below, so it is the
-   * one dependency each test supplies; everything else defaults.
-   */
-  async function serveAndCaptureDecisions(
-    request: Partial<ForwardedPermissionRequest>,
+  let dir: ForwardingTempDir;
+  let emitDecision: Mock<(event: PermissionDecisionEvent) => void>;
+
+  beforeEach(() => {
+    dir = createForwardingTempDir("parent-session");
+    // The module-level handle is what the shared `afterEach` cleans up.
+    temp = dir;
+    emitDecision = vi.fn<(event: PermissionDecisionEvent) => void>();
+  });
+
+  /** The serving session's server, with this describe's decision capture wired in. */
+  function makeServer(
     overrides: Partial<ForwardedRequestServerDeps> = {},
-  ): Promise<PermissionDecisionEvent[]> {
-    temp = createForwardingTempDir("parent-session");
-    temp.writeRequest(request);
-    const emitDecision = vi.fn<(event: PermissionDecisionEvent) => void>();
-    const server = new ForwardedRequestServer(
+  ): ForwardedRequestServer {
+    return new ForwardedRequestServer(
       makeServerDeps({
-        forwardingDir: temp.forwardingDir,
+        forwardingDir: dir.forwardingDir,
         broadcaster: { emitDecision },
         ...overrides,
       }),
     );
-
-    await server.processInbox(
-      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
-    );
-
-    return emitDecision.mock.calls.map(([event]) => event);
   }
 
   /** An escalator answering with one fixed decision. */
@@ -1060,27 +1063,37 @@ describe("processInbox — terminal decision broadcast", () => {
     return { escalate: vi.fn().mockResolvedValue(decision) };
   }
 
+  /** The decisions broadcast on the serving session's bus. */
+  function broadcastDecisions(): PermissionDecisionEvent[] {
+    return emitDecision.mock.calls.map(([event]) => event);
+  }
+
+  /** The serving context every case below drains its inbox under. */
+  function servingContext(): ForwarderContext {
+    return makeForwarderContext({ hasUI: true, sessionId: "parent-session" });
+  }
+
   test("broadcasts an approval carrying the ask's id, projection, and provenance", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      {
-        id: "req-ask",
-        source: "tool_call",
-        surface: "bash",
-        value: "git push",
-      },
-      {
-        escalator: escalatorAnswering({
-          approved: true,
-          state: "approved",
-          decidedBy: DECIDED_BY_HUMAN,
-        }),
-      },
-    );
+    dir.writeRequest({
+      id: "req-ask",
+      source: "tool_call",
+      surface: "bash",
+      value: "git push",
+    });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
+    });
+
+    await server.processInbox(servingContext());
 
     // Asserted whole: the bus is the narrowest renderer, so a field added here
     // later — `decidedBy` above all (#726) — must be a deliberate contract
     // change rather than something that leaks in with a spread.
-    expect(emitted).toEqual([
+    expect(broadcastDecisions()).toEqual([
       {
         requestId: "req-ask",
         surface: "bash",
@@ -1099,137 +1112,143 @@ describe("processInbox — terminal decision broadcast", () => {
   });
 
   test("broadcasts a denial as user_denied", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      { id: "req-deny", surface: "bash", value: "rm -rf /" },
-      {
-        escalator: escalatorAnswering({
-          approved: false,
-          state: "denied",
-          decidedBy: DECIDED_BY_HUMAN,
-        }),
-      },
-    );
+    dir.writeRequest({ id: "req-deny", surface: "bash", value: "rm -rf /" });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: false,
+        state: "denied",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
+    });
 
-    expect(emitted).toMatchObject([
+    await server.processInbox(servingContext());
+
+    expect(broadcastDecisions()).toMatchObject([
       { requestId: "req-deny", result: "deny", resolution: "user_denied" },
     ]);
   });
 
   test("broadcasts the human's grant scope, not the scope written to the wire", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      {
-        id: "req-serving-grant",
-        surface: "bash",
-        value: "git push",
-        sessionApproval: { surface: "bash", patterns: ["git *"] },
-      },
-      {
-        escalator: escalatorAnswering({
-          approved: true,
-          state: "approved_for_serving_session",
-          decidedBy: DECIDED_BY_HUMAN,
-        }),
-      },
-    );
+    dir.writeRequest({
+      id: "req-serving-grant",
+      surface: "bash",
+      value: "git push",
+      sessionApproval: { surface: "bash", patterns: ["git *"] },
+    });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: true,
+        state: "approved_for_serving_session",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
+    });
+
+    await server.processInbox(servingContext());
 
     // The grant-scope translation rewrites the response to a plain `approved`
     // so the child records nothing; the broadcast still reports what the human
     // actually chose.
-    expect(emitted).toMatchObject([
+    expect(broadcastDecisions()).toMatchObject([
       { result: "allow", resolution: "user_approved_for_session" },
     ]);
-    expect(readResponse(temp!, "req-serving-grant")).toMatchObject({
+    expect(readResponse(dir, "req-serving-grant")).toMatchObject({
       state: "approved",
     });
   });
 
   test("broadcasts a subagent-scoped grant as user_approved_for_session", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      { id: "req-child-grant", surface: "bash", value: "git push" },
-      {
-        escalator: escalatorAnswering({
-          approved: true,
-          state: "approved_for_session",
-          decidedBy: DECIDED_BY_HUMAN,
-        }),
-      },
-    );
+    dir.writeRequest({
+      id: "req-child-grant",
+      surface: "bash",
+      value: "git push",
+    });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: true,
+        state: "approved_for_session",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
+    });
 
-    expect(emitted).toMatchObject([
+    await server.processInbox(servingContext());
+
+    expect(broadcastDecisions()).toMatchObject([
       { result: "allow", resolution: "user_approved_for_session" },
     ]);
   });
 
   test("broadcasts an unreachable authority as confirmation_unavailable", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      { id: "req-unavailable", surface: "bash", value: "git push" },
-      {
-        escalator: escalatorAnswering({
-          approved: false,
-          state: "denied",
-          confirmationUnavailable: true,
-          denialReason: "no serving session",
-          decidedBy: { kind: "unavailable", reason: "no serving session" },
-        }),
-      },
-    );
+    dir.writeRequest({
+      id: "req-unavailable",
+      surface: "bash",
+      value: "git push",
+    });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: false,
+        state: "denied",
+        confirmationUnavailable: true,
+        denialReason: "no serving session",
+        decidedBy: { kind: "unavailable", reason: "no serving session" },
+      }),
+    });
 
-    expect(emitted).toMatchObject([
+    await server.processInbox(servingContext());
+
+    expect(broadcastDecisions()).toMatchObject([
       { result: "deny", resolution: "confirmation_unavailable" },
     ]);
   });
 
   test("broadcasts a failed escalation as gate_error", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      { id: "req-broken", surface: "bash", value: "git push" },
-      {
-        escalator: {
-          escalate: vi.fn().mockRejectedValue(new Error("dialog exploded")),
-        },
+    dir.writeRequest({ id: "req-broken", surface: "bash", value: "git push" });
+    const server = makeServer({
+      escalator: {
+        escalate: vi.fn().mockRejectedValue(new Error("dialog exploded")),
       },
-    );
+    });
+
+    await server.processInbox(servingContext());
 
     // The prompt broadcast is already out by the time the dialog can fail, so
     // this is the terminal event a consumer waiting on that prompt needs.
-    expect(emitted).toMatchObject([
+    expect(broadcastDecisions()).toMatchObject([
       { requestId: "req-broken", result: "deny", resolution: "gate_error" },
     ]);
   });
 
   test("broadcasts nothing when recorded authority resolves the request", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      {
-        id: "req-silent",
-        surface: "bash",
-        value: "git status",
-        accessIntent: makeForwardedAccessIntent({
-          matchValues: ["git status"],
-        }),
-      },
-      {
-        policy: {
-          resolve: vi.fn(() => makeCheckResult({ state: "allow" })),
-        },
-      },
-    );
+    dir.writeRequest({
+      id: "req-silent",
+      surface: "bash",
+      value: "git status",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git status"] }),
+    });
+    const server = makeServer({
+      policy: { resolve: vi.fn(() => makeCheckResult({ state: "allow" })) },
+    });
 
-    expect(emitted).toEqual([]);
+    await server.processInbox(servingContext());
+
+    expect(broadcastDecisions()).toEqual([]);
   });
 
   test("falls back to the payload's facts when the request carries no projection", async () => {
-    const emitted = await serveAndCaptureDecisions(
-      { id: "req-skew" },
-      {
-        escalator: escalatorAnswering({
-          approved: true,
-          state: "approved",
-          decidedBy: DECIDED_BY_HUMAN,
-        }),
-      },
-    );
+    dir.writeRequest({ id: "req-skew" });
+    const server = makeServer({
+      escalator: escalatorAnswering({
+        approved: true,
+        state: "approved",
+        decidedBy: DECIDED_BY_HUMAN,
+      }),
+    });
+
+    await server.processInbox(servingContext());
 
     // A version-skewed child sends no display projection; the payload's own
     // request facts are non-nullable, so they answer instead of a sentinel.
-    expect(emitted).toMatchObject([{ surface: "read", value: "read" }]);
+    expect(broadcastDecisions()).toMatchObject([
+      { surface: "read", value: "read" },
+    ]);
   });
 });
