@@ -97,3 +97,51 @@ Each section was cut to roughly five one-line non-goals and relocated to the ref
 - `pi-permission-system`'s purpose sentence was reworded on operator feedback.
   "An agent takes many actions and only some of them matter" was dismissive of both the agent and the user's judgment; the shipped line is that most actions are benign and some need a human to confirm they are safe or correct.
 - Verified after the revision: `pnpm run check`, `pnpm run lint`, and `pnpm pack` on both large packages all clean, with `pi-subagents` shipping the architecture doc its README links relatively and `pi-permission-system` still excluding it, which is why that link is an absolute URL.
+
+## Stage: Implementation — Cross-check audit (2026-08-19T16:03:23Z)
+
+### Session summary
+
+The operator asked to walk through the contradictions the build session found, which surfaced that the terminal cross-check had been a spot check reported as coverage.
+An exhaustive pass over the routing graph — all 23 routing statements, 12 of them pointing at another package in this repo — found two further contradictions, both on the one edge the spot check never examined.
+
+### Observations
+
+- The build session's cross-check checked the edges it had recently been thinking about and reported the result as though it were coverage: "permission-system ↔ subagents ↔ worktrees ↔ session-tools ↔ nocd routing all cross-checked".
+  `pi-permission-model-judge` is absent from that list, and both new contradictions sit on its edge with `pi-permission-system`.
+  The pre-completion reviewer then repeated the claim back, because the claim was supplied to it in the dispatch prompt — a reviewer cannot independently verify a coverage assertion it was handed as a premise.
+- Both new contradictions predate the condensation, so they survived the original drafting, the cross-check, and the reviewer.
+  Neither was introduced by trimming.
+- Contradiction 2: `pi-permission-system` routed "model-assisted judging of an `ask`" to `@gotgenes/pi-permission-model-judge` without qualification, while that package's charter accepts only mistyped paths and routes every other judgment purpose to a different chain link.
+  The sender is the package most likely to receive that request.
+- Contradiction 3: the same edge in reverse.
+  The judge routed "allow-capable adjudication" to `pi-permission-system`, which disclaims making model calls.
+  Two things were collapsed into one phrase — the delegation envelope (whether a link may return `allow` at all, `pi-permission-system`'s, tracked in issue #620) and the adjudication itself (a link's).
+  The fix reframes the permission system's routing around the authorizer seam and states in the non-goal that model judgment *attaches* through the seam, rather than reading as a bare refusal.
+  The operator confirmed the seam is a design goal, which is what the earlier wording obscured.
+- The audit also found one non-contradiction worth recording: `pi-nocd` routes "giving a child its own working directory" to `pi-subagents-worktrees` while that package routes "whether a child gets an isolated workspace at all" to `pi-subagents`.
+  Both are true — mechanism and policy respectively — but a reader following the first can bounce to a second.
+  Left as is.
+- One capability in the graph is disclaimed by a package and claimed by none: `pi-nocd`'s "enforcing the rule".
+  That is the deliberate consequence of the planning-gate choice to state the boundary without naming an owner, not a defect — but it is the graph's only dead end and worth knowing about.
+- Method note for any future charter work: a charter set is a directed graph, and the check that matters is per-edge, not per-package.
+  Enumerate every routing statement, resolve each target, and read that target's own non-goals.
+  Nine packages produced 12 inter-package edges, which is small enough to check exhaustively in one pass — there was never a reason to sample.
+- Also worth recording: the earlier claim that the cross-check step "earned its place" was hollow.
+  The one contradiction it fixed (`43c36685`) was in a sentence the condensation pass deleted outright a few commits later, so that fix is now moot.
+  The step earned its place on this pass instead.
+- The operator then raised a separate concern the audit had not been looking for: the sibling-package links read as self-advertising.
+  Comparing each charter's links against mentions already elsewhere in the same README split them cleanly — eight restated a relationship the README already had to document (a prerequisite, or where a removed feature went), and four were new.
+  The four new ones were exactly the promotional-feeling ones.
+  `pi-github-tools` pointing at `pi-session-tools` was the worst: two packages with no relationship, which co-occur only in this repo's prompt templates.
+  That is a private workflow leaking into a published README.
+- Same root cause as the length problem, a third time.
+  The four-part template mandated a routing line for **every** package, and a uniform slot has to be filled, so packages with no genuine adjacency got links manufactured to fill it.
+  The tell was visible all along: `pi-autoformat` and `pi-colgrep` carry zero sibling links and route only to `treefmt`, pre-commit hooks, and Pi's built-in `grep`/`find` — the two most credible sections in the set, precisely because every pointer leads away from this repo.
+- The rule adopted is ecosystem-or-prerequisite: sibling links survive only between `pi-permission-system` and the model judge, and between `pi-subagents` and worktrees.
+  Five packages now carry none.
+- Removing them exposed a second-order effect worth remembering.
+  Condensing a non-goal so it carries its own rationale absorbs the routing information, so once the sibling link was gone the remaining routing lines for `pi-nocd` and `pi-session-tools` only restated the non-goals above them.
+  Both sections now end after the non-goals.
+  A routing paragraph earns its place only when it names an owner the non-goals do not.
+- The first replacement lines written for `pi-github-tools` and `pi-session-tools` had exactly that redundancy and were reverted within the same step — the reflex when deleting a line is to write a replacement, and sometimes the correct replacement is nothing.
