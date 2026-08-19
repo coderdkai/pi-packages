@@ -157,6 +157,8 @@ The write-back reads the release commit from a path-prefixed `<path>--sha` outpu
 
 Present the substance — concrete examples, before/after, trade-offs — in a message first, then call `ask_user` with options that reference it.
 An option list is a set of choices, not a briefing; context crammed into option descriptions — or into `preview` panes — gets bounced (Refs #635, #737, #746).
+When the decision settles a structure that will repeat across many files, settle its **size budget** in the same gate.
+A placement or shape choice is only sound for a known size, so show a worked example of the largest instance (Refs #775).
 
 ### Background agent guardrails
 
@@ -171,6 +173,9 @@ Bound its searches to the repo, and require fixing a failed pattern before widen
 
 A subagent's universal claim ("no ordering issue", "nothing else calls this") is the one to verify — a positive finding ships the line that proves it, a universal one quantifies over cases the report never shows.
 Check a multi-question report against itself first: #725's trace answered "the `tools` option is an allowlist" and "there is no capping issue" in the same document, and answered the second by citing a test fixture rather than the implementation (Refs #725).
+
+The mirror holds for a claim **you** supply: a reviewer cannot verify a coverage assertion handed to it as a premise, so state what you checked, not what you conclude was covered.
+When a change creates N artifacts that cross-reference each other, enumerate the edges rather than sampling them (Refs #775).
 
 ### Parallel peer sessions (git worktrees)
 

@@ -179,5 +179,81 @@ Two follow-up issues were filed: [#779] for `pi-subagents` and [#780] for `pi-pe
 - The seven packages with no `docs/decisions/` tree were deliberately left alone.
   Their README charter is now the record, and introducing ADR practice there would be new process rather than a fix.
 
+## Stage: Final Retrospective (2026-08-19T17:05:00Z)
+
+### Session summary
+
+Shipped a `## Scope and non-goals` charter to all nine package READMEs, grounded in nine committed evidence briefs mined by parallel read-only subagents, and released nine patch versions.
+The work took two operator-driven revision rounds after the first pass shipped — one for length, one for cross-package self-promotion — and a subsequent exhaustive audit found two contradictions that the build session, its cross-check, and the pre-completion reviewer had all missed.
+
+### Observations
+
+#### What went well
+
+1. The evidence-mining subagent pattern is new to this repo and carried the issue.
+   Nine parallel read-only agents produced 149 cited candidate non-goals, and the mandatory citation plus the `## Gaps` section did the load-bearing work: agents consistently refused to promote absence to boundary.
+   `pi-github-tools`' brief called its own tool-surface question "the largest gap… the strongest signal is silence in `git log`, which is absence", and `pi-colgrep`'s flagged a plan Non-Goal that a later commit had already violated, warning it must not be promoted.
+2. The mining caught four artifact-versus-reality traps before any reached a README, including one where `pi-colgrep`'s plan `0092` declared `promptGuidelines` out of scope and `fa164a19` changed one the same day under the same issue.
+3. The citation policy chosen at the planning gate for **tone** — cite ADRs, never a contributor's declined PR — turned out to be load-bearing for **correctness**, because ADRs are written to be durable while plan Non-Goals are written to be scoped.
+   That insight is now generalized in `AGENTS.md` § Reading this repo's own artifacts.
+4. Dispatching nine background subagents at once worked cleanly against the runner's four-concurrent cap — the surplus queued and claimed slots as earlier agents finished, so no manual batching was needed.
+
+#### What caused friction (agent side)
+
+1. `premature-convergence` — the uniform four-part section template was settled at the planning gate on shape and placement alone, with no size budget.
+   That single under-specified decision produced three separate defects: sections running 29 to 68 lines, routing links manufactured for packages with no genuine adjacency, and a placement above `## Install` that was only defensible for a short section.
+   Impact: two full operator-driven revision rounds, five commits (`99f58298`, `9ee1952c`, `f613f757`, `3f30984b`, plus the moot `43c36685`), touching all nine READMEs twice.
+2. `scope-drift` (user-caught) — the first pass wrote each section as a complete inventory of every defensible boundary rather than an answer to the requests that actually arrive.
+   The cause was sunk-cost reasoning about the 149 mined candidates.
+   `pi-permission-system` shipped 13 non-goals where recurring requests cluster on about five, and `## Install` moved from line 27 to line 95.
+   Impact: one revision commit removing 372 lines and adding 253, plus a new architecture-doc home for the displaced inventories.
+3. `other` — overclaiming verification scope (user-surfaced, in that the exhaustive pass only ran because the operator asked to walk through the findings).
+   The build session's cross-check examined the edges it had recently been thinking about and reported "permission-system ↔ subagents ↔ worktrees ↔ session-tools ↔ nocd routing all cross-checked", a list that silently omits `pi-permission-model-judge`.
+   Both contradictions live on that omitted edge.
+   The claim was then handed to the `pre-completion-reviewer` in its dispatch prompt, so the reviewer repeated it back as verified — a reviewer cannot independently check a coverage assertion supplied to it as a premise.
+   Impact: two contradictions shipped in the first pass and survived three separate checks; fixed in `3f30984b`.
+4. `other` — a reflexive replacement edit.
+   When the promotional links were removed from `pi-github-tools` and `pi-session-tools`, the first replacement lines simply restated the non-goal directly above them, trading advertising for redundancy.
+   Self-caught and reverted within the same step.
+   Impact: no rework beyond one extra edit round.
+5. `other` — the `pre-completion-reviewer`'s PASS went stale.
+   It reviewed the state at `725ff3ca`, after which five substantive commits landed (condensation, architecture-doc inventories, routing fixes, link cleanup, the `AGENTS.md` rule).
+   The final shipped state was never seen by a fresh-context reviewer.
+   Flagged to the operator before shipping, who accepted it knowingly.
+   Impact: none realized, but the gap was structural rather than noticed by the protocol.
+
+#### What caused friction (user side)
+
+1. Nothing obstructive.
+   Both revision rounds were caught by the operator only because the agent shipped defects, and the earliest cheap place to prevent them — a size budget in the planning gate — was the agent's to offer and was not offered.
+2. One opportunity worth naming: the planning gate's placement question presented five options with no indication of what the section would cost in lines.
+   Had a worked example accompanied that question, "before the setup block" would likely have been rejected on the spot.
+   The operator answered exactly the question asked; the question was the wrong shape.
+3. The mid-planning redirect from "draft from README prose" to "send subagents to explore each package" was the single highest-leverage intervention in the issue, and it came from the operator.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the nine mining subagents ran as `general-purpose` with **no** `model:` override, inheriting the session default (`anthropic/claude-opus-5`).
+  The task was judgment-heavy — separating a recorded boundary from mere absence — and output quality was high, but the model was never deliberately chosen.
+  `AGENTS.md` warns that `Explore`'s haiku default is too weak for multi-hop reasoning; using `general-purpose` sidestepped that warning without replacing it with an explicit choice.
+  The `pre-completion-reviewer` ran on `anthropic/claude-sonnet-5` per its frontmatter, which is appropriate for a checklist pass.
+- **Escalation-delay tracking** — no sequence exceeded five consecutive tool calls on the same error.
+  The session had no rabbit holes; its failures were premature convergence and over-production, not thrashing.
+- **Unused-tool detection** — the terminal cross-check was performed inline with ad-hoc greps and sampled rather than enumerated.
+  A dedicated subagent, or a scripted enumeration of every routing statement against every target's non-goals, would have caught contradictions 2 and 3 during the build session.
+  Twelve inter-package edges is small enough to check exhaustively; there was never a reason to sample.
+- **Feedback-loop gap analysis** — verification was incremental and appropriate: `pnpm run lint` ran after each package's edits, `pnpm run check` and `pnpm -r run test` at baseline and completion, and `pnpm pack` plus `tar tzf` verified the distribution rule at the point the citation link-form decision was made.
+  The one gap is the stale reviewer PASS noted above, which is a protocol gap rather than a tooling one.
+
+### Changes made
+
+1. `AGENTS.md` § Clarification gates — added the size-budget rule: a decision settling a structure that repeats across many files must settle its size budget in the same gate, with a worked example of the largest instance.
+2. `AGENTS.md` § Background agent guardrails — added the mirror of the existing universal-claim rule: a reviewer cannot verify a coverage assertion supplied to it as a premise, and a change creating N cross-referencing artifacts needs its edges enumerated rather than sampled.
+3. `.pi/skills/pre-completion/SKILL.md` § Overall: PASS — added that a PASS is scoped to the commit it reviewed, and that substantive commits landing afterward require a re-dispatch before `/ship-issue`.
+
+Considered and rejected: a charter-writing skill (one issue is not a pattern; [#777] will exercise it first), a rule forcing an explicit `model:` on judgment-heavy `general-purpose` dispatches (no evidence of harm, only of an unexamined default), and abandoning the uniform-template convention (the fix is a size budget, not variable structure).
+The artifact-reading rule needed no retro change — it landed mid-session in `5c7c4779`.
+
+[#777]: https://github.com/gotgenes/pi-packages/issues/777
 [#779]: https://github.com/gotgenes/pi-packages/issues/779
 [#780]: https://github.com/gotgenes/pi-packages/issues/780
