@@ -1,5 +1,5 @@
 {
-  "name": "@gotgenes/pi-permission-system",
+  "name": "@coderdkai/pi-permission-system",
   "version": "26.3.0",
   "description": "Permission enforcement extension for the Pi coding agent.",
   "type": "module",
@@ -55,7 +55,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gotgenes/pi-packages.git",
+    "url": "git+https://github.com/coderdkai/pi-packages.git",
     "directory": "packages/pi-permission-system"
   },
   "homepage": "https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system#readme",
