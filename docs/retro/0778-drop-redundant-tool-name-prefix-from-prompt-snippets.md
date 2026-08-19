@@ -91,6 +91,10 @@ The distinguishing work was archaeological rather than technical — establishin
 4. `other` — SHA lengths returned by `git rev-parse` and `release_pr_merge` were re-verified by piping through `wc -c` three separate times.
    The repo's rule is to *resolve* every published SHA with `git rev-parse` rather than retype it, which was already satisfied; counting its characters afterward adds nothing.
    Impact: 3 extra tool calls, no rework.
+5. `instruction-violation` — model attribution for the first draft of this retrospective was taken from `env | grep '^PI_'` (`PI_MODEL`, `PI_PROVIDER`, `PI_REASONING_LEVEL`), though the `/retro` prompt names the instrument explicitly: attribute each turn from the inline `[provider/model]` label in an **unfiltered** `read_session` call.
+   `PI_MODEL` reports only the session's *current* model, so extrapolating it across the session produced a false claim — that all three stages ran on opus-5, when the ship stage ran entirely on sonnet-5.
+   Impact: a factual error landed in a committed, pushed retro and needed a correction commit.
+   Self-identified: no — user-caught, by asking why the environment variables were being read at all.
 
 #### What caused friction (user side)
 
@@ -101,9 +105,13 @@ The distinguishing work was archaeological rather than technical — establishin
 
 ### Diagnostic details
 
-- **Model-performance correlation** — the parent session ran `anthropic/claude-opus-5` at high reasoning for all three stages.
-  That fits the planning stage (third-party evaluation, provenance archaeology, a scope decision) but is a cost mismatch for the TDD stage, which was 11 mechanical string deletions with no design content.
+- **Model-performance correlation** — the parent session split across two models: `anthropic/claude-opus-5` for planning and TDD (73 turns, 21:08:11Z–22:06Z) and again for this retrospective (23 turns, from 22:17:44Z), with `anthropic/claude-sonnet-5` for the entire ship stage (29 turns, 22:06:27Z–22:17:38Z — `set_session_name` through the release-CI verification).
+  That split is sound: judgment-heavy planning on the stronger model, the procedural ship on the cheaper one.
+  The one mismatch is the TDD stage, which ran on opus-5 for 11 mechanical string deletions with no design content.
   Both subagents ran `anthropic/claude-sonnet-5`, appropriately: the `tidy-first-assessor` returned "no preparatory tidying warranted" in 18.5 s / 3 tool uses, and the `pre-completion-reviewer` did judgment-heavy verification in 103.8 s / 21 tool uses, independently re-running all four deterministic gates and diffing all 11 strings against the plan's table.
+- **Phantom model switches are real** — the session recorded 6 `model_change` entries, two of them to `opencode-go/deepseek-v4-flash`, which ran **zero** assistant turns.
+  Attributing from switch events would have invented two models that never executed anything, which is precisely the failure the `/retro` prompt's unfiltered-read instruction guards against (Refs #737).
+  The reliable source is the per-turn `provider`/`model` on each assistant message: `jq -r 'select(.type=="message" and .message.role=="assistant") | [.message.provider, .message.model] | @tsv' "$PI_SESSION_FILE" | sort | uniq -c`.
 - **Escalation-delay tracking** — no sequence exceeded five consecutive calls on the same error; there were no failing-test or lint loops at all, since the implementation was green on first run at every step.
 - **Unused-tool detection** — `colgrep` went unused, correctly: every search this session targeted the exact symbol `promptSnippet` or an exact snippet string, which is grep's job per the search decision table.
   An `Explore` subagent for the `../pi` git archaeology is the arguable miss (`AGENTS.md` recommends one for multi-hop traces there), though the evidence that actually settled the question was a GitHub comment, not source.
@@ -114,6 +122,7 @@ The distinguishing work was archaeological rather than technical — establishin
 
 1. `.pi/prompts/plan-issue.md` — appended to step 7 the inverse of the existing introduce-a-convention rule: when a plan *removes* a repo-wide convention, trace its origin with `git log -S` and read the introducing commit's plan and retro first, recording a rationale that governs a different mechanism in Non-Goals.
 2. `AGENTS.md` — appended to § Stale in-process extension code: the session's own system prompt is a zero-cost witness for the **published** prompt-assembly behavior, with the caveat that it can never show your uncommitted fix.
+3. Corrected this retro's model attribution after the operator questioned the `PI_*` environment-variable read: replaced the "opus-5 for all three stages" claim with per-turn counts, added the phantom-switch finding, and recorded the `instruction-violation` that produced the error.
 
 [#90]: https://github.com/gotgenes/pi-packages/issues/90
 [#152]: https://github.com/gotgenes/pi-packages/issues/152
