@@ -48,8 +48,9 @@ Ranking without the prior record re-derives settled decisions, silently re-defer
 Read, in this order:
 
 1. **The most recent prior triage** — `ls -1 docs/triage/*.md | tail -3`, then read the newest.
-   Carry forward four things specifically: its **Deferred** list, its **Keystones**, its **Blocked on others** entries, and the ranks it assigned.
+   Carry forward five things specifically: its **Deferred** list, its **Keystones**, its **Blocked on others** entries, its **Scope alignment** verdicts, and the ranks it assigned.
    You are accountable for what it deferred; see the repeat-deferral rule below.
+   A recorded scope verdict is settled and carries forward untouched unless the package's charter or the item itself changed since that triage's date — see Step 6.
 2. **PR-review triage notes** — `docs/retro/` and `packages/*/docs/retro/`, whose `## Stage: PR Review` entries record the direction already chosen for a PR (adopt as-is, adopt with simplified design, decline, or await reporter).
    A direction recorded there is **settled**: rank the follow-through, do not re-open the decision.
 3. **Active improvement roadmaps** — the `## Improvement roadmap` section of each `packages/*/docs/architecture/architecture.md`.
@@ -130,6 +131,7 @@ A red check is evidence about *something*, but not always about the PR.
 - **Green CI is not safety.**
   CI has no opinion about whether a design widens a security boundary, introduces an ungated configuration channel, or contradicts an ADR.
   Never let a passing check raise a security-relevant PR's rank.
+  It is no evidence of scope either — see Step 6.
 
 ## Step 5: Verify claims that drive priority
 
@@ -244,6 +246,7 @@ Only these, and only with the stated confirmation:
   A holding reply should say plainly that the item is parked and why, name the issue it is parked on, and avoid committing to a design shape the maintainer has not decided.
 
 Everything else is a recommendation, including merging, closing, re-running CI, and declining a PR.
+That covers a Step 6 scope decline: it is recorded in the document as a recommended disposition, never applied as a label, a comment, or a close.
 Never merge or close from this template.
 
 ## Output
@@ -266,18 +269,28 @@ The document contains:
 
 1. **Since the last triage** — from the Step 1 artifacts: what closed, what landed, what changed rank, and the disposition of every item the prior run deferred.
    Skip on the first run.
-2. **The prioritized table** — the deliverable:
+2. **Scope alignment** — the Step 6 verdicts, so the next run inherits them instead of re-deriving them.
+   One row per item classified this run, each with its package, verdict, and the non-goal or reason it rests on:
+
+   | Item | Package      | Verdict      | Basis                                                              |
+   | ---- | ------------ | ------------ | ------------------------------------------------------------------ |
+   | #740 | pi-subagents | out of scope | Non-goal: *A global run-mode default* — run mode is per-invocation |
+
+   Follow it with the recommended disposition for each `out of scope` item (close as not-planned citing the non-goal, or redirect), and a **Carried forward** subsection recording the verdicts inherited from the prior run and the outcome of any re-check.
+3. **The prioritized table** — the deliverable, carrying only `aligned`, `adjacent`, and `no charter` items:
 
    | Rank | Item | Kind         | Severity | Why now                              |
    | ---- | ---- | ------------ | -------- | ------------------------------------ |
    | 1    | #639 | issue (ours) | keystone | Decides #671, #684, #680, #603, #604 |
 
    Use `#N` bare (they auto-link on GitHub), mark third-party items, and keep `Why now` to one sentence.
-3. **Keystones** — each keystone with its dependants listed by number.
-4. **Findings that changed a rank** — the verification results from Steps 4 and 5: stale greens, defects already fixed, flakes masking real failures, green-but-misaligned PRs.
-5. **CI and security audit** — the Step 3 audit outcome, and which runs were approved.
-6. **Blocked on others** — items waiting on a contributor (rebase, version confirmation, change requests) with how long they have waited.
-7. **Deferred** — what you consciously did not rank, and why, so the next run does not silently re-derive it.
+   For an `adjacent` item, name the owning package or extension point there.
+4. **Keystones** — each keystone with its dependants listed by number.
+5. **Findings that changed a rank** — the verification results from Steps 4 and 5: stale greens, defects already fixed, flakes masking real failures, green-but-misaligned PRs.
+6. **CI and security audit** — the Step 3 audit outcome, and which runs were approved.
+7. **Blocked on others** — items waiting on a contributor (rebase, version confirmation, change requests) with how long they have waited.
+8. **Deferred** — what you consciously did not rank, and why, so the next run does not silently re-derive it.
+   An `out of scope` item is not deferred — it belongs to the Scope alignment section, with a disposition rather than a rationale for waiting.
 
 Then present a short summary in the session and commit:
 
