@@ -53,6 +53,68 @@ Test count is unchanged at 5218 — no tests were added or removed, three assert
   No warnings.
 - **Release shape at ship time:** three `fix:` commits across three components, so the next release-please PR carries a patch release for each of `pi-subagents`, `pi-github-tools`, and `pi-colgrep`.
 
+## Stage: Final Retrospective (2026-08-19T22:19:13Z)
+
+### Session summary
+
+One continuous session carried issue #778 from planning through TDD to ship: confirmed a third-party bug report, widened it from the single labeled package to all three affected ones, and landed 11 string-literal fixes as three per-package `fix:` commits.
+Released `pi-colgrep-v1.5.3`, `pi-github-tools-v4.3.2`, and `pi-subagents-v19.3.4`, all published successfully.
+The distinguishing work was archaeological rather than technical — establishing that the convention being removed never had a rationale, and that the rationale the operator remembered governs a different field.
+
+### Observations
+
+#### What went well
+
+1. **The session's own system prompt served as primary evidence.**
+   Rather than reasoning about what Pi *would* render, the assembled prompt in context already read `- subagent: subagent: Launch …` next to a correctly-rendered third-party `- web_search: …`.
+   That is a reproduction, a control case, and a scope survey in one artifact, available at zero tool cost — and it is exactly the kind of evidence an extension-authoring repo can reach for whenever a change affects prompt assembly.
+2. **A half-remembered rationale was resolved to a specific artifact, and disproved.**
+   The operator recalled a Pi issue justifying the name prefix.
+   It resolved to `earendil-works/pi#4879` ("Expose promptGuidelines on `ToolInfo`"), which concerns `promptGuidelines` bullets being flattened into one *unattributed* `Guidelines:` list — a real constraint, for a different field.
+   The distinction now lives in the plan's Non-Goals, so the next reader does not "restore" the prefix on the strength of the same memory.
+3. **Verification was redundant by design.**
+   The `- ${name}: ${snippet}` render was confirmed in Pi's `main` source, in both installed SDK builds (`0.79.1`, `0.80.5`), and in the second render path (`server/create-harness.ts`), before any claim was written down.
+   Checking the installed builds — not just the sibling checkout, which runs ahead of the pinned dependency — is what made the fix safe to ship immediately.
+4. **Scope widened on evidence, not on assumption.**
+   The issue carried only `pkg:pi-subagents`; a grep for `promptSnippet` across `packages/*/src` found 8 more instances in two other packages, which turned a 3-tool fix into an 11-tool sweep and a three-component release.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the origin of the convention being removed was not investigated until the operator asked about it.
+   The plan-issue template's step 7 covers *introducing* a convention (search siblings, follow the established pattern); the inverse — removing one — has no corresponding step, so the working plan was heading toward the `ask_user` gate with the provenance question unasked.
+   Impact: no rework, but the operator supplied context the session should have gathered.
+   Self-identified: no — user-prompted.
+2. `other` — the rationale hunt spent roughly six exploratory calls (`git log -S` and `git log -L` over `../pi`, two `gh search issues` queries that both returned empty, a `gh issue view 152`, a docs-wide grep) before the operator supplied the exact comment URL, after which two `gh api` calls settled it.
+   Impact: ~6 calls of context, no rework; the hunt was bounded and each step was reasonable, but it was searching for something only the operator could name.
+3. `other` — during the ship step, a `git log` for the close-comment range was run without its pathspec, dumping ~60 lines of unrelated history across three packages before being redone with `-- packages/<pkg>/`.
+   Impact: wasted output, no rework; self-identified immediately.
+4. `other` — SHA lengths returned by `git rev-parse` and `release_pr_merge` were re-verified by piping through `wc -c` three separate times.
+   The repo's rule is to *resolve* every published SHA with `git rev-parse` rather than retype it, which was already satisfied; counting its characters afterward adds nothing.
+   Impact: 3 extra tool calls, no rework.
+
+#### What caused friction (user side)
+
+1. **The decisive identifier arrived in the second interjection, not the first.**
+   The opening note ("I swear we had some rationale … but I can no longer find the Pi issue") set the hunt going; the follow-up supplying the exact comment URL ended it in two calls.
+   Opportunity, not criticism: when the context is a half-remembered artifact, leading with whatever identifier is at hand — URL, issue number, even the repo — converts an unbounded search into a lookup.
+   The first note was still valuable: without it, the plan would have shipped without ever asking why the convention existed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the parent session ran `anthropic/claude-opus-5` at high reasoning for all three stages.
+  That fits the planning stage (third-party evaluation, provenance archaeology, a scope decision) but is a cost mismatch for the TDD stage, which was 11 mechanical string deletions with no design content.
+  Both subagents ran `anthropic/claude-sonnet-5`, appropriately: the `tidy-first-assessor` returned "no preparatory tidying warranted" in 18.5 s / 3 tool uses, and the `pre-completion-reviewer` did judgment-heavy verification in 103.8 s / 21 tool uses, independently re-running all four deterministic gates and diffing all 11 strings against the plan's table.
+- **Escalation-delay tracking** — no sequence exceeded five consecutive calls on the same error; there were no failing-test or lint loops at all, since the implementation was green on first run at every step.
+- **Unused-tool detection** — `colgrep` went unused, correctly: every search this session targeted the exact symbol `promptSnippet` or an exact snippet string, which is grep's job per the search decision table.
+  An `Explore` subagent for the `../pi` git archaeology is the arguable miss (`AGENTS.md` recommends one for multi-hop traces there), though the evidence that actually settled the question was a GitHub comment, not source.
+- **Feedback-loop gap analysis** — no gap.
+  The full baseline (`check`, `lint`, `test`, `fallow dead-code`) ran before the first change; each TDD step ran its own package's `vitest` and `check` before committing; the full four-gate suite ran again after the last commit and once more inside the reviewer.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — appended to step 7 the inverse of the existing introduce-a-convention rule: when a plan *removes* a repo-wide convention, trace its origin with `git log -S` and read the introducing commit's plan and retro first, recording a rationale that governs a different mechanism in Non-Goals.
+2. `AGENTS.md` — appended to § Stale in-process extension code: the session's own system prompt is a zero-cost witness for the **published** prompt-assembly behavior, with the caveat that it can never show your uncommitted fix.
+
 [#90]: https://github.com/gotgenes/pi-packages/issues/90
 [#152]: https://github.com/gotgenes/pi-packages/issues/152
 [#437]: https://github.com/gotgenes/pi-packages/issues/437
