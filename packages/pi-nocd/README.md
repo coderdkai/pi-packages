@@ -18,35 +18,6 @@ Because the block names a literal path, it has to be rebuilt for each session th
 A subagent inherits its parent's system prompt verbatim, so a child sees a block naming the parent's directory — and a child given an isolated workspace (for example a git worktree from [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees)) would be told that shell commands already execute somewhere they do not.
 An inherited block is therefore rewritten to name the current session's directory rather than deferred to.
 
-## Scope and non-goals
-
-**Purpose.**
-Pi tells the agent its working directory but never forbids `cd`-prefixing it.
-This extension supplies the missing prohibition — and nothing else.
-
-**In scope.**
-The wording of the injected block, correct path resolution when a child session inherits a parent's prompt or runs in an isolated workspace, and the single `before_agent_start` hook that carries it.
-
-**Non-goals.**
-
-- _Enforcing the rule._
-  This extension instructs; it does not gate.
-  The injected block is a prompt-level prohibition, and a `cd`-prefixed command that reaches the shell anyway is not intercepted here.
-  Blocking or auditing a command at execution time is a separate concern from telling the agent not to write one.
-- _Owning the `# Working Directory` heading._
-  A section under that heading written by another handler is left alone.
-  A block is recognized by its heading _and_ its `Shell commands already execute in` sentence, so this extension only ever rewrites prompt content it wrote itself.
-- _Telling the agent what its working directory is._
-  Pi's own `Current working directory:` footer already does that.
-  The literal path appears here only to make the forbidden `cd <path> &&` example concrete.
-- _Registering tools or commands._
-  The entire surface is one `before_agent_start` hook — no tool, no slash command, and no configuration.
-
-**Where adjacent requests belong.**
-Reshaping the system-prompt preamble → [pi-anthropic-auth](https://github.com/gotgenes/pi-anthropic-auth).
-How a child session inherits its parent's prompt → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-Giving a child session its own working directory → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
-
 ## Install
 
 ```bash
@@ -82,6 +53,30 @@ A section under the same heading that this extension did not write (e.g. another
 | Hook                 | Behavior                                                                                                               |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `before_agent_start` | Ensures the prompt carries the working-directory block for the resolved `ctx.cwd`, appending or rewriting it as needed |
+
+## Scope and non-goals
+
+**Purpose.**
+Pi tells the agent its working directory but never forbids `cd`-prefixing it.
+This extension supplies the missing prohibition — and nothing else.
+
+**In scope.**
+The wording of the injected block, and correct path resolution when a child session inherits a parent's prompt or runs in an isolated workspace.
+
+**Non-goals.**
+
+- _Enforcing the rule._
+  This extension instructs; it does not gate a command at execution time.
+- _Owning the `# Working Directory` heading._
+  A block written by another handler is left alone; only content this extension wrote is ever rewritten.
+- _Telling the agent what its working directory is._
+  Pi's own footer already does that; the literal path appears here only to make the forbidden example concrete.
+- _Registering tools or commands._
+  The entire surface is one `before_agent_start` hook, with no configuration.
+
+**Where adjacent requests belong.**
+How a child session inherits its parent's prompt → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
+Giving a child its own working directory → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
 
 ## License
 

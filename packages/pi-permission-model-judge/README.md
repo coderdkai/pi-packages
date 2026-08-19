@@ -48,39 +48,6 @@ A non-`external_directory` ask is not logged — it is not this link's concern.
 
 Because every pattern-matched ask leaves a positive record, a misconfiguration that silently defers every path (an auth failure, an unresolved model) shows up as a run of `deferReason` entries rather than an empty log.
 
-## Scope and non-goals
-
-**Purpose.**
-A mistyped path — a doubled directory segment, a dropped prefix — lands as an `external_directory` ask you hand-deny, one at a time, with no way to say "this one is obviously a typo".
-This extension is an authorizer chain link that reviews those asks with a light model and auto-denies a mistyped path with a teaching reason.
-
-**In scope.**
-The model mechanism: the operator-declared typo-pattern pre-filter, the model call and its structured verdict, fail-safe handling of every error path, and the decision trail it records.
-
-**Non-goals.**
-
-- _Granting access._
-  The verdict range is `deny` or `defer`, never `allow`.
-  Every failure path — a missing model, invalid config, a timeout, an unparseable reply, an unsure verdict — resolves to `defer`, so this link can only ever remove a hand-denial, never widen access.
-- _Deciding permission on its own authority._
-  The judge advises and `@gotgenes/pi-permission-system` decides.
-  The link does nothing until it is named in `authorizerChain`, and the permission system caps any link's authority on this surface regardless.
-- _Judgment purposes other than mistyped paths._ `authorizerChain` is a chain of links, so a different kind of judgment — secret shapes, general path safety, opaque bash decomposition — belongs in a different link rather than as another mode of this one.
-- _Shipping built-in typo knowledge._
-  Patterns are operator-declared.
-  An installed instance that is named in the chain but left unconfigured defers everything and auto-denies nothing — a safe no-op by design.
-- _Keeping its own audit log._
-  Decisions are recorded to pi-permission-system's shared review log, keyed by request ID, rather than to a private JSONL.
-- _A cross-extension API._
-  This package is a leaf consumer; it exports nothing for other extensions to build on.
-- _Changing `@gotgenes/pi-permission-system`._
-  The authorizer seam, the delegation envelope, and the path-raising gates are consumed as they ship, not modified from here.
-
-**Where adjacent requests belong.**
-Whether this link runs, and in what order → pi-permission-system's `authorizerChain`.
-Allow-capable adjudication → pi-permission-system.
-Which path a multi-path bash command escalates → pi-permission-system's `bash-external-directory` gate, whose worst-path selection is relied on here rather than reimplemented.
-
 ## Install
 
 ```bash
@@ -131,6 +98,33 @@ Config is layered — a project file (`<cwd>/.pi/extensions/pi-permission-model-
 | `timeoutMs`    | `integer`  | `5000`   | Per-review model-call budget in milliseconds; a timeout defers.                            |
 
 An empty or absent `typoPatterns` (or a missing config) makes the reviewer defer everything — a safe no-op.
+
+## Scope and non-goals
+
+**Purpose.**
+A mistyped path lands as an `external_directory` ask you hand-deny, one at a time, with no way to say "this one is obviously a typo".
+This extension is an authorizer chain link that reviews those asks with a light model and auto-denies a mistyped path with a teaching reason.
+
+**In scope.**
+The model mechanism: the operator-declared typo-pattern pre-filter, the model call and its structured verdict, fail-safe handling of every error path, and the decision trail it records.
+
+**Non-goals.**
+
+- _Granting access, or deciding on its own authority._
+  The verdict range is `deny` or `defer`, never `allow`, and every failure path defers.
+  The judge advises; `@gotgenes/pi-permission-system` decides, and caps any link's authority regardless.
+- _Judgment purposes other than mistyped paths._
+  A different kind of judgment belongs in a different chain link, not another mode of this one.
+- _Shipping built-in typo knowledge._
+  Patterns are operator-declared, so an unconfigured instance defers everything and auto-denies nothing.
+- _Keeping its own audit log._
+  Decisions go to pi-permission-system's shared review log, keyed by request ID.
+- _Changing `@gotgenes/pi-permission-system`._
+  The authorizer seam and the path-raising gates are consumed as they ship.
+
+**Where adjacent requests belong.**
+Whether this link runs, and in what order → pi-permission-system's `authorizerChain`.
+Allow-capable adjudication, and which path a multi-path bash command escalates → pi-permission-system.
 
 ## License
 

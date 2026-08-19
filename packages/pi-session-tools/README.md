@@ -4,39 +4,6 @@
 
 Pi extension providing session metadata tools for multi-session workflows.
 
-## Scope and non-goals
-
-**Purpose.**
-A multi-session workflow needs two things Pi does not otherwise expose to an extension: a way to label the current session, and a way to read a session's transcript — including a parent's or a sibling's.
-This package provides exactly those.
-
-**In scope.**
-Rendering a transcript more usefully for whoever reads it, and reaching a session the existing tools cannot reach.
-A new capability arrives as a new tool rather than as another parameter on an existing one.
-
-**Non-goals.**
-
-- _Mutating transcript content._
-  Session metadata is writable — that is what `set_session_name` is for — but transcript entries are read-only.
-  Editing, redacting, replaying, and pruning entries are all outside this package's job.
-- _A raw or JSON passthrough mode._
-  These tools return a rendered transcript.
-  Anything that needs unrendered entries can read the session `.jsonl` directly with `Read` or `Bash`.
-- _Owning Pi's session storage format._
-  The directory encoding and entry schema belong to Pi.
-  This package matches them rather than improving them, and derives the sessions root from the running session instead of hard-coding a location.
-- _Path allowlisting for `read_session_file`._
-  The agent already has `Read` and `Bash` on any file, so restricting this one tool would add friction without creating a security boundary.
-- _Analytics and roll-ups._
-  Per-turn attribution and flat counts are emitted; interpreting them is the calling prompt's job.
-- _Guessing the caller's target directory._ `list_session_files` requires an explicit `cwd`, because defaulting to the process directory would silently return the current session's own files.
-
-**Where adjacent requests belong.**
-Unrendered session bytes → `Read` or `Bash` on the `.jsonl`.
-Session file naming, directory layout, and entry schema → Pi itself.
-Browsing a subagent's session in the UI → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-Creating and tearing down the worktrees a peer session runs in → whatever tooling created them; these tools only read the transcript a session leaves behind, which outlives the worktree.
-
 ## Tools
 
 ### `set_session_name`
@@ -178,6 +145,32 @@ Or add it to your Pi settings (`.pi/settings.json`):
   "packages": ["npm:@gotgenes/pi-session-tools"]
 }
 ```
+
+## Scope and non-goals
+
+**Purpose.**
+A multi-session workflow needs two things Pi does not otherwise expose to an extension: a way to label the current session, and a way to read a session's transcript — including a parent's or a sibling's.
+
+**In scope.**
+Rendering a transcript more usefully for whoever reads it, and reaching a session the existing tools cannot reach.
+A new capability arrives as a new tool rather than as another parameter on an existing one.
+
+**Non-goals.**
+
+- _Mutating transcript content._
+  Session metadata is writable; transcript entries are read-only — no editing, redacting, replaying, or pruning.
+- _A raw or JSON passthrough mode._
+  Anything needing unrendered entries can read the session `.jsonl` directly.
+- _Owning Pi's session storage format._
+  The directory encoding and entry schema belong to Pi; this package matches them rather than improving them.
+- _Path allowlisting for `read_session_file`._
+  The agent already has `Read` and `Bash` on any file, so restricting one tool adds friction without a security boundary.
+- _Analytics and roll-ups._
+  Per-turn attribution and flat counts are emitted; interpreting them is the calling prompt's job.
+
+**Where adjacent requests belong.**
+Session file naming and entry schema → Pi itself.
+Browsing a subagent's session in the UI → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
 
 ## License
 

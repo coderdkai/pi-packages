@@ -6,45 +6,6 @@ Pi extension providing deterministic GitHub CI, release, and issue tools.
 
 Replaces ad-hoc `gh` CLI polling with structured tools that have exponential backoff, progress streaming, and structured success/timeout returns.
 
-## Scope and non-goals
-
-**Purpose.**
-The ship workflow used to have the agent `sleep` and re-invoke `gh` in a prose loop, which burned turns and behaved differently every run.
-This package replaces that loop with deterministic tools that poll with bounded backoff, stream progress, and return structured success, timeout, and failure states.
-
-**In scope.**
-Making a tool wait where a human would otherwise wait, making a failure legible as a named `reason` a prompt can branch on, surviving transient GitHub errors on reads, refusing to leave an outcome ambiguous, and threading cancellation so Escape stops a poll loop.
-
-**Non-goals.**
-
-- _A general-purpose GitHub toolkit._
-  The tool surface is scoped to the CI, release, and issue-close flow an agent already runs end to end.
-  A tool earns its place by removing nondeterminism from that flow — bounded polling, structured returns, a legible failure reason.
-  An operation with no polling problem (opening a PR, editing labels, dispatching a workflow) is a plain `gh` call and stays one.
-- _Release automations other than release-please._
-  `release_pr_find`, `release_pr_merge`, and `release_watch` encode release-please's conventions, down to its `autorelease: pending` label.
-  The CI tools (`ci_find`, `ci_watch`, `ci_list`) are generic to any GitHub Actions repository, but the release tools are not, and generalizing them across changesets or semantic-release is out of scope.
-- _A GitHub API client._
-  The `gh` CLI is the sole external binary dependency, and the package has no runtime dependencies at all.
-  Even REST verification goes through `gh api` rather than an HTTP client.
-- _Pi SDK types in `src/lib/`._
-  Business logic there stays portable and SDK-free; only the extension entrypoint consumes the SDK.
-- _Auto-retrying mutations._
-  Reads retry on transient failures; `release_pr_merge` and `issue_close` do not.
-  A retried close would post a duplicate comment, so a failed mutation is reported with a verified outcome instead.
-- _Retrying rate limits or any 4xx._ `gh` does not surface response headers through stdout or stderr, and retrying a 403 or 429 makes throttling worse.
-- _Merging a PR the tool refuses today._
-  When a release PR reports no checks at all, `release_pr_merge` refuses with a named reason rather than merging through.
-- _Hardcoding this repository._
-  Repo identity is auto-detected and the workflow is a required parameter, so the tools are not bound to this monorepo.
-- _Project-management surface._
-  Boards, milestones, status columns, and definition-of-done preflight were declined at inception as repo-specific; `issue_close` deliberately has no board integration.
-
-**Where adjacent requests belong.**
-Session naming during the ship flow → [@gotgenes/pi-session-tools](https://www.npmjs.com/package/@gotgenes/pi-session-tools).
-Whether to release now, and which packages a release PR bumps → the calling prompt's release marker, not the tool.
-Merge-method policy → the extension's `defaultMergeMethod` config.
-
 ## Install
 
 ```bash
@@ -224,6 +185,33 @@ Two locations are supported — project config takes precedence over global:
   "defaultMergeMethod": "squash"
 }
 ```
+
+## Scope and non-goals
+
+**Purpose.**
+The ship workflow used to have the agent `sleep` and re-invoke `gh` in a prose loop, which burned turns and behaved differently every run.
+These tools replace that loop with bounded polling, streamed progress, and structured success, timeout, and failure states.
+
+**In scope.**
+Making a tool wait where a human would otherwise wait, making a failure legible as a named `reason` a prompt can branch on, surviving transient GitHub errors on reads, and refusing to leave an outcome ambiguous.
+
+**Non-goals.**
+
+- _A general-purpose GitHub toolkit._
+  The surface is scoped to the CI, release, and issue-close flow an agent runs end to end.
+  An operation with no polling problem — opening a PR, editing labels, dispatching a workflow — is a plain `gh` call and stays one.
+- _Release automations other than release-please._
+  The three release tools encode its conventions; the CI tools stay generic to any GitHub Actions repository.
+- _A GitHub API client._
+  The `gh` CLI is the sole external binary dependency, and there are no runtime dependencies at all.
+- _Auto-retrying mutations._
+  Reads retry on transient failures; `release_pr_merge` and `issue_close` do not, since a retried close would post a duplicate comment.
+- _Merging a PR the tool refuses today._
+  When a release PR reports no checks at all, `release_pr_merge` refuses with a named reason rather than merging through.
+
+**Where adjacent requests belong.**
+Session naming during the ship flow → [@gotgenes/pi-session-tools](https://www.npmjs.com/package/@gotgenes/pi-session-tools).
+Whether to release now → the calling prompt, not the tool.
 
 ## Architecture
 

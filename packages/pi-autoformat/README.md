@@ -49,48 +49,6 @@ A safety-net flush also runs at `agent_end` to catch files added via the EventBu
 
 See [docs/configuration.md](docs/configuration.md) for the full reference.
 
-## Scope and non-goals
-
-**Purpose.**
-Formatters that run at commit time or in CI mutate files after the agent has moved on, so commits fail and the agent has to recover from changes it did not make.
-This extension moves formatting earlier: it formats the files the agent just touched, between turns, so a commit sees already-formatted files.
-
-**In scope.**
-Widening which mutations are noticed (always opt-in and explicit), the formatter dispatch model, flush timing and how a change is reported back to the agent, and the reporting surface.
-
-**Non-goals.**
-
-- _Whole-repository formatting._
-  Only files the agent touched are formatted — no filesystem watchers, no repo-wide rescans, and no `git status` sweep after each bash command.
-  Each of those trades precision for false positives from IDE saves, editor watchers, and an already-dirty tree.
-- _Blocking an edit on a formatter failure._
-  Formatting is a report, never a gate.
-  A failure is surfaced and never silently swallowed, but it does not fail the edit that triggered it — enforcement belongs to the pre-commit hooks and CI that can actually block.
-  Successful runs are never annotated with output either; the goal is debugging failures, not chatter on the happy path.
-- _Inferring what a repository "really" uses._
-  No default chains are shipped and no formatter is auto-detected from config files, because a default formatter conflicting with the project's chosen tool is a worse failure than doing nothing.
-- _Reimplementing formatter config resolution._
-  Formatters discover their own project config by walking up the tree, and this extension does not model that.
-  For the same reason it does not auto-detect project-local binaries — wrappers such as `pnpm exec`, `npx`, or `mise x` are declared explicitly in the command.
-- _Per-formatter working directories._
-  There is deliberately no `baseDir` and no per-formatter `cwd`.
-  A single directory cannot express one tool serving several subprojects, and it conflicts with batch dispatch when one turn touches more than one.
-- _Git staging or commit orchestration._
-  Formatted files are not re-staged and `git commit` is not intercepted.
-  This package moves formatting earlier so that hooks stop failing; it does not replace them.
-- _Per-file attribution or parallel execution._
-  Dispatch is batched and sequential, and outcomes are reported per batch.
-  Which formatter inside a `treefmt` run failed is `treefmt`'s own output to report.
-- _Configuration in Pi's shared `settings.json`._
-  A dedicated config file avoids collisions with Pi core settings and makes strict schema validation practical.
-  A user's config file is never rewritten on their behalf; a deprecated key is accepted with a notice instead.
-
-**Where adjacent requests belong.**
-Subdirectory-scoped formatters in a monorepo → `treefmt` / `treefmt-nix` `includes` and `excludes`, declared as a chain step.
-Mutations made by another extension's or MCP server's tools → the `autoformat:touched` event channel, or `customMutationTools`.
-Codegen and wrapper scripts that rewrite files → declared `shellMutationDetection.wrappers` prefixes.
-Commit-time enforcement → your existing pre-commit hooks, left in place.
-
 ## Install
 
 ```bash
@@ -161,6 +119,35 @@ Outside the TUI, summaries are written as prefixed log lines on `stdout` / `stde
 
 Set `hideSummariesInTui` to `true` to suppress the success status line.
 To surface failed-run stderr (or stdout+stderr), see [`formatterOutput`](docs/configuration.md#formatteroutput).
+
+## Scope and non-goals
+
+**Purpose.**
+Formatters that run at commit time or in CI mutate files after the agent has moved on, so commits fail and the agent has to recover from changes it did not make.
+This extension formats the files the agent just touched, between turns, so a commit sees already-formatted files.
+
+**In scope.**
+Widening which mutations are noticed (always opt-in and explicit), the formatter dispatch model, flush timing, and the reporting surface.
+
+**Non-goals.**
+
+- _Whole-repository formatting._
+  Only files the agent touched are formatted — no watchers, no repo-wide rescans, no `git status` sweep, each of which trades precision for false positives.
+- _Blocking an edit on a formatter failure._
+  Formatting reports; it does not gate.
+  Enforcement belongs to the pre-commit hooks and CI that can actually block.
+- _Inferring what a repository "really" uses._
+  No default chains ship and no formatter is auto-detected, because a default conflicting with your chosen tool is worse than doing nothing.
+  Formatters find their own project config; this extension does not model that.
+- _Per-formatter working directories._
+  There is deliberately no `baseDir`: one directory cannot express a tool serving several subprojects, and it conflicts with batch dispatch.
+- _Git staging or commit orchestration._
+  Formatted files are not re-staged and `git commit` is not intercepted.
+
+**Where adjacent requests belong.**
+Subdirectory-scoped formatters in a monorepo → `treefmt` / `treefmt-nix`, declared as a chain step.
+Mutations from another extension's tools → the `autoformat:touched` event channel, or `customMutationTools`.
+Commit-time enforcement → your existing pre-commit hooks, left in place.
 
 ## Development
 
