@@ -30,6 +30,29 @@ Widened the scope from the labeled package to all three affected packages (11 to
 - **Release shape.**
   Not a roadmap step in any package, so ship independently — but three `fix:` commits, one per package, means three component releases at the next release-PR merge.
 
+## Stage: Implementation — TDD (2026-08-19T21:27:18Z)
+
+### Session summary
+
+Executed all three plan steps: removed the redundant `"<tool_name>: "` prefix from 11 `promptSnippet` literals across `pi-subagents` (3), `pi-github-tools` (7), and `pi-colgrep` (1), landing one `fix:` commit per package.
+Only step 1 had a real Red→Green cycle (three exact-string assertions in `pi-subagents`' tool tests went red, then green); steps 2 and 3 have no test surface and were verified by `check`/`lint` plus review against the plan's Design Overview table.
+Test count is unchanged at 5218 — no tests were added or removed, three assertion strings were updated in place.
+
+### Observations
+
+- **No deviations from the plan.**
+  Every file in Module-Level Changes was touched and nothing else; the predicted "no docs change" held, re-verified independently by the reviewer.
+- **Tidy-First assessor: no preparatory tidying warranted.**
+  It correctly read the change as 11 isolated string-literal edits with no surrounding friction, and declined a shared `stripToolPrefix`-style helper as new abstraction rather than preparation.
+- **Biome reflow happened as the plan predicted.**
+  Four github-tools snippets collapsed from a wrapped continuation onto one line (`issue-close.ts`, `release-pr-find.ts`, `release-watch.ts`, and the formatter also tidied `ci-list.ts`), which is why that commit shows 7 insertions against 10 deletions.
+  Letting the formatter own the layout kept the diff honest.
+- **Coverage gap is by design, not oversight.**
+  8 of the 11 edits are in packages with no tool-definition tests (`pi-colgrep`, `pi-github-tools`), a direct consequence of the declined regression guard; the plan and the reviewer both record it explicitly.
+- **Pre-completion reviewer: PASS** — all four deterministic checks green, all 11 resulting strings diffed byte-for-byte against the plan's table, and the "no user-facing doc quotes a snippet" claim independently re-verified (only `docs/plans/`, `docs/retro/`, and an unrelated release-please `CHANGELOG.md` entry mention `promptSnippet`).
+  No warnings.
+- **Release shape at ship time:** three `fix:` commits across three components, so the next release-please PR carries a patch release for each of `pi-subagents`, `pi-github-tools`, and `pi-colgrep`.
+
 [#90]: https://github.com/gotgenes/pi-packages/issues/90
 [#152]: https://github.com/gotgenes/pi-packages/issues/152
 [#437]: https://github.com/gotgenes/pi-packages/issues/437
