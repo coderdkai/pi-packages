@@ -52,6 +52,23 @@ Cite an issue in a module-tree entry **only** when the ref encodes an active con
 Without this discipline, the per-change doc-update commits that append provenance re-inflate the tree — the debt #601 and #605 paid down in bulk for pi-permission-system and pi-subagents.
 `/finish-phase`'s bounded doc-hygiene step holds each phase's touched module-tree entries to this standard (Refs #601, #605, #606, #607).
 
+### Reading this repo's own artifacts
+
+When mining history for a **durable** claim — a scope charter, a triage verdict, an ADR, a README boundary — this repo's artifacts answer narrower questions than they appear to.
+
+A plan's `## Non-Goals` is scoped to that change, not to the package.
+It answers "what is out of scope for this change", never "what is out of scope forever", and it mixes three unrelated claims under one heading: sequencing (not in this change), deferral (not until someone asks), and a real boundary (not ever, and here is why).
+So **a plan Non-Goal is a lead, not a citation** — use it to find the ADR or numbered design principle, and cite that.
+A Non-Goal decays fastest in the most active packages: `pi-colgrep`'s plan `0092` declared `promptGuidelines` out of scope and `fa164a19` changed one the same day under the same issue, and `pi-github-tools`' plan `0005` forbade retry/timeout on one-shot tools before #673 and #764 added both (Refs #775).
+
+Pull-request status is an **inverted** signal here, because the repo reimplements adopted third-party changes through its own TDD cycle rather than merging them.
+Seven of nine closed-unmerged external PRs on `pi-permission-system`, and six on `pi-subagents`, shipped as capability with `Co-authored-by` credit — so "closed unmerged" usually means *accepted*.
+Read the close comment, never the close status.
+An **open** PR is not a decline either: #692 sits unmerged because the policy-source channel is undecided (#639), while `pi-permission-system` design principle 8 anticipates the capability outright.
+
+Check an ADR's frontmatter `status:` before citing it.
+`pi-subagents` `docs/decisions/0001-deferred-patches.md` is `superseded`, and it is still the only record of the `pi -e` ephemeral-extension limitation.
+
 ## Workflow
 
 - Keep scope tight.
