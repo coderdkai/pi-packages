@@ -145,3 +145,39 @@ An exhaustive pass over the routing graph — all 23 routing statements, 12 of t
   Both sections now end after the non-goals.
   A routing paragraph earns its place only when it names an owner the non-goals do not.
 - The first replacement lines written for `pi-github-tools` and `pi-session-tools` had exactly that redundancy and were reverted within the same step — the reflex when deleting a line is to write a replacement, and sometimes the correct replacement is nothing.
+
+## Stage: Artifact-reliability findings (2026-08-19T16:34:07Z)
+
+### Session summary
+
+Walking through the artifact-versus-reality contradictions produced a durable rule, now recorded in `AGENTS.md` under § Reading this repo's own artifacts, and an audit of all 15 ADRs identifying which need amendment or supersession.
+Two follow-up issues were filed: [#779] for `pi-subagents` and [#780] for `pi-permission-system`.
+
+### Observations
+
+- Four artifacts stated a boundary the code contradicted.
+  `pi-colgrep`'s plan `0092` listed `promptGuidelines` under Non-Goals and `fa164a19` changed one **the same day, under the same issue** — the brief reported "days later", and the real gap was hours.
+  `pi-github-tools`' plan `0005` forbade retry/timeout on one-shot tools before #673 and #764 added both.
+  `pi-permission-system`'s unmerged PR #692 looks like a decline while design principle 8 and `architecture.md:570` ("a future 'always' writes config") anticipate the capability.
+  `pi-subagents` ADR-0001 is `superseded` and is still the only record of the `pi -e` limitation.
+- The unifying diagnosis is that none of these artifacts is wrong — each is correct in its own frame, and the charter asked them a question they were never written to answer.
+  A plan's `## Non-Goals` answers "what is out of scope for **this change**"; a charter asks "what is out of scope for **this package**".
+  Same words, different question.
+  Worse, one heading carries three unrelated claims — sequencing, deferral, and a real boundary — which are grammatically identical and only one of which belongs in a charter.
+- Pull-request status is an **inverted** signal in this repo.
+  Seven of nine closed-unmerged external PRs on `pi-permission-system`, and six on `pi-subagents`, were adopted and reimplemented with `Co-authored-by` credit — so "closed unmerged" here usually means *accepted*.
+  A miner reading close status as intent would have produced a charter declining the features that actually shipped.
+- The citation policy turned out to be load-bearing for correctness, not just tone.
+  "Cite ADRs and architecture docs, never contributor PRs" was chosen at the planning gate so a shipped README would not name someone's declined PR.
+  Because ADRs are written to be durable while plan Non-Goals are written to be scoped, that same rule is what kept all four stale artifacts out of the READMEs.
+  A tone decision bought staleness protection as a side effect.
+- The rule distilled into `AGENTS.md`: a plan Non-Goal is a **lead, not a citation** — use it to find the ADR or numbered design principle, and cite that.
+  All four failures are caught by that one sentence.
+- ADR audit: 14 of 15 are `accepted` and healthy.
+  The work is three-shaped — one superseded ADR still load-bearing (`pi-subagents` 0001), one accepted ADR whose own amendment supplies the argument an open PR uses against a decision just made (`pi-subagents` 0002 on additive vs. subtractive settings keys), and three boundaries published with no decision record (run-mode default; conservative defaults; outbound bridges).
+  `pi-permission-system` ADR-0007 needs nothing — the authorizer-seam reframing is consistent with it.
+- The seven packages with no `docs/decisions/` tree were deliberately left alone.
+  Their README charter is now the record, and introducing ADR practice there would be new process rather than a fix.
+
+[#779]: https://github.com/gotgenes/pi-packages/issues/779
+[#780]: https://github.com/gotgenes/pi-packages/issues/780
