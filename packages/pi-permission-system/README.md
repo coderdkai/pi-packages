@@ -158,8 +158,8 @@ Hardening the gates against bypass, fail-closed corrections (breaking ones inclu
 - _Guessing what is sensitive._
   No built-in secret denylist, and log redaction is key-name-structural rather than predictive — a redactor that silently misses a key invites treating the log as safe to share.
 - _Model judgment in the core._
-  This package makes no LLM call and holds no model config.
-  A registered authorizer link decides nothing until you name it in `authorizerChain`, and its `allow` on an excluded surface is downgraded to `defer`.
+  This package makes no LLM call and holds no model config; model-assisted judging attaches as a chain link over the authorizer seam instead.
+  A link decides nothing until you name it in `authorizerChain`, and its `allow` on an excluded surface is downgraded to `defer`.
 
 The [architecture doc](https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/architecture/architecture.md#scope-and-non-goals) carries the full inventory, with the decision record behind each entry.
 
@@ -169,7 +169,7 @@ Several requested widenings are parked on it rather than declined, durable persi
 
 **Where adjacent requests belong.**
 True isolation of a permitted action → an agent sandbox.
-Model-assisted judging of an `ask` → [@gotgenes/pi-permission-model-judge](https://www.npmjs.com/package/@gotgenes/pi-permission-model-judge).
+Model-assisted judging of an `ask` → a chain link over the authorizer seam; [@gotgenes/pi-permission-model-judge](https://www.npmjs.com/package/@gotgenes/pi-permission-model-judge) is the first-party one, and judges mistyped paths.
 Approve-and-steer, edit diffs, and risk explanations → a downstream package over the `permissions:decision` event and the presentation seams.
 
 ## Documentation

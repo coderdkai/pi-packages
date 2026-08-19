@@ -124,7 +124,8 @@ The model mechanism: the operator-declared typo-pattern pre-filter, the model ca
 
 **Where adjacent requests belong.**
 Whether this link runs, and in what order → pi-permission-system's `authorizerChain`.
-Allow-capable adjudication, and which path a multi-path bash command escalates → pi-permission-system.
+Widening the delegation envelope so a link may `allow`, and which path a multi-path bash command escalates → pi-permission-system.
+An allow-capable judgment, or any judgment not about mistyped paths → a different chain link.
 
 ## License
 
