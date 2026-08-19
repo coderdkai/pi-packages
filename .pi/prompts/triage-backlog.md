@@ -156,6 +156,8 @@ Answer that first, or a well-argued request for a capability a package deliberat
 
 Read `## Scope and non-goals` in `packages/<pkg>/README.md` — only for the packages with items in scope, not all nine.
 That section is the charter: purpose, in-scope changes, non-goals with their rationale, and where an adjacent request belongs.
+A charter may also record an explicitly **open** decision — `pi-permission-system`'s names the policy-source question (#639) and lists the widenings parked on it.
+An item that lands on an open decision is `aligned` and parked, never `out of scope`; say which decision it waits on.
 
 Classify every item before it is scored:
 
