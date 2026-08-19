@@ -24,7 +24,7 @@ export function registerReleasePrMerge(pi: ExtensionAPI): void {
       "merged, did not merge (safe to retry), or could not be verified. " +
       "Returns merge confirmation with new HEAD SHA, or a structured error if not mergeable.",
     promptSnippet:
-      "release_pr_merge: Merge a release-please PR after confirming it's clean, " +
+      "Merge a release-please PR after confirming it's clean, " +
       "waiting out any in-progress checks and verifying the outcome of a failed merge call.",
     parameters: Type.Object({
       pr_number: Type.Number({
