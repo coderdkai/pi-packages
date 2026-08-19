@@ -90,8 +90,7 @@ The git plumbing bracketing a child run, not losing the child's work when cleanu
 - _Worktree knowledge in the subagents core._ `git` does not appear there; uninstalling this package leaves children running in the parent's directory.
 
 **Where adjacent requests belong.**
-Whether a child gets an isolated workspace at all, and the seam that asks → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-A child's system prompt and its working-directory claim → `@gotgenes/pi-subagents` and `@gotgenes/pi-nocd`.
+Whether a child gets an isolated workspace at all, the seam that asks, and a child's system prompt or working-directory claim → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
 
 ## License
 

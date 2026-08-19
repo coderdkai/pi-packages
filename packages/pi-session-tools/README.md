@@ -168,10 +168,6 @@ A new capability arrives as a new tool rather than as another parameter on an ex
 - _Analytics and roll-ups._
   Per-turn attribution and flat counts are emitted; interpreting them is the calling prompt's job.
 
-**Where adjacent requests belong.**
-Session file naming and entry schema → Pi itself.
-Browsing a subagent's session in the UI → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-
 ## License
 
 MIT

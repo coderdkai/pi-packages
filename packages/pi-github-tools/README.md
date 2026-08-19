@@ -210,8 +210,7 @@ Making a tool wait where a human would otherwise wait, making a failure legible 
   When a release PR reports no checks at all, `release_pr_merge` refuses with a named reason rather than merging through.
 
 **Where adjacent requests belong.**
-Session naming during the ship flow → [@gotgenes/pi-session-tools](https://www.npmjs.com/package/@gotgenes/pi-session-tools).
-Whether to release now → the calling prompt, not the tool.
+Whether to release now, and which packages a release PR bumps → the calling prompt, not the tool.
 
 ## Architecture
 

@@ -74,10 +74,6 @@ The wording of the injected block, and correct path resolution when a child sess
 - _Registering tools or commands._
   The entire surface is one `before_agent_start` hook, with no configuration.
 
-**Where adjacent requests belong.**
-How a child session inherits its parent's prompt → [@gotgenes/pi-subagents](https://www.npmjs.com/package/@gotgenes/pi-subagents).
-Giving a child its own working directory → [@gotgenes/pi-subagents-worktrees](https://www.npmjs.com/package/@gotgenes/pi-subagents-worktrees).
-
 ## License
 
 MIT
