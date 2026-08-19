@@ -95,6 +95,9 @@ The distinguishing work was archaeological rather than technical — establishin
    `PI_MODEL` reports only the session's *current* model, so extrapolating it across the session produced a false claim — that all three stages ran on opus-5, when the ship stage ran entirely on sonnet-5.
    Impact: a factual error landed in a committed, pushed retro and needed a correction commit.
    Self-identified: no — user-caught, by asking why the environment variables were being read at all.
+6. `instruction-violation` — the correction itself then reached for `jq` over `$PI_SESSION_FILE` rather than `read_session`, bypassing `pi-session-tools`, the tooling this repo maintains for reading session transcripts.
+   Impact: no wrong result (the data matched), but the second failure repeated the shape of the first — an ad-hoc probe in place of the named instrument.
+   Self-identified: no — user-caught.
 
 #### What caused friction (user side)
 
@@ -111,7 +114,8 @@ The distinguishing work was archaeological rather than technical — establishin
   Both subagents ran `anthropic/claude-sonnet-5`, appropriately: the `tidy-first-assessor` returned "no preparatory tidying warranted" in 18.5 s / 3 tool uses, and the `pre-completion-reviewer` did judgment-heavy verification in 103.8 s / 21 tool uses, independently re-running all four deterministic gates and diffing all 11 strings against the plan's table.
 - **Phantom model switches are real** — the session recorded 6 `model_change` entries, two of them to `opencode-go/deepseek-v4-flash`, which ran **zero** assistant turns.
   Attributing from switch events would have invented two models that never executed anything, which is precisely the failure the `/retro` prompt's unfiltered-read instruction guards against (Refs #737).
-  The reliable source is the per-turn `provider`/`model` on each assistant message: `jq -r 'select(.type=="message" and .message.role=="assistant") | [.message.provider, .message.model] | @tsv' "$PI_SESSION_FILE" | sort | uniq -c`.
+  The reliable source is the per-turn `provider`/`model` on each assistant message, read through `pi-session-tools` (`read_session` / `read_session_file`) — the tooling this repo built for it.
+  The correction here was made with a raw `jq` query over `$PI_SESSION_FILE`, which reached the same data by the wrong route: it bypasses the transcript rendering the lens is specified against and would drift the moment the session format changes.
 - **Escalation-delay tracking** — no sequence exceeded five consecutive calls on the same error; there were no failing-test or lint loops at all, since the implementation was green on first run at every step.
 - **Unused-tool detection** — `colgrep` went unused, correctly: every search this session targeted the exact symbol `promptSnippet` or an exact snippet string, which is grep's job per the search decision table.
   An `Explore` subagent for the `../pi` git archaeology is the arguable miss (`AGENTS.md` recommends one for multi-hop traces there), though the evidence that actually settled the question was a GitHub comment, not source.
@@ -123,6 +127,7 @@ The distinguishing work was archaeological rather than technical — establishin
 1. `.pi/prompts/plan-issue.md` — appended to step 7 the inverse of the existing introduce-a-convention rule: when a plan *removes* a repo-wide convention, trace its origin with `git log -S` and read the introducing commit's plan and retro first, recording a rationale that governs a different mechanism in Non-Goals.
 2. `AGENTS.md` — appended to § Stale in-process extension code: the session's own system prompt is a zero-cost witness for the **published** prompt-assembly behavior, with the caveat that it can never show your uncommitted fix.
 3. Corrected this retro's model attribution after the operator questioned the `PI_*` environment-variable read: replaced the "opus-5 for all three stages" claim with per-turn counts, added the phantom-switch finding, and recorded the `instruction-violation` that produced the error.
+4. `.pi/prompts/retro.md` — the model-attribution lens now names `pi-session-tools` (`read_session` / `read_session_file`) as the instrument, and rules out both `jq` over `$PI_SESSION_FILE` and `PI_MODEL`/`PI_PROVIDER`.
 
 [#90]: https://github.com/gotgenes/pi-packages/issues/90
 [#152]: https://github.com/gotgenes/pi-packages/issues/152
