@@ -70,3 +70,30 @@ The cross-check pass found and fixed one real cross-package contradiction, and `
   Both answer live requests, which is why they shipped.
 - Pre-completion reviewer: PASS.
   No warnings requiring action; its single caveat about the unenumerated operator-decision list is addressed above.
+
+## Stage: Implementation — Revision (2026-08-19T03:50:27Z)
+
+### Session summary
+
+The operator reviewed the shipped charters and rejected them on length: too much content for someone evaluating whether to use a package, and `## Install` pushed far down every README.
+Each section was cut to roughly five one-line non-goals and relocated to the reference tail, with the full inventories moved into `architecture.md` for the two largest packages.
+
+### Observations
+
+- The length problem was real and measurable, and the build session shipped it without noticing.
+  Sections ran 29 to 68 lines; for `pi-colgrep`, `pi-subagents-worktrees`, and `pi-nocd` the charter was a third or more of the entire README, and `pi-github-tools` went from install instructions at line 9 to line 48.
+  After the revision `## Install` sits at its original line in all nine packages.
+- The root cause was a framing error, not sloppy editing.
+  The mining phase produced 149 cited candidate non-goals, and having paid for them it felt wasteful to drop any — so each section became a complete inventory of every defensible boundary rather than an answer to the requests that actually arrive.
+  `pi-permission-system` shipped 13 non-goals where the recurring requests cluster on about five.
+- The placement decision made at the planning gate was sound **given the assumption** that the section would be short.
+  Once it ran 40-plus lines, "before the setup block" stopped serving the reader it was chosen for.
+  A placement choice and a length budget are one decision, and the planning gate asked only the first half.
+- The operator's suggestion to move full inventories into `architecture.md` resolved the tension the trim would otherwise have created.
+  The mined detail stays durable and citable for `pi-permission-system` and `pi-subagents` — both docs now carry a table mapping each boundary to its ADR or design principle, plus an explicit list of what is **not** a boundary — while the READMEs stay short.
+  `docs/architecture` is in `exclude-paths`, so that commit cut no release.
+- Reader-audience separation is the lesson worth carrying: the person evaluating a package and the person about to file an issue want different things from a README, and the evaluator is far more common.
+  Scope belongs with the reference material, not above the install instructions.
+- `pi-permission-system`'s purpose sentence was reworded on operator feedback.
+  "An agent takes many actions and only some of them matter" was dismissive of both the agent and the user's judgment; the shipped line is that most actions are benign and some need a human to confirm they are safe or correct.
+- Verified after the revision: `pnpm run check`, `pnpm run lint`, and `pnpm pack` on both large packages all clean, with `pi-subagents` shipping the architecture doc its README links relatively and `pi-permission-system` still excluding it, which is why that link is an absolute URL.
