@@ -36,6 +36,33 @@ Plan committed as `docs/plans/0776-contributing-guide.md` in `141cbd8d`; follow-
 - The issue's measured merge-rate statistics are motivation, not content.
   Recorded as a Non-Goal so the build session does not reach for them when the `## Pull requests` section feels thin.
 
+## Stage: Implementation — Build (2026-08-19T19:35:18Z)
+
+### Session summary
+
+Executed all three build steps: the 42-line `CONTRIBUTING.md`, the two pointers to it (a root README `## Contributing` section and a `contact_links` entry on the issue chooser), and the resolved forward reference in `pi-subagents`' architecture doc.
+Commits `f114989d`, `2f7328c9`, `54e21b0a`.
+Pre-completion reviewer: PASS.
+
+### Observations
+
+- The shipped guide is **byte-identical to the plan's worked draft** — the reviewer confirmed this with a `diff` returning zero.
+  That is the [#775] size lesson working exactly as intended: settling the size at the gate with a real draft left the build step nothing to negotiate, and no section drifted longer under the pressure of writing it.
+- Reviewer WARN (non-blocking, planning-artifact only): the plan's per-section line-budget table sums to "~74, hard ceiling 95", while its own worked draft — labeled "the target, not a placeholder" — was already 42 lines.
+  The two were never reconciled against each other at planning time.
+  Nothing was dropped to reach 42; the arithmetic simply over-counted blank lines and per-section sentences.
+  Left the plan uncorrected as a historical record and recorded the discrepancy here instead.
+  The transferable lesson is narrow but real: when a plan carries **both** a budget table and a worked example, the example is the binding artifact and the table should be derived from it (`wc -l`), not estimated alongside it.
+- The `contact_links` YAML was verified by parsing it with the repo's own `yaml` package rather than by eye.
+  Worth doing: the `about:` value contains an em-dash and an apostrophe, and the `url:` value contains an unquoted `https://`, all of which are valid plain scalars but none of which are obvious by inspection.
+  The rendered chooser page remains a post-push check.
+- The `pi-subagents` pointer is the one link in this change where the form is load-bearing.
+  The reviewer independently confirmed `docs/architecture` is in that package's `files` array, which is what makes the absolute URL required rather than stylistic ([#647]).
+- `README.md` verification was framed as a scoping assertion and checked as one: `git diff` reports 4 insertions and **0 deletions**, so the Non-Goals claim that `## Development` is untouched is pinned by a number rather than by reading.
+- Deliberately did not load the `package-pi-subagents` skill for the one-line prose pointer in that package's architecture doc.
+  The edit changes no module, symbol, or boundary — only a forward reference to a file that now exists.
+- No `src/`/`test/` files were touched, so Tidy First was skipped per its applicability gate, and `pnpm run test` was not required — the reviewer ran the full suite anyway and it was green.
+
 [#647]: https://github.com/gotgenes/pi-packages/issues/647
 [#775]: https://github.com/gotgenes/pi-packages/issues/775
 [#781]: https://github.com/gotgenes/pi-packages/issues/781
