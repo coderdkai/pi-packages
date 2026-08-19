@@ -146,7 +146,56 @@ Two checks pay for themselves repeatedly:
 
 The full verification protocol lives in `/pr-review`; do only as much here as the ranking requires, and defer the rest.
 
-## Step 6: Score each item
+## Step 6: Check scope alignment before scoring
+
+Severity, likelihood, blast radius, and response cost all measure how much an item matters *if we do it*.
+None asks the prior question: do we want it at all?
+Answer that first, or a well-argued request for a capability a package deliberately does not offer ranks high and stays high, run after run.
+
+Read `## Scope and non-goals` in `packages/<pkg>/README.md` — only for the packages with items in scope, not all nine.
+That section is the charter: purpose, in-scope changes, non-goals with their rationale, and where an adjacent request belongs.
+
+Classify every item before it is scored:
+
+| Verdict        | Meaning                                                           | Effect                                                              |
+| -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `aligned`      | Inside the package's purpose and in-scope list                    | Scored and ranked normally                                          |
+| `adjacent`     | A real need, wrong package or wrong layer                         | Scored and ranked; name the package or extension point that owns it |
+| `out of scope` | Excluded by a specific non-goal                                   | No severity rank; a recommended disposition instead                 |
+| `no charter`   | No package owns it — repo tooling, a prompt template, CI, install | Scored and ranked normally; no scope call                           |
+
+Five rules keep the gate honest:
+
+1. **Cite the non-goal; never paraphrase a boundary into existence.**
+   An `out of scope` verdict quotes the bullet it rests on.
+   If no bullet covers the item, the verdict is `aligned`, `adjacent`, or a question for the user — never `out of scope`.
+   Do not invent a charter to justify a decline.
+2. **An item labeled for several packages is out of scope only if every named charter excludes it.**
+   One charter that admits it makes it `aligned` there.
+3. **`no charter` is not a decline.**
+   It records that the question does not apply — the item is scored on the four axes exactly as before.
+4. **Weight the gate harder for a PR than for an issue.**
+   An issue proposes; a PR arrives with sunk contributor effort, a working implementation, and often a green check.
+   That pressure is real, and it is not evidence of alignment — green CI has no opinion about scope, for the same reason it has none about security.
+   An out-of-scope PR still needs a timely answer, so give its disposition a response urgency even though it gets no severity rank.
+5. **When alignment is genuinely unclear, ask rather than decide.**
+   Bundle the question into the same `ask_user` call as the Step 1 repeat deferrals; do not open a second round-trip.
+
+A verdict recorded in a prior triage's **Scope alignment** section is settled — inherit it rather than re-deriving it.
+Re-check only when one of the two sides it rests on changed since that triage's date:
+
+```bash
+git log --since=<prior triage date> --oneline -- packages/<pkg>/README.md
+gh issue view <N> --json updatedAt,title,body
+```
+
+A charter edit reopens the verdicts citing that package; a materially changed item reopens its own.
+Record each re-check as `unchanged` or as the new verdict with what changed.
+
+The verdict is a document entry, not a mutation.
+Closing an out-of-scope item, labeling it, and replying to its author all remain recommendations — see [Mutations you may perform](#mutations-you-may-perform).
+
+## Step 7: Score each item
 
 Score on four axes; keep them separate rather than collapsing them into one number too early.
 
@@ -162,7 +211,7 @@ Hold **merit** and **urgency of response** apart, and label which one is driving
 A PR whose design you intend to decline can still be the most urgent thing to *answer*.
 Say "this is ranked high to respond, not to merge" in the rationale when that is the case, so the list is not misread as an endorsement.
 
-## Step 7: Keystone detection
+## Step 8: Keystone detection
 
 Before ordering, look for convergence: several open items that are all really asking one unanswered question.
 
@@ -175,7 +224,7 @@ Deciding a keystone converts N separate judgment calls into N answers by referen
 Also flag the inverse: a third-party PR implementing a blunter version of a design you have already specified.
 The existing issue is the answer to that PR; note the pairing rather than reviewing the PR on its own terms.
 
-## Step 8: Interleave
+## Step 9: Interleave
 
 Produce one list, not separate ours/theirs lists.
 Group by theme where our issues and third-party work converge, then order across themes.
