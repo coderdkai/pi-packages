@@ -104,6 +104,13 @@ export interface AuthorizerSelectionDeps {
   getPromptPreferences: () => PromptPreferences;
   /** Injected for testability; production callers pass the real function. */
   requestPermissionDecision: typeof requestPermissionDecision;
+  /**
+   * Write a persistent allow rule to the project/global config and reload the
+   * session's permissions so the grant is effective immediately. Called when
+   * the operator chooses "allow in this project" / "allow for you". A failed
+   * write reports a warning to the session but never throws.
+   */
+  persistApproval: (opts: PersistApprovalOptions) => void;
   /** Forwarding directory `ParentAuthorizer` reads/writes request and response files under. */
   forwardingDir: string;
   /** In-process subagent session registry for forwarding target resolution. */
@@ -113,6 +120,15 @@ export interface AuthorizerSelectionDeps {
   /** The forwarding timeout, read live so a config edit applies to the next ask. */
   getForwardingTimeoutMs: () => number;
   logger: DebugReviewLogger;
+}
+
+/** The inputs a persistent-approval write needs at decision time. */
+export interface PersistApprovalOptions {
+  scope: "project" | "global";
+  surface: string;
+  pattern: string;
+  cwd: string | undefined;
+  projectTrusted: boolean;
 }
 
 /**
@@ -136,6 +152,9 @@ export function selectAuthorizer(
         events: deps.events,
         getPromptPreferences: deps.getPromptPreferences,
         requestPermissionDecision: deps.requestPermissionDecision,
+        persistApproval: deps.persistApproval,
+        cwd: ctx.cwd,
+        isProjectTrusted: () => ctx.isProjectTrusted(),
       }),
       adjudicatesLocally: true,
     };

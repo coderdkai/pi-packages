@@ -166,9 +166,11 @@ describe("presentInlinePermissionPrompt", () => {
     expect(text).toContain("tool : read");
     expect(text).toContain("path : /repo/secret.txt");
     expect(text).toContain("Yes");
-    expect(text).toContain("No, provide reason");
+    expect(text).toContain("Allow in this project");
+    expect(text).toContain("Allow for you");
     expect(text).toContain("y");
-    expect(text).toContain("r");
+    expect(text).toContain("p");
+    expect(text).toContain("u");
   });
 
   it("clips every rendered line to the terminal width", () => {
@@ -263,111 +265,91 @@ describe("presentInlinePermissionPrompt", () => {
     });
   });
 
-  describe("deny with reason", () => {
-    it("collects a typed reason and resolves denied_with_reason", async () => {
-      const decision = await runPrompt(false, ["r", "n", "o", "p", "e", ENTER]);
+  describe("persistent allow (p in project / u for user)", () => {
+    it("resolves approved_for_project on p (single-candidate path ask)", async () => {
+      const decision = await runPrompt(false, ["p"]);
       expect(decision).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "nope",
+        approved: true,
+        state: "approved_for_project",
+        persistPattern: "*",
       });
     });
 
-    it("rejects an empty reason and shows an error, then accepts a real one", async () => {
+    it("resolves approved_for_global on u", async () => {
+      const decision = await runPrompt(false, ["u"]);
+      expect(decision).toEqual({
+        approved: true,
+        state: "approved_for_global",
+        persistPattern: "*",
+      });
+    });
+
+    it("opens the range step when a bash ask offers layered candidates", async () => {
       const { view, captured } = makeFakeView(false);
-      const promise = presentInlinePermissionPrompt(view, "T", ASK);
-      captured.component?.handleInput("r"); // opens reason step
-      captured.component?.handleInput(ENTER); // empty submit -> rejected
+      const bash = makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          surface: "bash",
+          toolName: "bash",
+          value: "git reset HEAD",
+          matchedPattern: "git reset *",
+        },
+      });
+      const promise = presentInlinePermissionPrompt(view, "T", bash);
+      captured.component?.handleInput("p");
       const text = captured.component?.render(80).join("\n") ?? "";
-      expect(text).toContain("A reason is required.");
-      captured.component?.handleInput("x");
-      captured.component?.handleInput(ENTER);
-      expect(await promise).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "x",
-      });
+      expect(text).toContain("choose the scope");
+      expect(text).toContain("git reset HEAD");
+      expect(text).toContain("git reset *");
+      expect(text).toContain("git *");
+      captured.component?.handleInput(ESCAPE); // back out
+      captured.component?.handleInput("n"); // terminal deny
+      expect(await promise).toEqual({ approved: false, state: "denied" });
     });
 
-    it("supports backspace while editing the reason", async () => {
-      const decision = await runPrompt(false, [
-        "r",
-        "a",
-        "b",
-        "\u007f", // backspace removes "b"
-        ENTER,
-      ]);
-      expect(decision).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "a",
-      });
-    });
-
-    it("accepts pasted text into the reason", async () => {
-      expect(
-        await runPrompt(false, ["r", paste("pasted text"), ENTER]),
-      ).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "pasted text",
-      });
-    });
-
-    it("flattens a multi-line paste into one readable line", async () => {
-      expect(
-        await runPrompt(false, [
-          "r",
-          paste("denied because it touches\n~/.ssh"),
-          ENTER,
-        ]),
-      ).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "denied because it touches ~/.ssh",
-      });
-    });
-
-    it("keeps a pasted reason on one row, however long it is", () => {
+    it("commits the chosen range in the range step", async () => {
       const { view, captured } = makeFakeView(false);
-      void presentInlinePermissionPrompt(view, "Title", ASK);
-      captured.component?.handleInput("r");
-      const before = captured.component?.render(40) ?? [];
-
-      // "q" appears nowhere else in this render; "x" would match `secret.txt`.
-      captured.component?.handleInput(paste("q".repeat(500)));
-      const after = captured.component?.render(40) ?? [];
-
-      expect(after).toHaveLength(before.length);
-      expect(after.join("\n")).toContain("qqq");
-      for (const line of after) {
-        expect(visibleWidth(line)).toBeLessThanOrEqual(40);
-      }
-    });
-
-    it("drops the expand key instead of typing it into the reason", async () => {
-      const { view, captured, setToolsExpanded } = makeFakeView(false);
-      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
-
-      captured.component?.handleInput("r");
-      captured.component?.handleInput("a");
-      captured.component?.handleInput(CTRL_O);
+      const bash = makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          surface: "bash",
+          toolName: "bash",
+          value: "git reset HEAD",
+          matchedPattern: "git reset *",
+        },
+      });
+      const promise = presentInlinePermissionPrompt(view, "T", bash);
+      captured.component?.handleInput("u");
+      captured.component?.handleInput(ARROW_DOWN); // widen to git reset *
       captured.component?.handleInput(ENTER);
-
       expect(await promise).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "a",
+        approved: true,
+        state: "approved_for_global",
+        persistPattern: "git reset *",
       });
-      expect(setToolsExpanded).not.toHaveBeenCalled();
     });
 
-    it("navigates back to the decision step on escape from the reason step", async () => {
-      // r opens reason, esc returns to decision, then n deny
-      expect(await runPrompt(false, ["r", ESCAPE, "n"])).toEqual({
-        approved: false,
-        state: "denied",
+    it("returns to the decision step on escape from the range step", async () => {
+      const { view, captured } = makeFakeView(false);
+      const bash = makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          surface: "bash",
+          toolName: "bash",
+          value: "git reset HEAD",
+          matchedPattern: "git reset *",
+        },
       });
+      const promise = presentInlinePermissionPrompt(view, "T", bash);
+      captured.component?.handleInput("p");
+      captured.component?.handleInput(ESCAPE);
+      const text = captured.component?.render(80).join("\n") ?? "";
+      expect(text).toContain("Allow in this project");
+      captured.component?.handleInput("n"); // deny
+      expect(await promise).toEqual({ approved: false, state: "denied" });
     });
   });
 
@@ -574,22 +556,25 @@ describe("presentInlinePermissionPrompt", () => {
       expect(captured.component?.render(120).at(-1)).not.toContain("ctrl+o");
     });
 
-    it("does not intercept the expand key while a denial reason is typed", async () => {
-      // Bound to a printable key on purpose: the default Ctrl+O is a control
-      // character the reason editor rejects anyway, so it cannot discriminate.
-      const { view, captured, setToolsExpanded } = makeFakeView(false, "e");
-      const promise = presentInlinePermissionPrompt(view, "Title", ASK);
-
-      captured.component?.handleInput("r"); // decision -> reason
-      captured.component?.handleInput("e"); // typed literally, not an app action
-      captured.component?.handleInput(ENTER);
-
-      expect(await promise).toEqual({
-        approved: false,
-        state: "denied_with_reason",
-        denialReason: "e",
+    it("still toggles tool expansion during the persistent-scope range step", async () => {
+      const { view, captured, setToolsExpanded } = makeFakeView(false);
+      const bash = makePromptPayload({
+        kind: "bash",
+        request: {
+          ...makePromptPayload().request,
+          surface: "bash",
+          toolName: "bash",
+          value: "git reset HEAD",
+          matchedPattern: "git reset *",
+        },
       });
-      expect(setToolsExpanded).not.toHaveBeenCalled();
+      const promise = presentInlinePermissionPrompt(view, "Title", bash);
+      captured.component?.handleInput("p"); // decision -> range
+      captured.component?.handleInput(CTRL_O); // app action still handled
+      captured.component?.handleInput(ESCAPE); // back to decision
+      captured.component?.handleInput("n"); // deny
+      expect(await promise).toEqual({ approved: false, state: "denied" });
+      expect(setToolsExpanded).toHaveBeenCalledWith(true);
     });
   });
 });

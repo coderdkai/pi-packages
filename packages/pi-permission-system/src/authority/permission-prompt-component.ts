@@ -3,8 +3,7 @@ import type {
   ExtensionUIContext,
   KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { type Component, Input, matchesKey } from "@earendil-works/pi-tui";
-import { collapsePastedNewlines } from "#src/authority/bracketed-paste";
+import { type Component, matchesKey } from "@earendil-works/pi-tui";
 import type {
   DecisionSource,
   UserDecisionSurface,
@@ -17,12 +16,14 @@ import {
 } from "#src/authority/permission-dialog";
 import {
   initialPromptState,
+  type PersistentCandidate,
   type PromptEvent,
   type PromptKey,
   type PromptModelConfig,
   type PromptViewState,
   reducePrompt,
 } from "#src/authority/permission-prompt-decision";
+import { bashScopeCandidates } from "#src/path/bash-scope-patterns";
 import {
   completeViewBudget,
   type DialogView,
@@ -128,10 +129,30 @@ const OPTION_LABELS: Record<PromptKey, string> = {
   y: "Yes",
   s: DEFAULT_SESSION_LABEL,
   n: "No",
-  r: "No, provide reason",
+  p: "Allow in this project",
+  u: "Allow for you (persistent)",
 };
 
-const OPTION_ORDER: readonly PromptKey[] = ["y", "s", "n", "r"];
+const OPTION_ORDER: readonly PromptKey[] = ["y", "s", "n", "p", "u"];
+
+/**
+ * The layered persistent-allow candidates for this ask, narrowest first.
+ *
+ * A bash ask expands its command into scope candidates (`git reset HEAD` →
+ * `git reset HEAD` / `git reset *` / `git *`); any other ask offers its
+ * matched pattern as the single grant — a single candidate the model commits
+ * directly, skipping the range step.
+ */
+function persistCandidates(payload: PromptPayload): PersistentCandidate[] {
+  if (payload.kind === "bash" && payload.request.value !== "") {
+    return bashScopeCandidates(payload.request.value).map((c) => ({
+      pattern: c.pattern,
+      text: c.text,
+    }));
+  }
+  const pattern = payload.request.matchedPattern ?? "*";
+  return [{ pattern, text: pattern }];
+}
 
 export function presentInlinePermissionPrompt(
   view: PermissionPromptView,
@@ -143,6 +164,7 @@ export function presentInlinePermissionPrompt(
     doublePressToConfirm: view.doublePressToConfirm,
     sessionLabel: options?.sessionLabel ?? DEFAULT_SESSION_LABEL,
     sessionScope: options?.sessionScope,
+    persistCandidates: persistCandidates(payload),
   };
   return view.ui.custom<UnattributedDecision>(
     (tui, theme, keybindings, done) =>
@@ -189,8 +211,6 @@ function handleToolsExpandAction(
 
 class PermissionPromptComponent implements Component {
   private state: PromptViewState;
-  /** The denial-reason line editor, rebuilt each time the step is entered. */
-  private reason: Input;
   /** Whether the operator asked to see the complete request (ADR 0011 §4). */
   private expanded = false;
 
@@ -205,28 +225,6 @@ class PermissionPromptComponent implements Component {
     private readonly done: (decision: UnattributedDecision) => void,
   ) {
     this.state = initialPromptState(config);
-    this.reason = this.createReasonEditor();
-  }
-
-  /**
-   * A fresh editor per visit to the reason step.
-   *
-   * The framework editor carries an undo stack and a kill ring, so reusing one
-   * instance would let a reason the operator backed out of be restored into a
-   * later ask.
-   */
-  private createReasonEditor(): Input {
-    const editor = new Input();
-    // Emits pi-tui's zero-width cursor marker, which positions the hardware
-    // cursor for IME composition.
-    editor.focused = true;
-    editor.onSubmit = (draft) => {
-      this.apply({ type: "submitReason", draft });
-    };
-    editor.onEscape = () => {
-      this.apply({ type: "cancel" });
-    };
-    return editor;
   }
 
   invalidate(): void {
@@ -241,10 +239,10 @@ class PermissionPromptComponent implements Component {
     switch (this.state.step) {
       case "decision":
         return this.renderDecision(width);
-      case "reason":
-        return this.renderReason(width);
       case "scope":
         return this.renderScope();
+      case "range":
+        return this.renderRange();
     }
   }
 
@@ -285,10 +283,6 @@ class PermissionPromptComponent implements Component {
   }
 
   handleInput(data: string): void {
-    if (this.state.step === "reason") {
-      this.handleReasonInput(data);
-      return;
-    }
     if (this.handleAppAction(data)) {
       // One "expand" for the operator: the host expands its pending tool call
       // and the dialog expands its own render, on the same keystroke.
@@ -300,20 +294,6 @@ class PermissionPromptComponent implements Component {
     if (event) {
       this.apply(event);
     }
-  }
-
-  /**
-   * Hand the keystroke to the framework line editor.
-   *
-   * Delegating is what makes the field accept a paste: a paste arrives as one
-   * multi-character chunk wrapped in bracketed-paste markers, which the editor
-   * understands and a per-character reader cannot. Submit and cancel come back
-   * through the editor's callbacks, so the decision model still owns them.
-   */
-  private handleReasonInput(data: string): void {
-    this.reason.handleInput(collapsePastedNewlines(data));
-    // The editor mutates its own buffer silently; only the dialog can repaint.
-    this.requestRender();
   }
 
   private toEvent(data: string): PromptEvent | undefined {
@@ -344,9 +324,6 @@ class PermissionPromptComponent implements Component {
       this.done(outcome.decision);
       return;
     }
-    if (outcome.state.step === "reason" && this.state.step !== "reason") {
-      this.reason = this.createReasonEditor();
-    }
     this.state = outcome.state;
     this.requestRender();
   }
@@ -366,20 +343,21 @@ class PermissionPromptComponent implements Component {
     return lines;
   }
 
-  private renderReason(width: number): string[] {
+  private renderRange(): string[] {
+    const candidates = this.config.persistCandidates ?? [];
     const lines = [
       this.theme.fg("accent", this.title),
-      ...this.renderAsk(width).lines,
+      "Allow persistently — choose the scope:",
       "",
-      "Reason (required):",
-      // Exactly one row, whatever its length: the editor scrolls horizontally.
-      ...this.reason.render(width),
     ];
-    if (this.state.reasonError) {
-      lines.push(this.theme.fg("error", this.state.reasonError));
+    for (const [index, candidate] of candidates.entries()) {
+      const selected = this.state.highlightedRange === index;
+      const marker = selected ? "▶" : " ";
+      const text = `${marker} ${candidate.text}`;
+      lines.push(selected ? this.theme.fg("accent", text) : text);
     }
     lines.push("");
-    lines.push(this.theme.fg("muted", "enter submit · esc back"));
+    lines.push(this.theme.fg("muted", "↑/↓ move · enter confirm · esc back"));
     return lines;
   }
 

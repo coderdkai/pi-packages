@@ -80,10 +80,46 @@ describe("requestPermissionDecisionFromUi", () => {
     expect(result).toEqual({ approved: false, state: "denied" });
   });
 
-  it("returns denied_with_reason when user provides reason", async () => {
+  it("returns approved_for_project when user picks allow in this project", async () => {
     const ui: PermissionDecisionUi = {
-      select: vi.fn().mockResolvedValue("No, provide reason"),
-      input: vi.fn().mockResolvedValue("not now"),
+      select: vi.fn().mockResolvedValue("Yes, allow in this project"),
+      input: vi.fn(),
+    };
+    const result = await requestPermissionDecisionFromUi(
+      ui,
+      "Title",
+      "Message",
+      { persistPattern: "git reset *" },
+    );
+    expect(result).toEqual({
+      approved: true,
+      state: "approved_for_project",
+      persistPattern: "git reset *",
+    });
+  });
+
+  it("returns approved_for_global when user picks allow persistently", async () => {
+    const ui: PermissionDecisionUi = {
+      select: vi.fn().mockResolvedValue("Yes, allow persistently (you)"),
+      input: vi.fn(),
+    };
+    const result = await requestPermissionDecisionFromUi(
+      ui,
+      "Title",
+      "Message",
+      { persistPattern: "git *" },
+    );
+    expect(result).toEqual({
+      approved: true,
+      state: "approved_for_global",
+      persistPattern: "git *",
+    });
+  });
+
+  it("defaults a persistent allow to '*' when no pattern is provided", async () => {
+    const ui: PermissionDecisionUi = {
+      select: vi.fn().mockResolvedValue("Yes, allow in this project"),
+      input: vi.fn(),
     };
     const result = await requestPermissionDecisionFromUi(
       ui,
@@ -91,23 +127,10 @@ describe("requestPermissionDecisionFromUi", () => {
       "Message",
     );
     expect(result).toEqual({
-      approved: false,
-      state: "denied_with_reason",
-      denialReason: "not now",
+      approved: true,
+      state: "approved_for_project",
+      persistPattern: "*",
     });
-  });
-
-  it("returns denied when user selects deny-with-reason but gives empty input", async () => {
-    const ui: PermissionDecisionUi = {
-      select: vi.fn().mockResolvedValue("No, provide reason"),
-      input: vi.fn().mockResolvedValue(""),
-    };
-    const result = await requestPermissionDecisionFromUi(
-      ui,
-      "Title",
-      "Message",
-    );
-    expect(result).toEqual({ approved: false, state: "denied" });
   });
 
   it("returns denied when user dismisses dialog (undefined)", async () => {
@@ -123,7 +146,7 @@ describe("requestPermissionDecisionFromUi", () => {
     expect(result).toEqual({ approved: false, state: "denied" });
   });
 
-  it("passes four options to ui.select", async () => {
+  it("passes all decision options to ui.select", async () => {
     const selectFn = vi.fn().mockResolvedValue("Yes");
     const ui: PermissionDecisionUi = {
       select: selectFn,
@@ -134,8 +157,9 @@ describe("requestPermissionDecisionFromUi", () => {
     expect(options).toEqual([
       "Yes",
       "Yes, for this session",
+      "Yes, allow in this project",
+      "Yes, allow persistently (you)",
       "No",
-      "No, provide reason",
     ]);
   });
 

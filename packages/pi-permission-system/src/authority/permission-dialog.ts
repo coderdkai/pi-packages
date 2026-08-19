@@ -4,6 +4,8 @@ export type PermissionDecisionState =
   | "approved"
   | "approved_for_session"
   | "approved_for_serving_session"
+  | "approved_for_project"
+  | "approved_for_global"
   | "denied"
   | "denied_with_reason";
 
@@ -11,6 +13,12 @@ export type PermissionPromptDecision = {
   approved: boolean;
   state: PermissionDecisionState;
   denialReason?: string;
+  /**
+   * Set on a persistent allow (`approved_for_project` / `approved_for_global`):
+   * the wildcard pattern to record as an allow rule in the matching config
+   * scope. The authorizer performs the write.
+   */
+  persistPattern?: string;
   /**
    * True when the decision was made automatically by yolo mode rather than
    * by an interactive user prompt. Used by handlers to emit "auto_approved"
@@ -57,7 +65,8 @@ export interface PermissionDecisionUi {
 const APPROVE_OPTION = "Yes";
 const APPROVE_FOR_SESSION_OPTION = "Yes, for this session";
 const DENY_OPTION = "No";
-const DENY_WITH_REASON_OPTION = "No, provide reason";
+const ALLOW_IN_PROJECT_OPTION = "Yes, allow in this project";
+const ALLOW_FOR_USER_OPTION = "Yes, allow persistently (you)";
 
 export function normalizePermissionDenialReason(
   value: unknown,
@@ -93,6 +102,8 @@ export function isPermissionDecisionState(
     value === "approved" ||
     value === "approved_for_session" ||
     value === "approved_for_serving_session" ||
+    value === "approved_for_project" ||
+    value === "approved_for_global" ||
     value === "denied" ||
     value === "denied_with_reason"
   );
@@ -110,6 +121,8 @@ export interface RequestPermissionOptions {
     subagentLabel: string;
     servingSessionLabel: string;
   };
+  /** The pattern a persistent allow (`all` in project/for user) records. */
+  persistPattern?: string;
 }
 
 export async function requestPermissionDecisionFromUi(
@@ -122,8 +135,9 @@ export async function requestPermissionDecisionFromUi(
   const decisionOptions = [
     APPROVE_OPTION,
     sessionOption,
+    ALLOW_IN_PROJECT_OPTION,
+    ALLOW_FOR_USER_OPTION,
     DENY_OPTION,
-    DENY_WITH_REASON_OPTION,
   ] as const;
 
   const selected = await ui.select(`${title}\n${message}`, [
@@ -159,16 +173,24 @@ export async function requestPermissionDecisionFromUi(
     };
   }
 
-  if (selected === DENY_WITH_REASON_OPTION) {
-    const denialReason = normalizePermissionDenialReason(
-      await ui.input(
-        `${title}\nShare why this request was denied (optional).`,
-        "Reason shown back to the agent",
-      ),
-    );
-
-    return createDeniedPermissionDecision(denialReason);
+  if (selected === ALLOW_IN_PROJECT_OPTION) {
+    return {
+      approved: true,
+      state: "approved_for_project",
+      persistPattern: options?.persistPattern ?? "*",
+    };
   }
 
-  return createDeniedPermissionDecision();
+  if (selected === ALLOW_FOR_USER_OPTION) {
+    return {
+      approved: true,
+      state: "approved_for_global",
+      persistPattern: options?.persistPattern ?? "*",
+    };
+  }
+
+  return {
+    approved: false,
+    state: "denied",
+  };
 }

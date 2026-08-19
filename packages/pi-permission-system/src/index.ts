@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { warmBashParser } from "./access-intent/bash/parser";
 import { buildResolvedIntentFromMatchValues } from "./access-intent/input-normalizer";
+import { persistAllowRule } from "./approval-persistence";
 import { AuthorizerRegistry } from "./authority/authorizer-registry";
 import { AuthorizerSelection } from "./authority/authorizer-selection";
 import {
@@ -148,6 +149,27 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       PERMISSION_FORWARDING_TIMEOUT_MS,
     logger,
     prompter,
+    persistApproval: ({ scope, surface, pattern, cwd, projectTrusted }) => {
+      const result = persistAllowRule(
+        { agentDir, cwd: cwd ?? "" },
+        scope,
+        surface,
+        pattern,
+      );
+      // Reload so the grant governs future asks in this session; the manager's
+      // cache is re-resolved on the next check. Project-scope reflects the
+      // trust the session started with (an untrusted cwd writes nothing below).
+      if (projectTrusted && cwd) {
+        session.reload(true);
+      } else {
+        session.reload(false);
+      }
+      if (!result.ok) {
+        session.notify(
+          `Could not save the "${surface}" allow rule to the ${scope} config: ${result.error ?? "unknown error"}.`,
+        );
+      }
+    },
     // The published service is the narrow, session-scoped PermissionQuery a
     // chain link is handed (it routes bash/path at gate parity against the live
     // session cwd). A thunk because `permissionsService` is constructed below;

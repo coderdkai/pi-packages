@@ -105,6 +105,7 @@ export function makeAuthorizerSelectionDeps(
         heartbeats: { read: () => "absent", servingIds: () => [] },
       }),
     getForwardingTimeoutMs: overrides.getForwardingTimeoutMs ?? (() => 1000),
+    persistApproval: overrides.persistApproval ?? (() => undefined),
     logger: overrides.logger ?? makeAuthorizerLog(),
     prompter: overrides.prompter ?? makePrompterApi(),
     getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),

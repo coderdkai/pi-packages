@@ -62,6 +62,9 @@ function makeDeps(
       events,
       getPromptPreferences: () => makePromptPreferences(),
       requestPermissionDecision: decisionFn,
+      persistApproval: vi.fn(),
+      cwd: "/repo",
+      isProjectTrusted: () => true,
     },
     events,
     ui,
@@ -172,6 +175,9 @@ describe("LocalUserAuthorizer", () => {
       events,
       getPromptPreferences: () => makePromptPreferences(),
       requestPermissionDecision: decisionFn,
+      persistApproval: vi.fn(),
+      cwd: "/repo",
+      isProjectTrusted: () => true,
     });
 
     await authorizer.authorize(makeDetails());

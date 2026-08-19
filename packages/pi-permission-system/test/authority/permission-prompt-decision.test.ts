@@ -17,19 +17,22 @@ function makeConfig(
   };
 }
 
+const BASE_STATE = {
+  armedKey: undefined,
+  hint: "",
+  scopeServing: false,
+};
+
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe("reducePrompt", () => {
   describe("initial state", () => {
     it("starts on the decision step highlighting approve with nothing armed", () => {
-      const state = initialPromptState(makeConfig());
-      expect(state).toEqual({
+      expect(initialPromptState(makeConfig())).toEqual({
         step: "decision",
         highlightedKey: "y",
-        armedKey: undefined,
-        hint: "",
-        reasonError: undefined,
-        scopeServing: false,
+        highlightedRange: 0,
+        ...BASE_STATE,
       });
     });
   });
@@ -46,9 +49,9 @@ describe("reducePrompt", () => {
         state: {
           step: "decision",
           highlightedKey: "y",
+          highlightedRange: 0,
           armedKey: "y",
           hint: "Press y again to approve.",
-          reasonError: undefined,
           scopeServing: false,
         },
       });
@@ -87,9 +90,9 @@ describe("reducePrompt", () => {
         state: {
           step: "decision",
           highlightedKey: "n",
+          highlightedRange: 0,
           armedKey: "n",
           hint: "Press n again to deny.",
-          reasonError: undefined,
           scopeServing: false,
         },
       });
@@ -144,9 +147,9 @@ describe("reducePrompt", () => {
         state: {
           step: "decision",
           highlightedKey: "s",
+          highlightedRange: 0,
           armedKey: undefined,
           hint: "",
-          reasonError: undefined,
           scopeServing: false,
         },
       });
@@ -155,7 +158,8 @@ describe("reducePrompt", () => {
     it("wraps the highlight from the last option back to the first", () => {
       const config = makeConfig();
       let state = initialPromptState(config);
-      for (const _ of [0, 1, 2, 3]) {
+      // Five options (y/s/n/p/u): four up-presses from y wrap over all of them.
+      for (const _ of [0, 1, 2, 3, 4]) {
         const outcome = reducePrompt(config, state, {
           type: "nav",
           direction: "up",
@@ -163,7 +167,6 @@ describe("reducePrompt", () => {
         if (outcome.kind !== "render") throw new Error("expected render");
         state = outcome.state;
       }
-      // up from y wraps to r, then walks r→n→s→y over four presses
       expect(state.highlightedKey).toBe("y");
     });
 
@@ -174,12 +177,12 @@ describe("reducePrompt", () => {
         direction: "down",
       });
       if (down.kind !== "render") throw new Error("expected render");
-      // highlight is now s; move once more to n
       const down2 = reducePrompt(config, down.state, {
         type: "nav",
         direction: "down",
       });
       if (down2.kind !== "render") throw new Error("expected render");
+      // highlight is now n
       const outcome = reducePrompt(config, down2.state, { type: "confirm" });
       expect(outcome).toEqual({
         kind: "decision",
@@ -201,106 +204,158 @@ describe("reducePrompt", () => {
     });
   });
 
-  describe("deny with reason", () => {
-    it("opens the reason step on confirming r (double-press enabled)", () => {
-      const config = makeConfig();
-      const armed = reducePrompt(config, initialPromptState(config), {
-        type: "hotkey",
-        key: "r",
+  describe("persistent allow in project (p)", () => {
+    it("commits an approved_for_project decision with the single pattern when only one candidate", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "git reset HEAD", text: "git reset HEAD" },
+        ],
       });
-      if (armed.kind !== "render") throw new Error("expected render");
-      const outcome = reducePrompt(config, armed.state, {
-        type: "hotkey",
-        key: "r",
-      });
-      expect(outcome).toEqual({
-        kind: "render",
-        state: {
-          step: "reason",
-          highlightedKey: "r",
-          armedKey: undefined,
-          hint: "",
-          reasonError: undefined,
-          scopeServing: false,
-        },
-      });
-    });
-
-    it("opens the reason step immediately when double-press is disabled", () => {
-      const config = makeConfig({ doublePressToConfirm: false });
       const outcome = reducePrompt(config, initialPromptState(config), {
         type: "hotkey",
-        key: "r",
-      });
-      expect(outcome.kind).toBe("render");
-      if (outcome.kind !== "render") throw new Error("expected render");
-      expect(outcome.state.step).toBe("reason");
-    });
-
-    it("rejects an empty reason and keeps the reason step open", () => {
-      const config = makeConfig({ doublePressToConfirm: false });
-      const opened = reducePrompt(config, initialPromptState(config), {
-        type: "hotkey",
-        key: "r",
-      });
-      if (opened.kind !== "render") throw new Error("expected render");
-      const outcome = reducePrompt(config, opened.state, {
-        type: "submitReason",
-        draft: "   ",
-      });
-      expect(outcome).toEqual({
-        kind: "render",
-        state: {
-          step: "reason",
-          highlightedKey: "r",
-          armedKey: undefined,
-          hint: "",
-          reasonError: "A reason is required.",
-          scopeServing: false,
-        },
-      });
-    });
-
-    it("commits a denied_with_reason decision for a non-empty reason", () => {
-      const config = makeConfig({ doublePressToConfirm: false });
-      const opened = reducePrompt(config, initialPromptState(config), {
-        type: "hotkey",
-        key: "r",
-      });
-      if (opened.kind !== "render") throw new Error("expected render");
-      const outcome = reducePrompt(config, opened.state, {
-        type: "submitReason",
-        draft: "  not now  ",
+        key: "p",
       });
       expect(outcome).toEqual({
         kind: "decision",
         decision: {
-          approved: false,
-          state: "denied_with_reason",
-          denialReason: "not now",
+          approved: true,
+          state: "approved_for_project",
+          persistPattern: "git reset HEAD",
         },
       });
     });
 
-    it("navigates back to the decision step on escape from the reason step", () => {
-      const config = makeConfig({ doublePressToConfirm: false });
+    it("opens the range step when multiple candidates are offered (double-press disabled)", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "git reset HEAD", text: "git reset HEAD" },
+          { pattern: "git reset *", text: "git reset *" },
+          { pattern: "git *", text: "git *" },
+        ],
+      });
+      const outcome = reducePrompt(config, initialPromptState(config), {
+        type: "hotkey",
+        key: "p",
+      });
+      expect(outcome.kind).toBe("render");
+      if (outcome.kind !== "render") throw new Error("expected render");
+      expect(outcome.state.step).toBe("range");
+      expect(outcome.state.highlightedRange).toBe(0);
+      expect(outcome.state.highlightedKey).toBe("p");
+    });
+
+    it("commits the highlighted range in the range step", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "git reset HEAD", text: "git reset HEAD" },
+          { pattern: "git reset *", text: "git reset *" },
+          { pattern: "git *", text: "git *" },
+        ],
+      });
       const opened = reducePrompt(config, initialPromptState(config), {
         type: "hotkey",
-        key: "r",
+        key: "p",
+      });
+      if (opened.kind !== "render") throw new Error("expected render");
+      const moved = reducePrompt(config, opened.state, {
+        type: "nav",
+        direction: "down",
+      });
+      if (moved.kind !== "render") throw new Error("expected render");
+      expect(moved.state.highlightedRange).toBe(1);
+      const outcome = reducePrompt(config, moved.state, { type: "confirm" });
+      expect(outcome).toEqual({
+        kind: "decision",
+        decision: {
+          approved: true,
+          state: "approved_for_project",
+          persistPattern: "git reset *",
+        },
+      });
+    });
+
+    it("commits the narrowest grant by default (highlightedRange 0)", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "git reset HEAD", text: "git reset HEAD" },
+          { pattern: "git reset *", text: "git reset *" },
+        ],
+      });
+      const opened = reducePrompt(config, initialPromptState(config), {
+        type: "hotkey",
+        key: "p",
+      });
+      if (opened.kind !== "render") throw new Error("expected render");
+      const outcome = reducePrompt(config, opened.state, { type: "confirm" });
+      expect(outcome).toEqual({
+        kind: "decision",
+        decision: {
+          approved: true,
+          state: "approved_for_project",
+          persistPattern: "git reset HEAD",
+        },
+      });
+    });
+
+    it("returns to the decision step on escape from the range step", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "git reset HEAD", text: "git reset HEAD" },
+          { pattern: "git *", text: "git *" },
+        ],
+      });
+      const opened = reducePrompt(config, initialPromptState(config), {
+        type: "hotkey",
+        key: "p",
       });
       if (opened.kind !== "render") throw new Error("expected render");
       const outcome = reducePrompt(config, opened.state, { type: "cancel" });
+      expect(outcome.kind).toBe("render");
+      if (outcome.kind !== "render") throw new Error("expected render");
+      expect(outcome.state.step).toBe("decision");
+      expect(outcome.state.highlightedKey).toBe("p");
+    });
+  });
+
+  describe("persistent allow for user (u)", () => {
+    it("commits an approved_for_global decision when double-press is disabled", () => {
+      const config = makeConfig({ doublePressToConfirm: false });
+      const outcome = reducePrompt(config, initialPromptState(config), {
+        type: "hotkey",
+        key: "u",
+      });
       expect(outcome).toEqual({
-        kind: "render",
-        state: {
-          step: "decision",
-          highlightedKey: "r",
-          armedKey: undefined,
-          hint: "",
-          reasonError: undefined,
-          scopeServing: false,
+        kind: "decision",
+        decision: {
+          approved: true,
+          state: "approved_for_global",
+          persistPattern: "*",
         },
       });
+    });
+
+    it("opens the range step when multiple candidates are offered", () => {
+      const config = makeConfig({
+        doublePressToConfirm: false,
+        persistCandidates: [
+          { pattern: "rm foo", text: "rm foo" },
+          { pattern: "rm *", text: "rm *" },
+        ],
+      });
+      const outcome = reducePrompt(config, initialPromptState(config), {
+        type: "hotkey",
+        key: "u",
+      });
+      expect(outcome.kind).toBe("render");
+      if (outcome.kind !== "render") throw new Error("expected render");
+      expect(outcome.state.step).toBe("range");
+      // The highlighted key remembers u, so the committed scope is global.
+      expect(outcome.state.highlightedKey).toBe("u");
     });
   });
 
