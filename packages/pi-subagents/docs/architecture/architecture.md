@@ -57,7 +57,7 @@ The following are **not** boundaries.
 Pi's client-server split is a deferral pending an upstream capability (`docs/architecture/client-server-opportunities.md`), not a declined direction.
 The parity status of the SDK `spawn()` path against the tool path, the stability guarantee carried by `SubagentRecord` and the event payloads, parent-data redaction for SDK-spawned children, and ownership of `get_subagent_result` presentation are all unstated rather than settled.
 
-The reimplement-don't-merge contribution pattern, applied across eight closed pull requests, is a repo-wide process rather than a scope boundary and belongs in `CONTRIBUTING.md`.
+The reimplement-don't-merge contribution pattern, applied across eight closed pull requests, is a repo-wide process rather than a scope boundary, and is documented in the repository's [contributing guide](https://github.com/gotgenes/pi-packages/blob/main/CONTRIBUTING.md).
 
 ## Domain model
 
