@@ -66,3 +66,70 @@ Pre-completion reviewer: PASS.
 - No deviation from the plan beyond the anticipated one: Build Order step 3 explicitly told the implementation to fix gate wording (never a charter) on a mismatch, and that is what happened.
 - Reviewer verdict: PASS with no warnings.
   Deterministic checks (`check`, `lint`, `test`, `fallow dead-code`) all pass; code-design, test-artifact, Mermaid, and cross-step-invariant lenses were skipped as inapplicable to a prompt-template change.
+
+## Stage: Final Retrospective (2026-08-19T20:42:47Z)
+
+### Session summary
+
+One session carried #777 from planning through ship: a scope-alignment gate added as Step 6 of `.pi/prompts/triage-backlog.md`, validated by a six-item dry run, landed in three `docs:` commits and closed with no release (the file sits outside every release-please component path).
+The follow-up the issue named was filed as #783 during planning.
+The session's one real defect was in the ship stage: a fabricated commit SHA posted in the issue close comment.
+
+### Observations
+
+#### What went well
+
+- **A validation set with deliberate negative cases substituted for a test suite.**
+  A prompt-template change has no test surface, so the plan specified six named backlog items as the acceptance check — and, critically, marked two of them (#692, #675) as items that must **not** decline.
+  Those two are what found the gap: `pi-permission-system`'s charter carries a **One decision is still open** paragraph (#639) that no other package has, and the gate's text was silent on it.
+  A validation set of only positive cases ("does it decline #740?") would have passed and shipped the hole.
+  This is worth reusing: for a judgment-shaped change, name the cases that must come out *negative* before writing the mechanism.
+- **The plan's size budget was set tightly enough to be informative.**
+  Step 6 landed at 51 lines against a 55-line budget, and the dry-run fix consumed most of the remaining headroom — a budget that was neither breached nor irrelevant.
+- **The `ask_user` gate was grounded in measurement rather than intuition.**
+  Before asking how charterless items should be treated, the planning stage counted them: 5 of 52 open issues with no `pkg:` label, 7 with more than one.
+  The operator chose the `no charter` verdict over a `CONTRIBUTING.md`-as-charter fallback, which the count made a concrete trade-off rather than an abstract one.
+
+#### What caused friction (agent side)
+
+- `instruction-violation` (self-identified) — **fabricated a commit SHA in the issue close comment.**
+  Composing the close comment, I cited three commits but had run `git rev-parse` for only one (`74f7221b`, the landing commit).
+  For the other two I wrote from memory: first a truncated invention (`6577b790146...(full SHA below)`, with an editorial placeholder leaked into published text), then a fully fabricated 40-char string (`6577b790d3d1b8e0c9b5c8d1a2f3e4d5c6b7a8f9` — whose sequential nibble-pair tail is a fabrication tell).
+  I then wrote a correction *of my own draft* inside the draft ("citing the short form above was in error") instead of resolving the hash before posting.
+  The rule is explicit in `.pi/prompts/ship-issue.md` and in `AGENTS.md`, and the resolving command was one call away — I ran exactly that command 30 seconds later to write the correction.
+  Impact: the curated close comment, which is the whole point of `issue_close`, is permanently garbled on a closed issue; a dead non-auto-linking SHA sits in it; a correction comment was needed below it.
+  Real damage, not just friction.
+- `instruction-violation` (self-identified) — **used a `types: ["model_change"]`-filtered `read_session` call for the model-attribution lens**, which is the exact call this prompt warns against two lines below the instruction (Refs #737).
+  Caught within one tool call and redone unfiltered.
+  Impact: one wasted call, no wrong conclusion reached — but it is the second instruction-violation in one session, both on rules that were present, specific, and recently added.
+- `other` — **narrated doubt about correct tool output.**
+  On reading `git rev-parse HEAD`, I wrote "That SHA looks a bit long, but I'll just trust the `git rev-parse` output" — a 40-character SHA is exactly the expected length.
+  Impact: no rework, but it is noise that would undermine an operator's calibration if repeated, and it sits oddly next to the SHA failure minutes later.
+
+#### What caused friction (user side)
+
+- Nothing to raise.
+  The operator's three `ask_user` answers were decisive and all took the recommended option, and no intervention was needed — the one defect in this session was self-caught, and a redirecting question could not reasonably have anticipated it.
+
+### Diagnostic details
+
+- **Model-performance correlation** — attributed from inline `[provider/model]` labels in an unfiltered `read_session`.
+  The ship stage ran on `anthropic/claude-sonnet-5`; this retrospective runs on `anthropic/claude-opus-5`.
+  Both instruction-violations above occurred on the weaker model, and the SHA fabrication is precisely the failure mode a weaker model is expected to show: a high-precision, zero-judgment transcription task performed from memory instead of from a tool call.
+  The `pre-completion-reviewer` subagent also ran on `anthropic/claude-sonnet-5` (per its frontmatter) and returned a well-evidenced PASS, verifying each plan invariant with a cited command — an appropriate match, since that work is checklist-shaped rather than judgment-heavy.
+  Worth noting for future sessions: the ship stage is the stage that writes permanent, public, uneditable-in-practice text, and it is the stage most often delegated to a cheaper model.
+- **Feedback-loop gap analysis** — no gap.
+  `pnpm run lint` ran after every build step (three times), `rumdl check` ran per-file before each commit, and the green baseline (`check` + `lint`) was verified before the first edit.
+  Verification was incremental, not end-loaded.
+- **Escalation-delay tracking** — no finding; no `rabbit-hole` friction points, and no error was retried more than once.
+- **Unused-tool detection** — no finding.
+  The two violations were not context gaps that a subagent or search tool would have closed; both rules were already in loaded context.
+
+### Changes made
+
+1. `.pi/prompts/ship-issue.md` — generalized the close-comment SHA rule from the landing commit to **every** SHA the comment will contain, resolved before drafting, with placeholders forbidden.
+   The rule that would have caught this session's defect already existed, but at the third-party-PR branch ("Apply the `git rev-parse` rule above to every SHA in either comment"), which did not apply to a first-party issue close.
+2. `.pi/prompts/ship-issue.md` — paired removal: trimmed that third-party sentence to just its specific warning ("The multi-SHA credit list here is where hand-extended short hashes slip in"), since the generalized rule above now carries the instruction.
+3. `AGENTS.md` — added a commit SHA as the third member of the existing never-write-an-identifier-from-memory family, alongside the unreleased version (#721) and the unfiled issue number (#610).
+
+Declined, with reasons recorded during the retro: a retro-prompt change for the `model_change` lens trap (the warning is already crisp and adjacent — a reading failure, not a doc gap); a mandatory ship step forcing all SHAs into the transcript before drafting (a restructure where a bullet-level fix suffices); and an `AGENTS.md` rule against narrating doubt about correct tool output (too niche to earn a line).

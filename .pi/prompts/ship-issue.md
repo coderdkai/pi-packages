@@ -86,8 +86,10 @@ git log --oneline <pkg-tag>..HEAD
 The comment should include:
 
 - The commit hash that lands the change ("Implemented in <sha> …").
-  Get the full 40-char SHA from `git rev-parse <commit>` and paste it exactly — never hand-type or extend a short SHA from memory; a fabricated SHA does not auto-link.
-  Write it as plain text — no backticks — so GitHub auto-links it to the commit.
+  Run `git rev-parse` for **every** SHA the comment will contain — the landing commit and any follow-on commits — before you start drafting.
+  Paste each exactly; never hand-type or extend a short SHA from memory, and never leave a placeholder to fill in later.
+  A fabricated SHA does not auto-link (Refs #704, #777).
+  Write them as plain text — no backticks — so GitHub auto-links them to the commits.
 - A short bullet list of feature/breaking commits.
 - One sentence on user-visible behavior change.
 - A note flagging any breaking change (matches `feat!:` commits).
@@ -100,7 +102,7 @@ When `$1` is a third-party **PR** adopted via `/review-third-party-pr` (we re-im
 Verify with `gh api repos/gotgenes/pi-packages/issues/$1 --jq '.pull_request != null'`.
 Close it with `gh pr comment` then `gh pr close` — never merge — crediting the contributor by `@login`.
 An adopted PR and the issue it addresses are both close targets: shipping either one closes the other too — read the retro's PR Review stage for the counterpart number.
-Apply the `git rev-parse` rule above to every SHA in either comment; a multi-SHA credit list is where hand-extended short hashes slip in (Refs #704).
+The multi-SHA credit list here is where hand-extended short hashes slip in (Refs #704).
 
 A shipped issue can also supersede open third-party PRs without either being the close target — this repo reimplements rather than merges.
 Close each PR the plan names with `gh pr comment` then `gh pr close`, never merge, crediting the author by `@login` (Refs #670, #690).
