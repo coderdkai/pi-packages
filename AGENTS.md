@@ -331,6 +331,8 @@ Use `echo ---`.
 A shell snippet quoted inside a `/* */` block comment must not contain `*/` — a `sed 's/,.*//'` closes the comment and breaks the file's parse.
 Use `cut -d, -f1`.
 Pass file tool paths repo-relative (`packages/<pkg>/src/x.ts`), not hand-built absolute ones — a mistyped absolute path trips the `external_directory` gate instead of failing fast (Refs #726).
+Before making an existing prose convention machine-read (a grep-able heading, tag, or marker), enumerate its existing spellings first.
+A hand-written convention drifts — `Open-issue sweep dispositions` had three spellings across two packages' archives (Refs #767).
 
 ## Markdown
 
