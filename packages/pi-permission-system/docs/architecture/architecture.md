@@ -517,6 +517,7 @@ The guide covers the two-layer model, flat format reference, composition example
 ## Cross-extension service accessor
 
 The primary cross-extension API is a `Symbol.for()`-backed service object on `globalThis`.
+The cross-node contract governing this surface — session-keyed publication, ready-payload facts, the ready latch, and the deprecation of the zero-arg accessor — is settled in [ADR 0012](../decisions/0012-cross-node-extension-contract.md); the behavior described in this section is current until those decisions are implemented.
 
 Pi's extension loader creates a fresh jiti instance per extension with `moduleCache: false`, isolating module-scoped state.
 `Symbol.for()` and `globalThis` are process-global by spec, so they survive this isolation.
