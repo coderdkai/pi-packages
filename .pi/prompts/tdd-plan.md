@@ -103,6 +103,12 @@ If a step uncovers a problem the plan didn't anticipate (e.g. a downstream test 
 If the deviation is large, stop and ask.
 If a plan's quantitative target (LOC, clone count, complexity) does not fall out as the plan predicted, treat that as a deviation: re-decide via `ask_user` rather than escalating the abstraction to force the number.
 
+## Filing an issue mid-implementation
+
+When a step surfaces work outside the plan's scope, file it and keep going — do not scope-creep the step.
+Then load the `roadmap-fit` skill and follow it: an issue spun off while its package has an open improvement phase gets a recorded disposition at filing time, not at phase close, which is too late to fold anything in.
+The skill exits at its first step when no phase is open, and recording a disposition never authorizes implementing the work now.
+
 ## After the last TDD step
 
 1. Run the full suite: `pnpm run test`.

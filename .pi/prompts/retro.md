@@ -178,6 +178,9 @@ A retro commit (`docs(retro): ...`) should land the retro file plus small (~1–
 If a proposed change is larger — touches more than ~3 files, restructures content significantly, or rewrites a prompt's scope — record it in the retro file as a follow-up but **do not** implement it inline.
 Suggest the user open a GitHub issue and run `/plan-issue` on it.
 
+When an issue is actually filed during the retro, load the `roadmap-fit` skill and follow it for each one — an issue spun off while its package has an open improvement phase gets a recorded disposition now, not at phase close.
+The skill exits at its first step when no phase is open.
+
 ## Step 7 — Verbosity check before landing changes
 
 Retro-driven additions to `AGENTS.md` and prompt bodies should land as **rule + tight example**, not **rule + rationale + worked example**.

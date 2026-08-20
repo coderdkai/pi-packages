@@ -199,6 +199,9 @@ If planning identified work to defer to a separate issue (a follow-up named in D
 Record each new issue number in the plan's Non-Goals / Open Questions.
 File nothing speculative — only follow-ups the plan concretely names.
 
+After filing, load the `roadmap-fit` skill and follow it for each new issue — an issue spun off while its package has an open improvement phase gets a recorded disposition now, not at phase close.
+The skill exits at its first step when no phase is open.
+
 ## Commit
 
 Lint the plan file first so a markdown slip is caught here, not at the next stage's baseline (a `[#N]` mention inside backticks is a code span, not a reference, so its `[#N]:` definition trips `MD053`):
