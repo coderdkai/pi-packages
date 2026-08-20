@@ -27,5 +27,23 @@ Plan committed as `docs/plans/0767-roadmap-fit-at-filing-time.md`; the change is
   The reconciliation therefore lands as a subsection inside Step 2 rather than as a new numbered step.
 - Release framing: the touched files (`.pi/`, `AGENTS.md`) lie outside every release-please component path, so the change cuts no release at all — "ship independently" means land and close.
 
+## Stage: Implementation — Build (2026-08-20T01:32:46Z)
+
+### Session summary
+
+Executed all five Build Order steps as five `docs:` commits: the new `.pi/skills/roadmap-fit/SKILL.md`, the four filing-site directives (`/plan-issue`, `/tdd-plan`, `/build-plan`, `/retro`), the `#### Open-issue sweep dispositions` heading standardization in `/plan-improvements` and `improvement-discovery`, the `/finish-phase` reconciliation subsection, and the `AGENTS.md` entry.
+No deviations from the plan: every file in its Module-Level Changes table landed as described and nothing else was touched.
+Pre-completion reviewer: PASS.
+
+### Observations
+
+- Tidy First was skipped per the skill's applicability gate — the plan touches no `src/`/`test/` files.
+- Both dry-runs the plan promised reproduced their planning-time measurements: the detection grep (`^## Improvement roadmap — Phase`) matches nothing across all `packages/*/docs/architecture/architecture.md`, so the gate ships as a verified no-op at rest, and the reconciliation query against Phase 13's window still returns the same 15 issues.
+- The `improvement-discovery` Output format gained a trailing item 6 rather than absorbing the rule into item 1, because the dispositions list is its own artifact and not part of the health-metrics table; `/plan-improvements`'s own Output item 1 did take the rule in place, since its item 1 is the findings summary the list lives inside.
+- One sloppy `Edit` call included a no-op entry (identical `oldText`/`newText`), which still reported as a replaced block.
+  Harmless here, but it is the same class of miscount `AGENTS.md` warns about when counting reported blocks against intended edits.
+- The reviewer independently confirmed the two structural claims the plan flagged as invariants at risk: `/finish-phase`'s four step self-references (`Step 1`, `per Step 4`, `Step 5.2`, `Step 5.3`) all still resolve, and `/plan-improvements`'s Output items 1–5 were not renumbered.
+- Per the `AGENTS.md` stale-prompt rule, none of the edited templates were re-invoked to check the change — this session runs the pre-edit copies.
+
 [#751]: https://github.com/gotgenes/pi-packages/issues/751
 [#753]: https://github.com/gotgenes/pi-packages/issues/753
