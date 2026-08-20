@@ -36,3 +36,29 @@ The plan (`docs/plans/0786-cross-node-extension-contract-adr.md`) structures the
 [#635]: https://github.com/gotgenes/pi-packages/issues/635
 [#699]: https://github.com/gotgenes/pi-packages/issues/699
 [#702]: https://github.com/gotgenes/pi-packages/pull/702
+
+## Stage: Implementation — Build (2026-08-20T21:25:39Z)
+
+### Session summary
+
+All eight Build Order steps completed: the four mechanical claims re-verified against source, five deliberation gates run with the operator, ADR 0012 authored and committed (`c87e04b7`), the architecture-doc pointer added, downstream issues filed ([#787] latch, [#788] judge migration, [#789] docs consolidation), [#699] re-scoped by comment, and the issue numbers written back into the ADR's map (`569d2a27`).
+Pre-completion reviewer: PASS.
+
+### Observations
+
+- The plan's leading parameter-2 candidate (capability on the ready payload) was rejected at Gate B on the operator's channel-purity objection ("that's not data, that's a client to a service; it only works because it's all in memory") — grounded in this package's own ADR 0011 §6 (the bus as narrowest renderer).
+  The adopted mechanism is a refinement the objection produced: session-keyed publication with the key traveling as data on the ready payload, making the "largest contract change" candidate additive.
+  Lesson: when the operator pushes back on a recommendation, re-derive the rejected alternative's cost honestly — the original C4 framing had priced the redesign version, not the additive one.
+- Gate A grew a deliberation the plan never enumerated: a local/triage adjudication mode (a relaying node's link deciding ahead of forwarding, motivated by the operator's per-node-judge and orchestrator-judge scenarios).
+  It was rejected on a structural trilemma (forward anyway / replicate policy that session rules stale / accept the bypass), and the rejection dissolved an author-declared-placement axis before it entered the contract — the containment win that unblocked parameter 1.
+- The operator bounced two gates for insufficient grounding before answering ("wait to use `ask_user` until it's clear I have a solid understanding"), consistent with the planning session's lesson: for this operator, in contested design space, brief to parity first — vocabulary tables (link vs. forwarding relationship, node vs. process vs. subagent) and end-to-end mechanism walks (the S2 and S3 ask flows) are what unlocked decisions.
+- Mid-gate factual questions ("who uses the query surface?") were answered by checking source and docs live rather than from memory; the answer (no in-repo accessor-based query consumers; two documented external use cases) materially informed the accessor-deprecation decision.
+- Operator amendments recorded in the ADR beyond the plan's candidate set: the O4 channel rule (no RPC-over-event-bus, bus stays fire-and-forget) and the runtime deprecation-warning mechanism (`process.emitWarning` with `DeprecationWarning` type, prompted by the operator's "how can downstream authors notice at runtime?").
+- Error codes on duplicate-registration errors (kept on the table by the plan from [#699]'s proposal) were declined — post-contract duplicates are genuine author bugs; additive later if a consumer need appears.
+- roadmap-fit exited at step 1 for all three filed issues (no open phase in pi-permission-system; no architecture doc in pi-permission-model-judge).
+- ADR 0007 deliberately untouched: §7 reaffirmed unamended, stated inside ADR 0012 rather than as a 0007 header edit.
+- Pre-completion reviewer: PASS (all deterministic checks green; invariants verified by content review; follow-up filing confirmed against live issue state).
+
+[#787]: https://github.com/gotgenes/pi-packages/issues/787
+[#788]: https://github.com/gotgenes/pi-packages/issues/788
+[#789]: https://github.com/gotgenes/pi-packages/issues/789
