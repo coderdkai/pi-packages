@@ -200,11 +200,11 @@ If the migrated code is not smaller than the workaround it replaces, the contrac
 
 - The [#699] defect family ends structurally: no duplicate throw (the child's sibling registers into the child's own keyed service), no silently weakened child gates (extractors land where the child's gates read), no per-start stderr noise, and the vacancy that remains is recorded where the operator already looks.
 - A sibling author's obligation shrinks to one idempotent ready handler; a subagent implementation's obligation shrinks to the announcement; neither ever learns the other exists.
-- The decision-to-implementation map (issue numbers recorded at filing):
+- The decision-to-implementation map:
   - Decisions 2 and 4 — re-scoped onto [#699] (keyed publication and locator, ready-payload fields, vacant-cell observation).
-  - Decision 3 — the latch, filed as its own implementation issue.
-  - Decision 7 — the judge migration in `pi-permission-model-judge`, filed as its own issue; the accessor deprecation warning rides the decision-2 work.
-  - Decisions 5 and 6 — the docs consolidation (adapter convention home, asymmetry statement, cross-extension API rewrite), filed as its own issue.
+  - Decision 3 — the latch, [#787].
+  - Decision 7 — the judge migration in `pi-permission-model-judge`, [#788]; the accessor deprecation warning rides the decision-2 work on [#699].
+  - Decisions 5 and 6 — the docs consolidation (adapter convention home, asymmetry statement, cross-extension API rewrite), [#789].
 - PR [#702] is evaluated against this contract rather than against [#699]'s option list; its exported-detector approach is superseded by the keyed channel, and its documentation example (`(_event, ctx) => ...`) contradicts the verified SDK handler signature.
 - Anticipated extensions, supported by the law and deliberately not decided here: requester-context facts-widening (letting an adjudicating node's link distinguish a forwarded ask and its requester — more facts traveling, additive, but it reverses part of [#635]'s narrowing and needs its own deliberation), and machine-readable duplicate-error codes if a real consumer need appears.
 - The architecture doc's "Cross-extension service accessor" section points here; its behavioral prose changes only as the implementation issues land.
@@ -248,4 +248,7 @@ Removing the zero-arg accessor in the same cut breaks unknown external consumers
 [#699]: https://github.com/gotgenes/pi-packages/issues/699
 [#702]: https://github.com/gotgenes/pi-packages/pull/702
 [#727]: https://github.com/gotgenes/pi-packages/issues/727
+[#787]: https://github.com/gotgenes/pi-packages/issues/787
+[#788]: https://github.com/gotgenes/pi-packages/issues/788
+[#789]: https://github.com/gotgenes/pi-packages/issues/789
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
