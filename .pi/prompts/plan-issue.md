@@ -62,6 +62,8 @@ Before investigating the issue, load skills relevant to the change:
 7. When the plan introduces a public API pattern (package `exports`, `Symbol.for()` accessor, service interface) or agent-facing message formatting (attribution tags, error prefixes, log labels), use colgrep or grep to search sibling packages for the established convention and follow it unless there is a documented reason to diverge.
    When a config key or public field names an SDK/domain concept (a tool-call part, event, or content type), use the SDK's own term for it — verify against the SDK types — rather than adopting a term from the issue body verbatim (Refs #580: `commandField` shipped, then needed renaming to `commandArgument` to match `ToolCall.arguments`).
    When the change introduces a mechanism a mature ecosystem already standardizes (log redaction, retry/backoff, caching, rate limiting), check what established libraries in that space actually do before building the `ask_user` option set — a set built only from first principles can omit the standard, lowest-maintenance choice (Refs #647).
+   When the plan **removes** an existing repo-wide convention rather than introducing one, find why it was introduced before planning its removal: `git log -S'<literal>'` to the first commit, then read that commit's plan and retro.
+   A rationale that turns out to govern a *different* mechanism belongs in the plan's Non-Goals, or the convention gets restored later on the strength of the same memory (Refs #778: the `promptSnippet` name prefix had no recorded rationale; the remembered one was `promptGuidelines` attribution).
 8. Determine the issue's **release recommendation** from the package's architecture roadmap, if it is part of one.
    Grep `packages/<PKG>/docs/architecture/architecture.md` for the step that references this issue (`(#$1)` / `[#$1]`) and read its `Release:` tag (defined by the `improvement-discovery` skill):
    - `Release: independent` (or no tag, or the issue is not in any roadmap) → **ship independently**.
@@ -174,6 +176,7 @@ Then an H1 title (e.g., `# <short descriptive title>`) — required by markdownl
 - **Test Impact Analysis** — for extraction and refactoring issues: (1) what new unit tests does the extraction enable that were previously impossible or impractical?
   (2) what existing tests become redundant with the new lower-level tests, and can they be simplified or removed?
   (3) which existing tests must stay as-is because they genuinely exercise the layer being extracted?
+  For a prompt or skill change, the shell commands the new text prescribes are its testable surface: dry-run each at planning time and record the expected output, so `/build-plan` can re-run them as verification (Refs #767).
 - **Invariants at risk** — when the change touches a surface a prior phase step already refactored, list that step's documented invariants (the architecture roadmap's `Outcome:`/`Landed:` bullets) and name the test that pins each — add a test if the invariant lives only in prose.
   A later step must not regress an earlier step's outcome with a green suite.
   When an invariant is quantitative (a byte-identical prefix, a token budget, a cache or latency characteristic), measure the baseline and predict the post-change value at planning time.
@@ -196,6 +199,9 @@ If the change is breaking, say so explicitly in Goals and use `feat!:` in the su
 If planning identified work to defer to a separate issue (a follow-up named in Design Overview, Non-Goals, or Open Questions), create it now with `gh issue create` — before the plan commit, while this session holds full context.
 Record each new issue number in the plan's Non-Goals / Open Questions.
 File nothing speculative — only follow-ups the plan concretely names.
+
+After filing, load the `roadmap-fit` skill and follow it for each new issue — an issue spun off while its package has an open improvement phase gets a recorded disposition now, not at phase close.
+The skill exits at its first step when no phase is open.
 
 ## Commit
 

@@ -52,6 +52,23 @@ Cite an issue in a module-tree entry **only** when the ref encodes an active con
 Without this discipline, the per-change doc-update commits that append provenance re-inflate the tree — the debt #601 and #605 paid down in bulk for pi-permission-system and pi-subagents.
 `/finish-phase`'s bounded doc-hygiene step holds each phase's touched module-tree entries to this standard (Refs #601, #605, #606, #607).
 
+### Reading this repo's own artifacts
+
+When mining history for a **durable** claim — a scope charter, a triage verdict, an ADR, a README boundary — this repo's artifacts answer narrower questions than they appear to.
+
+A plan's `## Non-Goals` is scoped to that change, not to the package.
+It answers "what is out of scope for this change", never "what is out of scope forever", and it mixes three unrelated claims under one heading: sequencing (not in this change), deferral (not until someone asks), and a real boundary (not ever, and here is why).
+So **a plan Non-Goal is a lead, not a citation** — use it to find the ADR or numbered design principle, and cite that.
+A Non-Goal decays fastest in the most active packages: `pi-colgrep`'s plan `0092` declared `promptGuidelines` out of scope and `fa164a19` changed one the same day under the same issue, and `pi-github-tools`' plan `0005` forbade retry/timeout on one-shot tools before #673 and #764 added both (Refs #775).
+
+Pull-request status is an **inverted** signal here, because the repo reimplements adopted third-party changes through its own TDD cycle rather than merging them.
+Seven of nine closed-unmerged external PRs on `pi-permission-system`, and six on `pi-subagents`, shipped as capability with `Co-authored-by` credit — so "closed unmerged" usually means *accepted*.
+Read the close comment, never the close status.
+An **open** PR is not a decline either: #692 sits unmerged because the policy-source channel is undecided (#639), while `pi-permission-system` design principle 8 anticipates the capability outright.
+
+Check an ADR's frontmatter `status:` before citing it.
+`pi-subagents` `docs/decisions/0001-deferred-patches.md` is `superseded`, and it is still the only record of the `pi -e` ephemeral-extension limitation.
+
 ## Workflow
 
 - Keep scope tight.
@@ -89,6 +106,9 @@ When the pasted prompt body contradicts the on-disk file (e.g. you just changed 
 Pi loads each package's extension once at session start, so a session that edits `packages/<pkg>/src/` keeps running the **pre-edit** tool for the rest of its life.
 When the change targets a tool the workflow itself calls (`release_pr_merge`, `ci_watch`, `issue_close`), restart Pi before the step that uses it — otherwise `/ship-issue` exercises the old behavior and the new code looks broken (Refs #673).
 
+The same staleness makes the session's own system prompt a reliable witness for the **published** behavior: a defect in prompt assembly (a tool's `Available tools:` line, a guideline bullet, an injected block) is readable in context at zero tool cost.
+Read it before hunting the SDK — but never to verify your own fix, which the running session cannot see (Refs #778).
+
 ### Edit tool batches
 
 A multi-edit `Edit` call is atomic: if one `oldText` fails to match, the whole batch is rejected and nothing is applied.
@@ -121,6 +141,10 @@ The standard flow is:
 Each prompt template writes a stage entry to `docs/retro/NNNN-<slug>.md` (or `packages/<PKG>/docs/retro/`) before finishing.
 These entries accumulate across sessions and serve as the cross-session context bridge — when a later stage starts, it reads the retro file to pick up decisions, observations, and warnings from prior sessions.
 
+An issue spun off mid-lifecycle — by a step's implementation, a plan's follow-up, or a retrospective — is evaluated for roadmap fit when it is filed, not at phase close, so load the `roadmap-fit` skill at the filing point.
+It exits immediately when the package has no open improvement phase; otherwise it records the operator's disposition (fold into a step / new step / defer / out of scope) in the roadmap's `#### Open-issue sweep dispositions` list, and filing-without-scope-creeping remains the correct local move.
+`/finish-phase` reconciles the phase window's issues against that list before archiving, so a miss surfaces at phase close instead of vanishing from the history (Refs #767).
+
 Release batching is plan-driven: `/plan-improvements` annotates each roadmap step with a grep-able `Release:` tag (and a `Release batches` subsection), `/plan-issue` derives a `Release Recommendation` from those annotations, and `/ship-issue` reads the plan's `**Release:**` marker early — asking only when it is `mid-batch — defer`, otherwise releasing now.
 A `refactor:`/`style:`/`test:`/`build:`/`ci:` commit is a `hidden: true` changelog type and does not cut a release on its own; such work lands on `main` and auto-batches into the next `feat:`/`fix:`/unhidden-`docs:` release.
 So a refactor-only plan's `Release Recommendation` rationale must not claim it will cut a release (Refs #479).
@@ -140,6 +164,8 @@ The write-back reads the release commit from a path-prefixed `<path>--sha` outpu
 
 Present the substance — concrete examples, before/after, trade-offs — in a message first, then call `ask_user` with options that reference it.
 An option list is a set of choices, not a briefing; context crammed into option descriptions — or into `preview` panes — gets bounced (Refs #635, #737, #746).
+When the decision settles a structure that will repeat across many files, settle its **size budget** in the same gate.
+A placement or shape choice is only sound for a known size, so show a worked example of the largest instance (Refs #775).
 
 ### Background agent guardrails
 
@@ -154,6 +180,9 @@ Bound its searches to the repo, and require fixing a failed pattern before widen
 
 A subagent's universal claim ("no ordering issue", "nothing else calls this") is the one to verify — a positive finding ships the line that proves it, a universal one quantifies over cases the report never shows.
 Check a multi-question report against itself first: #725's trace answered "the `tools` option is an allowlist" and "there is no capping issue" in the same document, and answered the second by citing a test fixture rather than the implementation (Refs #725).
+
+The mirror holds for a claim **you** supply: a reviewer cannot verify a coverage assertion handed to it as a premise, so state what you checked, not what you conclude was covered.
+When a change creates N artifacts that cross-reference each other, enumerate the edges rather than sampling them (Refs #775).
 
 ### Parallel peer sessions (git worktrees)
 
@@ -302,6 +331,8 @@ Use `echo ---`.
 A shell snippet quoted inside a `/* */` block comment must not contain `*/` — a `sed 's/,.*//'` closes the comment and breaks the file's parse.
 Use `cut -d, -f1`.
 Pass file tool paths repo-relative (`packages/<pkg>/src/x.ts`), not hand-built absolute ones — a mistyped absolute path trips the `external_directory` gate instead of failing fast (Refs #726).
+Before making an existing prose convention machine-read (a grep-able heading, tag, or marker), enumerate its existing spellings first.
+A hand-written convention drifts — `Open-issue sweep dispositions` had three spellings across two packages' archives (Refs #767).
 
 ## Markdown
 
@@ -338,6 +369,7 @@ Do not edit `CHANGELOG.md` — release-please owns it.
 Do not name an unreleased version in docs — release-please assigns it at merge, so a number written during implementation is a guess.
 Describe the condition instead: "a version that predates the heartbeat", not "older than 25.2.0" (Refs #721).
 The same applies to an unfiled issue number: file the follow-up first, then write back the number the API returned — a guessed `#N` is off by however many issues landed since (Refs #610).
+The same applies to a commit SHA: resolve every one you publish with `git rev-parse` — including the second and third hash cited mid-draft, which is where the invention happens (Refs #777).
 Before naming a remediation in a breaking-change migration note (CLI flag, config key, API call), verify it exists in the real surface (SDK types, `--help`, schema) — do not infer a config key by analogy.
 The note ships to the `BREAKING CHANGE:` footer, the release-please CHANGELOG (uneditable), and the issue close comment.
 Do not put `Closes #N` / `Fixes #N` / `Resolves #N` in commit messages.

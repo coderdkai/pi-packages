@@ -137,6 +137,41 @@ Commands that previously slipped through silently on the error or empty-parse pa
 
 If you relied on the old permissive behavior for bash, set an explicit permissive bash policy — `"bash": { "*": "allow" }` — which also suppresses the new startup warning emitted when a top-level `"*": "allow"` leaves bash ungated.
 
+## Scope and non-goals
+
+**Purpose.**
+An agent takes many actions, most of them benign, but some of which need a human to confirm they are safe or correct.
+This package routes your attention to those, and turns each ruling into deterministic, reusable policy — enforced at the host level rather than by asking the model to police itself.
+
+**In scope.**
+Hardening the gates against bypass, fail-closed corrections (breaking ones included), named opt-in extension seams for downstream packages, and structural work backed by a written decision record.
+
+**Non-goals.**
+
+- _Sandboxing._
+  This is a decision layer, not a sandbox — it decides and records, it does not isolate.
+  If a dangerous action is reachable through an allowed tool, policy has to restrict it explicitly.
+- _Deciding project trust._
+  A policy enforcer, not a trust oracle: whether a project is trusted is Pi's decision and yours, and this package observes it.
+- _Permissive defaults, trust profiles, or workflow presets._
+  Your risk profile is not knowable from here, so defaults are least-privilege and common policies ship as documented recipes rather than preset keywords.
+- _Guessing what is sensitive._
+  No built-in secret denylist, and log redaction is key-name-structural rather than predictive — a redactor that silently misses a key invites treating the log as safe to share.
+- _Model judgment in the core._
+  This package makes no LLM call and holds no model config; model-assisted judging attaches as a chain link over the authorizer seam instead.
+  A link decides nothing until you name it in `authorizerChain`, and its `allow` on an excluded surface is downgraded to `defer`.
+
+The [architecture doc](https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/architecture/architecture.md#scope-and-non-goals) carries the full inventory, with the decision record behind each entry.
+
+**One decision is still open.**
+How policy may _enter_ the system — which channels are admissible, and with what precedence — is being worked out in [issue #639](https://github.com/gotgenes/pi-packages/issues/639), along with whether a capability model replaces the current surface list.
+Several requested widenings are parked on it rather than declined, durable persistence of an approval among them.
+
+**Where adjacent requests belong.**
+True isolation of a permitted action → an agent sandbox.
+Model-assisted judging of an `ask` → a chain link over the authorizer seam; [@gotgenes/pi-permission-model-judge](https://www.npmjs.com/package/@gotgenes/pi-permission-model-judge) is the first-party one, and judges mistyped paths.
+Approve-and-steer, edit diffs, and risk explanations → a downstream package over the `permissions:decision` event and the presentation seams.
+
 ## Documentation
 
 | Document                                                                                                                       | Contents                                                                                                             |
